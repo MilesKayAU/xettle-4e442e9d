@@ -665,10 +665,19 @@ Deno.serve(async (req) => {
         const amazonOrderId = getAmazonOrderId(order)
         if (!amazonOrderId) continue
 
+        // ─── Raw status logging for audit/debugging ───────────────
+        const orderStatus = getAmazonOrderStatus(order)
+        const lastUpdatedTime = order?.lastUpdatedTime || order?.LastUpdatedDate || null
+        console.log('fbm_order_status_observed', {
+          amazonOrderId,
+          raw_status: orderStatus,
+          last_updated_time: lastUpdatedTime,
+          dry_run: dryRun,
+        })
+
         // ─── Per-order status safety gate: filter out already-fulfilled orders ──
         // The bulk API requests Unshipped/PartiallyShipped, but orders can transition
         // between the poll and processing. This gate catches any that slipped through.
-        const orderStatus = getAmazonOrderStatus(order)
         if (orderStatus === 'Shipped' || orderStatus === 'Canceled') {
           await logEvent(supabase, userId, 'fbm_order_skipped_already_fulfilled', {
             amazon_status: orderStatus,
@@ -678,10 +687,48 @@ Deno.serve(async (req) => {
           continue
         }
 
+        // Check if already exists — allow re-processing of unsynced orders only
+        const { data: existing } = await supabase
+          .from('amazon_fbm_orders')
+          .select('id, shopify_order_id, status, created_at')
+          .eq('user_id', userId)
+          .eq('amazon_order_id', amazonOrderId)
+          .maybeSingle()
+
+        if (existing && (existing.shopify_order_id || existing.status === 'created' || existing.status === 'tracking_sent')) {
+          await logEvent(supabase, userId, 'fbm_existing_synced_skipped', {
+            existing_status: existing.status,
+            shopify_order_id: existing.shopify_order_id,
+            reason: 'Order was previously synced successfully — skip in dry run and live sync',
+          }, storeKey, amazonOrderId)
+          skippedCount++
+          continue
+        }
+
+        // Historical fallback: if the original sync row was cleaned up, still skip
+        // orders that we have already created/tracked successfully in the past.
+        const { data: historicalSuccess } = await supabase
+          .from('system_events')
+          .select('id, event_type, created_at, details')
+          .in('event_type', ['shopify_order_created', 'fbm_tracking_sent'])
+          .contains('details', { amazon_order_id: amazonOrderId })
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (historicalSuccess) {
+          await logEvent(supabase, userId, 'fbm_historical_sync_skipped', {
+            prior_event_type: historicalSuccess.event_type,
+            prior_event_at: historicalSuccess.created_at,
+            reason: 'Order was previously synced successfully and should not reappear as a dry-run candidate',
+          }, storeKey, amazonOrderId)
+          skippedCount++
+          continue
+        }
+
         // ─── Stale order check: flag orders last updated >7 days ago ──
         // If an order has been "Unshipped" for over 7 days, something unusual
         // may have happened. Flag for manual review rather than auto-creating.
-        const lastUpdatedTime = order?.lastUpdatedTime || order?.LastUpdatedDate || null
         if (lastUpdatedTime && (orderStatus === 'Unshipped' || orderStatus === 'PartiallyShipped')) {
           const lastUpdated = new Date(lastUpdatedTime)
           const ageMs = Date.now() - lastUpdated.getTime()
@@ -739,22 +786,7 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Check if already exists — allow re-processing of unsynced orders
-        const { data: existing } = await supabase
-          .from('amazon_fbm_orders')
-          .select('id, shopify_order_id, status, created_at')
-          .eq('user_id', userId)
-          .eq('amazon_order_id', amazonOrderId)
-          .maybeSingle()
-
         if (existing) {
-          // Truly synced or created — skip
-          if (existing.shopify_order_id || existing.status === 'created') {
-            await logEvent(supabase, userId, 'fbm_duplicate_skipped', { existing_status: existing.status }, storeKey, amazonOrderId)
-            skippedCount++
-            continue
-          }
-
           // ─── Auto-expire stale pending_payment orders ──────────
           if (existing.status === 'pending_payment') {
             const amazonOrderStatus = order.orderStatus || order.OrderStatus || ''
