@@ -141,6 +141,10 @@ export default function AccountMapperCard() {
   // Sync modal state
   const [syncModalOpen, setSyncModalOpen] = useState(false);
 
+  // Excluded marketplace:category combos (persisted to app_settings)
+  const [excludedMappings, setExcludedMappings] = useState<Set<string>>(new Set());
+  const [excludedMarketplaces, setExcludedMarketplaces] = useState<Set<string>>(new Set());
+
   // Confirmed (saved) codes for comparison
   const [confirmedCodes, setConfirmedCodes] = useState<Record<string, string>>({});
 
