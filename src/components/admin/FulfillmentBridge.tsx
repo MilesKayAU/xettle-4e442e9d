@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { RefreshCw, Trash2, Plus, ChevronDown, Play, FlaskConical, AlertTriangle, Search, ShieldAlert, CheckCircle2, XCircle, Clock, Webhook } from 'lucide-react';
+import { RefreshCw, Trash2, Plus, ChevronDown, Play, FlaskConical, AlertTriangle, Search, ShieldAlert, CheckCircle2, XCircle, Clock, Webhook, RotateCcw } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 
 const STORE_KEY = 'primary';
@@ -441,6 +441,31 @@ function OrderMonitorTab() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+
+  const retryTracking = async (order: any) => {
+    setRetryingId(order.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('shopify-fbm-fulfillment-webhook', {
+        body: { manual_retry: true, fbm_order_id: order.id },
+      });
+      if (error) throw error;
+      if (data?.error) {
+        toast({ title: 'Retry failed', description: data.error, variant: 'destructive' });
+      } else if (data?.status === 'tracking_sent') {
+        toast({ title: 'Tracking sent to Amazon!', description: `Tracking: ${data.tracking_number} (${data.carrier})` });
+        loadOrders();
+      } else if (data?.status === 'already_sent') {
+        toast({ title: 'Already sent', description: 'Tracking was already pushed to Amazon.' });
+        loadOrders();
+      } else {
+        toast({ title: 'Unexpected response', description: JSON.stringify(data) });
+      }
+    } catch (err: any) {
+      toast({ title: 'Retry failed', description: err.message, variant: 'destructive' });
+    }
+    setRetryingId(null);
+  };
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -552,6 +577,7 @@ function OrderMonitorTab() {
                   <TableHead>Status</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Error</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -579,10 +605,25 @@ function OrderMonitorTab() {
                         <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
                           {order.error_detail || '—'}
                         </TableCell>
+                        <TableCell className="text-right">
+                          {order.shopify_order_id && order.status !== 'tracking_sent' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => { e.stopPropagation(); retryTracking(order); }}
+                              disabled={retryingId === order.id}
+                            >
+                              {retryingId === order.id
+                                ? <RefreshCw className="h-3.5 w-3.5 mr-1 animate-spin" />
+                                : <RotateCcw className="h-3.5 w-3.5 mr-1" />}
+                              Resend Tracking
+                            </Button>
+                          )}
+                        </TableCell>
                       </TableRow>
                       <CollapsibleContent asChild>
                         <TableRow>
-                          <TableCell colSpan={6} className="bg-muted/50 p-4">
+                          <TableCell colSpan={7} className="bg-muted/50 p-4">
                             <div className="space-y-3">
                               {/* Duplicate Detection Info */}
                               {order.status === 'pending_payment' && (
