@@ -41,6 +41,42 @@ export type Database = {
         }
         Relationships: []
       }
+      amazon_compliance_items: {
+        Row: {
+          category: string
+          created_at: string
+          description: string | null
+          evidence_notes: string | null
+          id: string
+          is_compliant: boolean
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          evidence_notes?: string | null
+          id?: string
+          is_compliant?: boolean
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          evidence_notes?: string | null
+          id?: string
+          is_compliant?: boolean
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       amazon_fbm_orders: {
         Row: {
           amazon_order_id: string
