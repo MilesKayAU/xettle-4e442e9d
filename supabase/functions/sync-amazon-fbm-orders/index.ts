@@ -759,9 +759,9 @@ Deno.serve(async (req) => {
 
         let ordersResponse: Response
         try {
-          ordersResponse = await fetch(ordersUrl, {
+          ordersResponse = await auditedFetch(ordersUrl, {
             headers: getSpApiHeaders(accessToken),
-          })
+          }, { user_id: userId, integration: 'amazon_sp_api', context: { action: 'list_orders', page: pagesFetched + 1, marketplace_id } })
         } catch (fetchErr) {
           console.error('fbm_orders_fetch_failed', fetchErr)
           circuitBreaker.recordFailure()
