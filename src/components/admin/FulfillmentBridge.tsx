@@ -1003,6 +1003,10 @@ export default function FulfillmentBridge() {
           <TabsTrigger value="orders">Order Monitor</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
           <TabsTrigger value="events">Event Log</TabsTrigger>
+          <TabsTrigger value="audit">
+            <FileText className="h-3.5 w-3.5 mr-1" />
+            API Audit
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="links">
