@@ -256,10 +256,10 @@ export default function FulfilmentMethodsPanel() {
         }
       }
 
-      // Save all postage costs
+      // Save all postage costs (empty = 0, which clears)
       for (const mp of marketplaces) {
-        const val = postageCosts[mp.marketplace_code];
-        const num = parseFloat(val || '');
+        const val = postageCosts[mp.marketplace_code]?.trim() || '';
+        const num = val === '' ? 0 : parseFloat(val);
         if (!isNaN(num) && num >= 0) {
           await savePostageCost(user.id, mp.marketplace_code, num);
         }
