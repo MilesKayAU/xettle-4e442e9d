@@ -276,7 +276,7 @@ async function handleManualRetry(
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
-  // Find the FBM order
+  // Find the FBM order (includes shipping_service_level)
   let query = supabase.from('amazon_fbm_orders').select('*')
   if (body.fbm_order_id) {
     query = query.eq('id', body.fbm_order_id)
