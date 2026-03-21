@@ -371,7 +371,7 @@ export default function Dashboard() {
           supabase.from('amazon_tokens').select('id, marketplace_id').limit(1),
           supabase.from('shopify_tokens').select('id').limit(1),
           supabase.from('ebay_tokens').select('id').limit(1),
-          supabase.from('app_settings').select('value').eq('key', 'onboarding_wizard_complete').maybeSingle(),
+          supabase.from('app_settings').select('value').eq('user_id', user.id).eq('key', 'onboarding_wizard_complete').maybeSingle(),
         ]);
 
         const hasSettlements = !!(settRes.data && settRes.data.length > 0);
