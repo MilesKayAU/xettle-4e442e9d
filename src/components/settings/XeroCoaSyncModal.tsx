@@ -197,8 +197,10 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
         setErrorResults(prev => [...prev, ...result.errors]);
       }
 
-      // Reset consent for next run
-      setCreateConsent(false);
+      // Keep consent ticked if no errors so user can immediately push next batch
+      if (result.errors.length > 0) {
+        setCreateConsent(false);
+      }
 
       await onSyncComplete();
 
