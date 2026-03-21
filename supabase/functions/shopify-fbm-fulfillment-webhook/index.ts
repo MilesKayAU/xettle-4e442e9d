@@ -72,10 +72,10 @@ Deno.serve(async (req) => {
 
     logger.info('fbm_fulfillment_webhook_received', { shopify_order_id: shopifyOrderId })
 
-    // Look up matching amazon_fbm_orders row
+    // Look up matching amazon_fbm_orders row (include shipping_service_level for confirmShipment)
     const { data: fbmOrder, error: lookupErr } = await supabase
       .from('amazon_fbm_orders')
-      .select('id, amazon_order_id, user_id, status')
+      .select('id, amazon_order_id, user_id, status, shipping_service_level')
       .eq('shopify_order_id', shopifyOrderId)
       .maybeSingle()
 
@@ -189,13 +189,16 @@ Deno.serve(async (req) => {
     const baseUrl = getEndpointForRegion(region)
     const confirmUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders/${fbmOrder.amazon_order_id}/shipment/confirm`
 
+    // Use stored shipping service level instead of hardcoded 'Standard'
+    const shippingMethod = fbmOrder.shipping_service_level || 'Standard'
+
     const confirmPayload = {
       marketplaceId: tokenRow.marketplace_id,
       packageDetail: {
         trackingNumber: trackingNumber,
         carrierCode: carrierCode,
         carrierName: trackingCompany,
-        shippingMethod: 'Standard',
+        shippingMethod,
       },
     }
 
@@ -273,7 +276,7 @@ async function handleManualRetry(
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
-  // Find the FBM order
+  // Find the FBM order (includes shipping_service_level)
   let query = supabase.from('amazon_fbm_orders').select('*')
   if (body.fbm_order_id) {
     query = query.eq('id', body.fbm_order_id)
@@ -393,13 +396,16 @@ async function handleManualRetry(
   const baseUrl = getEndpointForRegion(region)
   const confirmUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders/${fbmOrder.amazon_order_id}/shipment/confirm`
 
+  // Use stored shipping service level instead of hardcoded 'Standard'
+  const shippingMethod = fbmOrder.shipping_service_level || 'Standard'
+
   const confirmPayload = {
     marketplaceId: amazonToken.marketplace_id,
     packageDetail: {
       trackingNumber,
       carrierCode,
       carrierName: trackingCompany,
-      shippingMethod: 'Standard',
+      shippingMethod,
     },
   }
 

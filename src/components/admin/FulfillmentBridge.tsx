@@ -506,7 +506,7 @@ function OrderMonitorTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         {confirmLive ? (
           <div className="flex items-center gap-2 p-2 rounded-md border border-amber-300 bg-amber-50">
             <AlertTriangle className="h-4 w-4 text-amber-600" />
@@ -525,6 +525,28 @@ function OrderMonitorTab() {
         <Button onClick={() => runSync(true)} disabled={syncing} variant="outline" size="sm">
           {syncing ? <RefreshCw className="h-4 w-4 mr-1 animate-spin" /> : <FlaskConical className="h-4 w-4 mr-1" />}
           {syncing ? 'Syncing…' : 'Dry Run'}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            setSyncing(true);
+            const { data: { user } } = await supabase.auth.getUser();
+            const { data, error } = await supabase.functions.invoke('sync-amazon-fbm-orders', {
+              body: { user_id: user!.id, store_key: STORE_KEY, action: 'retry_all_failed' },
+            });
+            if (error) {
+              toast({ title: 'Retry failed', description: error.message, variant: 'destructive' });
+            } else {
+              toast({ title: 'Failed orders reset', description: `${data?.count || 0} order(s) queued for retry` });
+              loadOrders();
+            }
+            setSyncing(false);
+          }}
+          disabled={syncing || orders.filter(o => o.status === 'failed' || o.status === 'manual_review').length === 0}
+        >
+          <RotateCcw className="h-4 w-4 mr-1" />
+          Retry All Failed
         </Button>
         <Button variant="ghost" size="sm" onClick={loadOrders}>
           <RefreshCw className="h-4 w-4" />
@@ -575,6 +597,7 @@ function OrderMonitorTab() {
                   <TableHead>Amazon Order ID</TableHead>
                   <TableHead>Shopify Order ID</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Shipping</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Error</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -598,6 +621,12 @@ function OrderMonitorTab() {
                           <Badge variant="outline" className={STATUS_COLORS[order.status] || ''}>
                             {order.status}
                           </Badge>
+                          {order.retry_count > 0 && order.status !== 'tracking_sent' && (
+                            <span className="text-xs text-muted-foreground ml-1">({order.retry_count}/{3})</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {order.shipping_service_level || '—'}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {new Date(order.created_at).toLocaleString()}
@@ -623,7 +652,7 @@ function OrderMonitorTab() {
                       </TableRow>
                       <CollapsibleContent asChild>
                         <TableRow>
-                          <TableCell colSpan={7} className="bg-muted/50 p-4">
+                          <TableCell colSpan={8} className="bg-muted/50 p-4">
                             <div className="space-y-3">
                               {/* Duplicate Detection Info */}
                               {order.status === 'pending_payment' && (
@@ -937,7 +966,7 @@ export default function FulfillmentBridge() {
     setConnectingInternal(true);
     try {
       const { data, error } = await supabase.functions.invoke('shopify-auth', {
-        body: { action: 'internal_initiate', shop: 'mileskayaustralia.myshopify.com' },
+        body: { action: 'internal_initiate' },
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
