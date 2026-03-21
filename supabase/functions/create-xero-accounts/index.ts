@@ -97,13 +97,13 @@ Deno.serve(async (req) => {
     // Check for duplicate codes against cached COA
     const { data: existingAccounts } = await supabase
       .from('xero_chart_of_accounts')
-      .select('account_code, account_name, account_type')
+      .select('account_code, account_name, account_type, xero_account_id')
       .eq('user_id', userId)
       .eq('is_active', true)
 
-    const existingMap = new Map<string, { name: string; type: string }>()
+    const existingMap = new Map<string, { name: string; type: string; xero_account_id: string }>()
     for (const a of (existingAccounts || [])) {
-      if (a.account_code) existingMap.set(a.account_code, { name: a.account_name, type: a.account_type || '' })
+      if (a.account_code) existingMap.set(a.account_code, { name: a.account_name, type: a.account_type || '', xero_account_id: a.xero_account_id })
     }
 
     // In create_only mode, reject duplicates
