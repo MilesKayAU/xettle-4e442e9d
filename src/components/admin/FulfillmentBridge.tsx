@@ -452,14 +452,33 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSel
   const [patching, setPatching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const processImageFile = (file: File) => {
+  // Resize image to max 1200px wide and compress as JPEG to keep payload small
+  const compressImage = (dataUrl: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX_W = 1200;
+        const scale = img.width > MAX_W ? MAX_W / img.width : 1;
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.src = dataUrl;
+    });
+  };
+
+  const processImageFile = async (file: File) => {
     setError(null);
     setExtractedData(null);
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       const dataUrl = ev.target?.result as string;
-      setImagePreview(dataUrl);
-      setImageBase64(dataUrl);
+      const compressed = await compressImage(dataUrl);
+      setImagePreview(compressed);
+      setImageBase64(compressed);
     };
     reader.readAsDataURL(file);
   };
@@ -470,18 +489,24 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSel
     processImageFile(file);
   };
 
-  const handlePaste = (e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    for (const item of Array.from(items)) {
-      if (item.type.startsWith('image/')) {
-        e.preventDefault();
-        const file = item.getAsFile();
-        if (file) processImageFile(file);
-        return;
+  // Global paste listener so Ctrl+V works as soon as dialog is open
+  useEffect(() => {
+    if (!open) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) processImageFile(file);
+          return;
+        }
       }
-    }
-  };
+    };
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+  }, [open]);
 
   const handleExtract = async () => {
     if (!imageBase64) return;
