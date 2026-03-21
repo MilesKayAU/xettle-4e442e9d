@@ -1004,11 +1004,13 @@ export default function AccountMapperCard() {
       }
     }
 
-    // Marketplace overrides
+    // Marketplace overrides (skip excluded)
     if (splitByMarketplace) {
       for (const mp of getEffectiveMarketplaces()) {
+        if (excludedMarketplaces.has(mp)) continue;
         for (const cat of SPLITTABLE_CATEGORIES) {
           const key = `${cat}:${mp}`;
+          if (excludedMappings.has(key)) continue;
           const code = editableMapping[key] || mapping[key]?.code;
           if (code) {
             const coaEntry = coaMap.get(code);
