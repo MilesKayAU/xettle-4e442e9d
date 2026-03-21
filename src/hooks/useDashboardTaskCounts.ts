@@ -96,7 +96,14 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
   ]);
 
   const settlements = settlementsRes.data || [];
-  const connections = connectionsRes.data || [];
+  const rawConnections = connectionsRes.data || [];
+  // Deduplicate connections by marketplace_code (duplicates cause phantom warnings)
+  const seenCodes = new Set<string>();
+  const connections = rawConnections.filter(c => {
+    if (seenCodes.has(c.marketplace_code)) return false;
+    seenCodes.add(c.marketplace_code);
+    return true;
+  });
   const settingsMap = new Map(settingsRes.data?.map(s => [s.key, s.value]) || []);
 
   // ─── Setup checks ─────────────────────────────────────────────────────

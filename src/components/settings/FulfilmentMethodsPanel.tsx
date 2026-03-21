@@ -84,7 +84,15 @@ export default function FulfilmentMethodsPanel() {
           loadMcfCosts(user.id),
         ]);
 
-        setMarketplaces(connRes.data || []);
+        // Deduplicate by marketplace_code (keep first occurrence)
+        const rawConns = connRes.data || [];
+        const seen = new Set<string>();
+        const deduped = rawConns.filter(c => {
+          if (seen.has(c.marketplace_code)) return false;
+          seen.add(c.marketplace_code);
+          return true;
+        });
+        setMarketplaces(deduped);
         setMethods(stored);
         const costStrings: Record<string, string> = {};
         for (const [code, val] of Object.entries(costs)) {
