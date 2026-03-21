@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
@@ -12,7 +13,7 @@ import { toast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import {
   CheckCircle, XCircle, RefreshCw, Plus, Download, Search, Send, Shield,
-  FileText, Bot, AlertTriangle, Clock, Copy,
+  FileText, Bot, AlertTriangle, Clock, Copy, Lock, FileCheck, GitBranch,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
@@ -63,7 +64,20 @@ const CATEGORY_LABELS: Record<string, string> = {
   code_architecture: 'Code Architecture',
   data_protection: 'Data Protection',
   operational: 'Operational',
+  security_controls: 'Security Controls',
+  documentation: 'Documentation',
+  scope_decision: 'Scope Decision',
   custom: 'Custom',
+};
+
+const CATEGORY_BADGES: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ReactNode }> = {
+  code_architecture: { label: 'Core', variant: 'outline', icon: <GitBranch className="h-3 w-3" /> },
+  data_protection: { label: 'Privacy', variant: 'destructive', icon: <Lock className="h-3 w-3" /> },
+  operational: { label: 'Ops', variant: 'secondary', icon: <Clock className="h-3 w-3" /> },
+  security_controls: { label: 'High priority', variant: 'destructive', icon: <Shield className="h-3 w-3" /> },
+  documentation: { label: 'Docs required', variant: 'default', icon: <FileCheck className="h-3 w-3" /> },
+  scope_decision: { label: 'Scope question', variant: 'secondary', icon: <AlertTriangle className="h-3 w-3" /> },
+  custom: { label: 'Custom', variant: 'outline', icon: <Plus className="h-3 w-3" /> },
 };
 
 /* ------------------------------------------------------------------ */
@@ -116,6 +130,7 @@ function ComplianceChecklist() {
   const [addOpen, setAddOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [newCategory, setNewCategory] = useState('custom');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -148,11 +163,12 @@ function ComplianceChecklist() {
       user_id: userData.user.id,
       title: newTitle.trim(),
       description: newDesc.trim() || null,
-      category: 'custom',
+      category: newCategory,
     } as any) as any);
     if (!error) {
       setNewTitle('');
       setNewDesc('');
+      setNewCategory('custom');
       setAddOpen(false);
       load();
       toast({ title: 'Item added' });
@@ -187,6 +203,16 @@ function ComplianceChecklist() {
           <CardContent className="pt-4 space-y-3">
             <Input placeholder="Requirement title" value={newTitle} onChange={e => setNewTitle(e.target.value)} />
             <Input placeholder="Description (optional)" value={newDesc} onChange={e => setNewDesc(e.target.value)} />
+            <Select value={newCategory} onValueChange={setNewCategory}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
+                  <SelectItem key={key} value={key}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <div className="flex gap-2">
               <Button size="sm" onClick={addItem}>Add</Button>
               <Button size="sm" variant="ghost" onClick={() => setAddOpen(false)}>Cancel</Button>
@@ -206,9 +232,17 @@ function ComplianceChecklist() {
       ).map(([cat, catItems]) => (
         <Card key={cat}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-              {CATEGORY_LABELS[cat] || cat}
-            </CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                {CATEGORY_LABELS[cat] || cat}
+              </CardTitle>
+              {CATEGORY_BADGES[cat] && (
+                <Badge variant={CATEGORY_BADGES[cat].variant} className="text-[10px] gap-1">
+                  {CATEGORY_BADGES[cat].icon}
+                  {CATEGORY_BADGES[cat].label}
+                </Badge>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-3">
             {catItems.map(item => (
