@@ -31,9 +31,18 @@ Deno.serve(async (req) => {
   const headers = { ...corsHeaders, 'Content-Type': 'application/json' }
 
   try {
+    const rawBody = await req.text()
+    const parsedBody = JSON.parse(rawBody)
+
+    // ── Manual retry path ──────────────────────────────────────
+    // Called from UI: { manual_retry: true, amazon_order_id: "..." }
+    if (parsedBody?.manual_retry === true) {
+      return await handleManualRetry(parsedBody, headers)
+    }
+
+    // ── Shopify webhook path ───────────────────────────────────
     // Verify Shopify HMAC signature
     const hmacHeader = req.headers.get('x-shopify-hmac-sha256') || ''
-    const rawBody = await req.text()
     const shopifySecret = Deno.env.get('SHOPIFY_CLIENT_SECRET') || ''
 
     if (shopifySecret && hmacHeader) {
