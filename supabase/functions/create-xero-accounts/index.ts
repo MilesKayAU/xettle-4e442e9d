@@ -111,21 +111,23 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Check for existing codes against cached COA
+    // Check for existing codes AND names against cached COA
     const { data: existingAccounts } = await supabase
       .from('xero_chart_of_accounts')
       .select('account_code, account_name, account_type, xero_account_id')
       .eq('user_id', userId)
       .eq('is_active', true)
 
-    const existingMap = new Map<string, { name: string; type: string; xero_account_id: string }>()
+    const existingByCode = new Map<string, { name: string; type: string; xero_account_id: string }>()
+    const existingByName = new Map<string, string>() // name (lowercase) → code
     for (const a of (existingAccounts || [])) {
-      if (a.account_code) existingMap.set(a.account_code, { name: a.account_name, type: a.account_type || '', xero_account_id: a.xero_account_id })
+      if (a.account_code) existingByCode.set(a.account_code, { name: a.account_name, type: a.account_type || '', xero_account_id: a.xero_account_id })
+      if (a.account_name) existingByName.set(a.account_name.toLowerCase().trim(), a.account_code || '')
     }
 
-    // In create_only mode, reject duplicates
+    // In create_only mode, reject duplicate codes
     if (mode === 'create_only') {
-      const duplicates = accounts.filter(a => existingMap.has(a.code))
+      const duplicates = accounts.filter(a => existingByCode.has(a.code))
       if (duplicates.length > 0) {
         return new Response(JSON.stringify({ 
           error: `Account code(s) already exist in Xero: ${duplicates.map(d => d.code).join(', ')}` 
@@ -133,6 +135,29 @@ Deno.serve(async (req) => {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
+    }
+
+    // Pre-flight: reject duplicate NAMES (Xero enforces unique names globally)
+    const nameConflicts = accounts.filter(a => {
+      const existingCode = existingByName.get(a.name.toLowerCase().trim())
+      // Conflict if name exists under a DIFFERENT code
+      return existingCode !== undefined && existingCode !== a.code
+    })
+    if (nameConflicts.length > 0) {
+      const details = nameConflicts.map(a => {
+        const existingCode = existingByName.get(a.name.toLowerCase().trim())
+        return `"${a.name}" (requested code ${a.code}, already exists under code ${existingCode})`
+      }).join('; ')
+      return new Response(JSON.stringify({
+        error: `Account name(s) already exist in Xero under different codes: ${details}. Rename the account or use the existing code.`,
+        name_conflicts: nameConflicts.map(a => ({
+          requested_code: a.code,
+          name: a.name,
+          existing_code: existingByName.get(a.name.toLowerCase().trim()),
+        })),
+      }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     // ─── Xero token ──────────────────────────────────────────────────
@@ -200,7 +225,7 @@ Deno.serve(async (req) => {
     const skipped: { code: string; reason: string }[] = []
 
     for (const acc of accounts) {
-      const existing = existingMap.get(acc.code)
+      const existing = existingByCode.get(acc.code)
       const isUpdate = !!existing && mode === 'create_and_update'
 
       // Guard: Xero Account Type is immutable — skip if type changed
