@@ -672,13 +672,103 @@ function OrderMonitorTab() {
   const [screenshotOrder, setScreenshotOrder] = useState<any | null>(null);
   const [sellerCentralDomain, setSellerCentralDomain] = useState(DEFAULT_AMAZON_REGION.sellerCentralDomain);
 
-  // Resolve Seller Central domain from user's amazon_tokens
+  // Smart URL template learning
+  const URL_TEMPLATE_KEY = 'amazon_seller_central_url_template';
+  const [savedUrlTemplate, setSavedUrlTemplate] = useState<string | null>(null);
+  const [editingUrlOrderId, setEditingUrlOrderId] = useState<string | null>(null);
+  const [editUrlValue, setEditUrlValue] = useState('');
+  const [pendingTemplate, setPendingTemplate] = useState<string | null>(null);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+
+  // Build URL from template or default
+  const buildSellerCentralUrl = useCallback((amazonOrderId: string) => {
+    if (savedUrlTemplate) {
+      return savedUrlTemplate.replace('{orderId}', amazonOrderId);
+    }
+    return `https://${sellerCentralDomain}/orders-v3/order/${amazonOrderId}`;
+  }, [savedUrlTemplate, sellerCentralDomain]);
+
+  // Extract template from a pasted URL by finding the order ID within it
+  const extractTemplate = (url: string, amazonOrderId: string): string | null => {
+    if (!url.includes(amazonOrderId)) return null;
+    return url.replace(amazonOrderId, '{orderId}');
+  };
+
+  // Handle URL edit submission
+  const handleUrlEditSubmit = (amazonOrderId: string) => {
+    const url = editUrlValue.trim();
+    if (!url) { setEditingUrlOrderId(null); return; }
+
+    // Try to extract a reusable template
+    const template = extractTemplate(url, amazonOrderId);
+    if (template && template !== `https://${sellerCentralDomain}/orders-v3/order/{orderId}`) {
+      setPendingTemplate(template);
+    }
+    // Open the URL immediately regardless
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setEditingUrlOrderId(null);
+  };
+
+  // Save template to app_settings
+  const saveUrlTemplate = async (template: string) => {
+    setSavingTemplate(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Upsert the template
+      const { data: existing } = await supabase
+        .from('app_settings')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('key', URL_TEMPLATE_KEY)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase.from('app_settings').update({ value: template }).eq('id', existing.id);
+      } else {
+        await supabase.from('app_settings').insert({ user_id: user.id, key: URL_TEMPLATE_KEY, value: template });
+      }
+
+      setSavedUrlTemplate(template);
+      setPendingTemplate(null);
+      toast({ title: 'URL pattern saved', description: 'All order links will now use this format.' });
+    } catch (err: any) {
+      toast({ title: 'Failed to save URL pattern', description: err.message, variant: 'destructive' });
+    }
+    setSavingTemplate(false);
+  };
+
+  // Reset template back to auto-detected default
+  const resetUrlTemplate = async () => {
+    setSavingTemplate(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      await supabase.from('app_settings').delete().eq('user_id', user.id).eq('key', URL_TEMPLATE_KEY);
+      setSavedUrlTemplate(null);
+      toast({ title: 'URL pattern reset', description: 'Links will use the default region-based format.' });
+    } catch (err: any) {
+      toast({ title: 'Failed to reset', description: err.message, variant: 'destructive' });
+    }
+    setSavingTemplate(false);
+  };
+
+  // Load saved URL template and Seller Central domain on mount
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('amazon_tokens').select('marketplace_id').limit(1).maybeSingle();
-      if (data?.marketplace_id) {
-        const region = AMAZON_REGIONS.find(r => r.marketplaceId === data.marketplace_id);
+      const [tokenRes, settingsRes] = await Promise.all([
+        supabase.from('amazon_tokens').select('marketplace_id').limit(1).maybeSingle(),
+        supabase.from('app_settings').select('value').eq('key', URL_TEMPLATE_KEY).maybeSingle(),
+      ]);
+
+      if (tokenRes.data?.marketplace_id) {
+        const region = AMAZON_REGIONS.find(r => r.marketplaceId === tokenRes.data!.marketplace_id);
         if (region) setSellerCentralDomain(region.sellerCentralDomain);
+      }
+
+      if (settingsRes.data?.value) {
+        setSavedUrlTemplate(settingsRes.data.value);
       }
     })();
   }, []);
