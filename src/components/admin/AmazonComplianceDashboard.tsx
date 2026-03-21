@@ -168,6 +168,7 @@ function ComplianceChecklist() {
     if (!error) {
       setNewTitle('');
       setNewDesc('');
+      setNewCategory('custom');
       setAddOpen(false);
       load();
       toast({ title: 'Item added' });
