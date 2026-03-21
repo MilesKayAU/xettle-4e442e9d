@@ -36,6 +36,7 @@ import { normalizeKeyLabel } from '@/utils/marketplace-codes';
 import { Save, Upload, Copy } from 'lucide-react';
 import CloneCoaDialog from './CloneCoaDialog';
 import CoaAuditPanel from './CoaAuditPanel';
+import XeroCoaSyncModal, { type SyncPreviewRow } from './XeroCoaSyncModal';
 
 type CoaValidation = 'valid' | 'missing' | 'inactive' | 'wrong_type';
 
