@@ -118,15 +118,10 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
       if (result.errors.length > 0) parts.push(`${result.errors.length} error${result.errors.length !== 1 ? 's' : ''}`);
       toast.success(`COA sync complete: ${parts.join(', ')}`);
       await onSyncComplete();
-      onOpenChange(false);
+      handleOpenChange(false);
     } else {
       toast.error(`Sync failed: ${result.error || 'Unknown error'}`);
     }
-
-    // Reset state
-    setMode('create_only');
-    setRiskConsent(false);
-    setProgress(null);
   };
 
   const progressPct = progress
