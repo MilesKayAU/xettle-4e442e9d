@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Sparkles, CheckCircle2, RefreshCw, Info, AlertTriangle, XCircle, Search, ChevronsUpDown, Filter, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -1199,10 +1200,25 @@ export default function AccountMapperCard() {
         <XCircle className="h-3.5 w-3.5 shrink-0" /> Inactive
       </span>
     );
+    const isRevenue = REVENUE_CATEGORIES_SET.has(category);
+    const expectedType = isRevenue ? 'Revenue / Sales' : 'Expense / Direct Costs';
+    const entry = coaMap.get(code!);
+    const actualType = entry?.type || 'unknown';
     return (
-      <span className="flex items-center gap-1 text-[10px] text-amber-600">
-        <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> Wrong type
-      </span>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="flex items-center gap-1 text-[10px] text-amber-600 cursor-help">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> Wrong type
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-[280px] text-xs">
+            <p className="font-medium mb-1">Account type mismatch</p>
+            <p>This category expects a <strong>{expectedType}</strong> account, but <strong>{code}</strong> is set as <strong>{actualType}</strong> in Xero.</p>
+            <p className="mt-1 text-muted-foreground">Pick a different account from the dropdown, or change the account type in Xero directly (types can't be changed via API).</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   };
 
@@ -1213,7 +1229,21 @@ export default function AccountMapperCard() {
     if (status === 'reuse_existing') return <Badge variant="outline" className="text-amber-700 border-amber-300 text-[10px]">Use existing</Badge>;
     if (status === 'missing') return <Badge variant="outline" className="text-destructive border-destructive/30 text-[10px]">Not in Xero</Badge>;
     if (status === 'inactive') return <Badge variant="outline" className="text-destructive border-destructive/30 text-[10px]">Inactive</Badge>;
-    return <Badge variant="outline" className="text-amber-700 border-amber-300 text-[10px]">Wrong type</Badge>;
+    const isRev = REVENUE_CATEGORIES_SET.has(category);
+    const expected = isRev ? 'Revenue/Sales' : 'Expense/Direct Costs';
+    const actual = coaMap.get(code!)?.type || '?';
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge variant="outline" className="text-amber-700 border-amber-300 text-[10px] cursor-help">Wrong type</Badge>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-[260px] text-xs">
+            Expects <strong>{expected}</strong> but account is <strong>{actual}</strong> in Xero. Pick a different account or fix the type in Xero.
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
   };
 
   /** Searchable COA dropdown */
