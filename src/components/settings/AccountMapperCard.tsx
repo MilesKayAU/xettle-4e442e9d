@@ -1617,13 +1617,12 @@ export default function AccountMapperCard() {
             <RefreshCw className="h-3 w-3" />
             Re-run AI mapper
           </Button>
-          {isAdmin && coaAccounts.length > 0 && (
+          {coaAccounts.length > 0 && (
             <Button
               variant="outline"
               size="sm"
               className="gap-2"
               onClick={async () => {
-                // Refresh COA before computing diff
                 toast.info('Refreshing COA from Xero…');
                 const result = await refreshXeroCOA();
                 if (!result.success) {
@@ -1640,7 +1639,7 @@ export default function AccountMapperCard() {
               }}
             >
               <Upload className="h-3 w-3" />
-              Sync to Xero
+              Sync Accounts to Xero
             </Button>
           )}
         </div>
@@ -1648,22 +1647,20 @@ export default function AccountMapperCard() {
     </Card>
     {renderCloneDialog()}
     {renderOverwriteConfirmDialog()}
-    {isAdmin && (
-      <XeroCoaSyncModal
-        open={syncModalOpen}
-        onOpenChange={setSyncModalOpen}
-        previewRows={computeSyncPreviewRows()}
-        coaAccounts={coaAccounts}
-        onSyncComplete={async () => {
-          const [accounts, lastSynced] = await Promise.all([
-            getCachedXeroAccounts(),
-            getCoaLastSyncedAt(),
-          ]);
-          setCoaAccounts(accounts);
-          setCoaLastSynced(lastSynced);
-        }}
-      />
-    )}
+    <XeroCoaSyncModal
+      open={syncModalOpen}
+      onOpenChange={setSyncModalOpen}
+      previewRows={computeSyncPreviewRows()}
+      coaAccounts={coaAccounts}
+      onSyncComplete={async () => {
+        const [accounts, lastSynced] = await Promise.all([
+          getCachedXeroAccounts(),
+          getCoaLastSyncedAt(),
+        ]);
+        setCoaAccounts(accounts);
+        setCoaLastSynced(lastSynced);
+      }}
+    />
     </>
   );
 }
