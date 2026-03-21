@@ -1170,6 +1170,17 @@ export default function AccountMapperCard() {
       const key = `${baseCat}:${mp}`;
       const isExcluded = excludedMappings.has(key) || excludedMarketplaces.has(mp);
 
+      // Filter by search keyword at sub-row level
+      if (searchKeyword.trim()) {
+        const lowerSearch = searchKeyword.toLowerCase().trim();
+        const rowLabel = `${mp} ${baseCat}`.toLowerCase();
+        const code = editableMapping[key] || mapping[key]?.code || coaSuggestions.get(key)?.code || '';
+        const name = mapping[key]?.name || coaSuggestions.get(key)?.name || '';
+        if (!rowLabel.includes(lowerSearch) && !code.toLowerCase().includes(lowerSearch) && !name.toLowerCase().includes(lowerSearch)) {
+          return null;
+        }
+      }
+
       // Skip excluded rows entirely if in filter mode
       if (isExcluded) {
         return (
