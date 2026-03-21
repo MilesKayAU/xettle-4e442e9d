@@ -1375,12 +1375,17 @@ export default function AccountMapperCard() {
   // Count missing mappings
   const missingCount = CATEGORIES.filter(cat => {
     const code = editableMapping[cat] || mapping[cat]?.code;
-    return !code || validateCode(code, cat) !== 'valid';
+    const expectedName = mapping[cat]?.name;
+    return !code || !['valid', 'reuse_existing'].includes(validateCode(code, cat, expectedName));
   }).length;
 
-  // Count codes that exist in editableMapping but are not found in Xero COA
+  // Count codes that truly need creation in Xero (exclude name-clash rows that should reuse an existing code)
   const notInXeroCount = coaMap.size > 0
-    ? Object.values(editableMapping).filter(code => code && !coaMap.has(code)).length
+    ? Object.entries(editableMapping).filter(([key, code]) => {
+        if (!code || coaMap.has(code)) return false;
+        const expectedName = mapping[key]?.name || coaSuggestions.get(key)?.name;
+        return validateCode(code, key.split(':')[0], expectedName) === 'missing';
+      }).length
     : 0;
 
   const renderPinDialog = () => (
