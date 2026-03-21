@@ -1483,14 +1483,14 @@ Deno.serve(async (req) => {
         try {
           console.log('fbm_shopify_create', { amazonOrderId, shopifyUrl, lineItemCount: lineItems.length, shippingLevel })
 
-          const shopifyResponse = await fetch(shopifyUrl, {
+          const shopifyResponse = await auditedFetch(shopifyUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'X-Shopify-Access-Token': shopifyToken.access_token,
             },
             body: JSON.stringify(shopifyPayload),
-          })
+          }, { user_id: userId, integration: 'shopify', context: { action: 'create_order', order_id: amazonOrderId } })
 
           console.log('fbm_shopify_response', { amazonOrderId, status: shopifyResponse.status, ok: shopifyResponse.ok })
 

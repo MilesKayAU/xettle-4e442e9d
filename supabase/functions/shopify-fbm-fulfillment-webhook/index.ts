@@ -318,9 +318,9 @@ async function handleManualRetry(
   const shopifyToken = tokenRow.access_token
   const fulfillmentsUrl = `https://${shopifyDomain}/admin/api/2024-01/orders/${fbmOrder.shopify_order_id}/fulfillments.json`
 
-  const fulfillRes = await fetch(fulfillmentsUrl, {
+  const fulfillRes = await auditedFetch(fulfillmentsUrl, {
     headers: { 'X-Shopify-Access-Token': shopifyToken, 'Content-Type': 'application/json' },
-  })
+  }, { user_id: fbmOrder.user_id, integration: 'shopify', context: { action: 'fetch_fulfillments', shopify_order_id: fbmOrder.shopify_order_id } })
 
   if (!fulfillRes.ok) {
     const errText = await fulfillRes.text()
