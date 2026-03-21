@@ -141,6 +141,10 @@ export default function AccountMapperCard() {
   // Sync modal state
   const [syncModalOpen, setSyncModalOpen] = useState(false);
 
+  // Excluded marketplace:category combos (persisted to app_settings)
+  const [excludedMappings, setExcludedMappings] = useState<Set<string>>(new Set());
+  const [excludedMarketplaces, setExcludedMarketplaces] = useState<Set<string>>(new Set());
+
   // Confirmed (saved) codes for comparison
   const [confirmedCodes, setConfirmedCodes] = useState<Record<string, string>>({});
 
@@ -539,6 +543,22 @@ export default function AccountMapperCard() {
         }
       }
 
+      // Load excluded mappings
+      const { data: excludedSetting } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('user_id', user.id)
+        .eq('key', 'coa_excluded_mappings')
+        .maybeSingle();
+
+      if (excludedSetting?.value) {
+        try {
+          const parsed = JSON.parse(excludedSetting.value);
+          if (parsed.keys) setExcludedMappings(new Set(parsed.keys));
+          if (parsed.marketplaces) setExcludedMarketplaces(new Set(parsed.marketplaces));
+        } catch { /* ignore */ }
+      }
+
       // Check if confirmed mapping exists
       const { data: confirmedSetting } = await supabase
         .from('app_settings')
@@ -779,8 +799,10 @@ export default function AccountMapperCard() {
     }
     if (splitByMarketplace) {
       for (const mp of getEffectiveMarketplaces()) {
+        if (excludedMarketplaces.has(mp)) continue;
         for (const cat of SPLITTABLE_CATEGORIES) {
           const key = `${cat}:${mp}`;
+          if (excludedMappings.has(key)) continue;
           if (editableMapping[key]) {
             finalCodes[key] = editableMapping[key];
           }
@@ -909,6 +931,34 @@ export default function AccountMapperCard() {
     toast.success('Applied suggestions to all unmapped categories');
   };
 
+  /** Persist exclusion settings */
+  const saveExclusions = useCallback(async (keys: Set<string>, mps: Set<string>) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase.from('app_settings').upsert(
+      { user_id: user.id, key: 'coa_excluded_mappings', value: JSON.stringify({ keys: [...keys], marketplaces: [...mps] }) },
+      { onConflict: 'user_id,key' }
+    );
+  }, []);
+
+  const toggleExcludeMapping = useCallback((key: string) => {
+    setExcludedMappings(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      saveExclusions(next, excludedMarketplaces);
+      return next;
+    });
+  }, [excludedMarketplaces, saveExclusions]);
+
+  const toggleExcludeMarketplace = useCallback((mp: string) => {
+    setExcludedMarketplaces(prev => {
+      const next = new Set(prev);
+      if (next.has(mp)) next.delete(mp); else next.add(mp);
+      saveExclusions(excludedMappings, next);
+      return next;
+    });
+  }, [excludedMappings, saveExclusions]);
+
   const getEffectiveMarketplaces = (): string[] => {
     if (activeMarketplaces.length > 0) return activeMarketplaces;
     return KNOWN_MARKETPLACES.slice(0, 3);
@@ -956,11 +1006,13 @@ export default function AccountMapperCard() {
       }
     }
 
-    // Marketplace overrides
+    // Marketplace overrides (skip excluded)
     if (splitByMarketplace) {
       for (const mp of getEffectiveMarketplaces()) {
+        if (excludedMarketplaces.has(mp)) continue;
         for (const cat of SPLITTABLE_CATEGORIES) {
           const key = `${cat}:${mp}`;
+          if (excludedMappings.has(key)) continue;
           const code = editableMapping[key] || mapping[key]?.code;
           if (code) {
             const coaEntry = coaMap.get(code);
@@ -1101,6 +1153,38 @@ export default function AccountMapperCard() {
 
     return sortedMarketplaces.map(mp => {
       const key = `${baseCat}:${mp}`;
+      const isExcluded = excludedMappings.has(key) || excludedMarketplaces.has(mp);
+
+      // Skip excluded rows entirely if in filter mode
+      if (isExcluded) {
+        return (
+          <tr key={key} className="border-b last:border-b-0 bg-muted/10 opacity-40">
+            <td className="p-2 pl-6">
+              <div className="text-xs text-muted-foreground line-through">↳ {mp} {baseCat}</div>
+            </td>
+            <td className="p-2" colSpan={2}>
+              <span className="text-[10px] text-muted-foreground">Excluded from mapping</span>
+            </td>
+            <td className="p-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-5 text-[10px] px-1.5 gap-0.5"
+                onClick={() => {
+                  if (excludedMarketplaces.has(mp)) {
+                    toggleExcludeMarketplace(mp);
+                  } else {
+                    toggleExcludeMapping(key);
+                  }
+                }}
+              >
+                <Plus className="h-2.5 w-2.5" /> Restore
+              </Button>
+            </td>
+          </tr>
+        );
+      }
+
       const baseCode = editableMapping[baseCat] || mapping[baseCat]?.code || '';
       const coaSuggestion = coaSuggestions.get(key); // COA-scanned suggestion
       // Auto-apply gap-fill suggestion to editable mapping if no override set yet
@@ -1118,9 +1202,18 @@ export default function AccountMapperCard() {
       const isGapFill = coaSuggestion?.isGapFill === true;
       const suggestion = aiSuggestion || (coaSuggestion ? { code: coaSuggestion.code, name: coaSuggestion.name } : null);
       return (
-        <tr key={key} className="border-b last:border-b-0 bg-muted/20">
+        <tr key={key} className="border-b last:border-b-0 bg-muted/20 group/row">
           <td className="p-2 pl-6">
-            <div className="text-xs text-muted-foreground">↳ {mp} {baseCat}</div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">↳ {mp} {baseCat}</span>
+              <button
+                onClick={() => toggleExcludeMapping(key)}
+                className="opacity-0 group-hover/row:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                title={`Exclude ${mp} ${baseCat} from mapping`}
+              >
+                <XCircle className="h-3 w-3" />
+              </button>
+            </div>
           </td>
           <td className="p-2">
             {suggestion?.code ? (
@@ -1411,15 +1504,64 @@ export default function AccountMapperCard() {
 
           {/* Split by marketplace toggle */}
           {getEffectiveMarketplaces().length > 0 && (
-            <div className="flex items-center gap-3 rounded-lg border border-border/50 px-3 py-2">
-              <Switch
-                id="split-marketplace"
-                checked={splitByMarketplace}
-                onCheckedChange={handleSplitToggle}
-              />
-              <Label htmlFor="split-marketplace" className="text-xs text-muted-foreground cursor-pointer">
-                Split by marketplace — map each category per channel (Sales, Fees, Refunds, etc.)
-              </Label>
+            <div className="space-y-2">
+              <div className="flex items-center gap-3 rounded-lg border border-border/50 px-3 py-2">
+                <Switch
+                  id="split-marketplace"
+                  checked={splitByMarketplace}
+                  onCheckedChange={handleSplitToggle}
+                />
+                <Label htmlFor="split-marketplace" className="text-xs text-muted-foreground cursor-pointer">
+                  Split by marketplace — map each category per channel (Sales, Fees, Refunds, etc.)
+                </Label>
+              </div>
+
+              {/* Marketplace exclusion filter */}
+              {splitByMarketplace && getEffectiveMarketplaces().length > 1 && (
+                <div className="rounded-lg border border-border/50 px-3 py-2.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-medium flex items-center gap-1.5">
+                      <Filter className="h-3 w-3" />
+                      Exclude marketplaces from COA mapping
+                    </Label>
+                    {excludedMarketplaces.size > 0 && (
+                      <button
+                        onClick={() => {
+                          setExcludedMarketplaces(new Set());
+                          saveExclusions(excludedMappings, new Set());
+                        }}
+                        className="text-[10px] text-primary hover:underline"
+                      >
+                        Clear all
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {getEffectiveMarketplaces().map(mp => {
+                      const isExcluded = excludedMarketplaces.has(mp);
+                      return (
+                        <button
+                          key={mp}
+                          onClick={() => toggleExcludeMarketplace(mp)}
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] border transition-colors ${
+                            isExcluded
+                              ? 'bg-destructive/10 border-destructive/30 text-destructive line-through'
+                              : 'bg-background border-border text-foreground hover:bg-accent'
+                          }`}
+                        >
+                          {isExcluded ? <XCircle className="h-2.5 w-2.5" /> : <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" />}
+                          {mp}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {excludedMarketplaces.size > 0 && (
+                    <p className="text-[10px] text-muted-foreground">
+                      {excludedMarketplaces.size} marketplace{excludedMarketplaces.size > 1 ? 's' : ''} excluded — their rows won't be included in Xero sync or mapping confirmation.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
