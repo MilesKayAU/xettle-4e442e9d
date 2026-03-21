@@ -864,6 +864,36 @@ export default function AccountMapperCard() {
 
       const finalCodes = buildFinalCodes();
 
+      // ─── Pre-validate all codes against live Xero COA ────────────────
+      toast.info('Verifying accounts against live Xero data…');
+      const refreshResult = await refreshXeroCOA();
+      if (!refreshResult.success) {
+        toast.error(`Cannot verify with Xero: ${refreshResult.error}. Please try again.`);
+        return;
+      }
+      const [freshAccounts, freshSyncedAt] = await Promise.all([
+        getCachedXeroAccounts(),
+        getCoaLastSyncedAt(),
+      ]);
+      setCoaAccounts(freshAccounts);
+      setCoaLastSynced(freshSyncedAt);
+
+      const freshCoaSet = new Set(freshAccounts.map(a => a.account_code).filter(Boolean));
+      const invalidCodes: string[] = [];
+      for (const [key, code] of Object.entries(finalCodes)) {
+        if (code && !freshCoaSet.has(code)) {
+          invalidCodes.push(`${key} → ${code}`);
+        }
+      }
+      if (invalidCodes.length > 0) {
+        toast.error(
+          `${invalidCodes.length} code${invalidCodes.length > 1 ? 's' : ''} not found in Xero. ` +
+          `Create them first or choose existing accounts.`,
+          { duration: 6000 }
+        );
+        return;
+      }
+
       // Detect overwrites of existing confirmed codes
       const changes: Array<{ category: string; oldCode: string; newCode: string }> = [];
       for (const [key, newCode] of Object.entries(finalCodes)) {
@@ -874,13 +904,13 @@ export default function AccountMapperCard() {
       }
 
       if (changes.length > 0) {
-        // Show overwrite confirmation
+        // Show overwrite confirmation — codes already validated above
         setOverwriteChanges(changes);
-        setPendingConfirmAction(() => () => executeConfirm(finalCodes));
+        setPendingConfirmAction(() => () => executeConfirmAfterValidation(finalCodes, freshAccounts));
         setOverwriteConfirmOpen(true);
       } else {
-        // No overwrites — save directly
-        await executeConfirm(finalCodes);
+        // No overwrites — save directly (codes already validated)
+        await executeConfirmAfterValidation(finalCodes, freshAccounts);
       }
     });
   };
