@@ -861,19 +861,30 @@ function OrderMonitorTab() {
                         <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
                           {order.error_detail || '—'}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right space-x-1">
                           {order.shopify_order_id && order.status !== 'tracking_sent' && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={(e) => { e.stopPropagation(); retryTracking(order); }}
-                              disabled={retryingId === order.id}
-                            >
-                              {retryingId === order.id
-                                ? <RefreshCw className="h-3.5 w-3.5 mr-1 animate-spin" />
-                                : <RotateCcw className="h-3.5 w-3.5 mr-1" />}
-                              Resend Tracking
-                            </Button>
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => { e.stopPropagation(); setScreenshotOrder(order); }}
+                                title="Extract customer from screenshot"
+                              >
+                                <Camera className="h-3.5 w-3.5 mr-1" />
+                                Customer
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => { e.stopPropagation(); retryTracking(order); }}
+                                disabled={retryingId === order.id}
+                              >
+                                {retryingId === order.id
+                                  ? <RefreshCw className="h-3.5 w-3.5 mr-1 animate-spin" />
+                                  : <RotateCcw className="h-3.5 w-3.5 mr-1" />}
+                                Resend Tracking
+                              </Button>
+                            </>
                           )}
                         </TableCell>
                       </TableRow>
