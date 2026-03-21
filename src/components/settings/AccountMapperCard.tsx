@@ -140,7 +140,6 @@ export default function AccountMapperCard() {
 
   // Sync modal state
   const [syncModalOpen, setSyncModalOpen] = useState(false);
-  const [pendingConfirmAction, setPendingConfirmAction] = useState<(() => Promise<void>) | null>(null);
 
   // Confirmed (saved) codes for comparison
   const [confirmedCodes, setConfirmedCodes] = useState<Record<string, string>>({});
