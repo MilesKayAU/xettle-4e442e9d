@@ -24,7 +24,10 @@ interface Props {
 }
 
 async function fetchStatuses(): Promise<ConnectionStatus[]> {
-  // Fetch tokens AND scan completion flags in parallel for a unified view
+  // Ensure we have an auth session before querying RLS-protected tables
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return [];
+
   const [xeroRes, amazonRes, shopifyRes, ebayRes, flagsRes] = await Promise.all([
     supabase.from('xero_tokens').select('tenant_name, updated_at').limit(1),
     supabase.from('amazon_tokens').select('selling_partner_id, updated_at').limit(1),
