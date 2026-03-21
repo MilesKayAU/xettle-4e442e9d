@@ -241,6 +241,14 @@ export default function AccountMapperCard() {
       }
     }
 
+    // ─── Name → code lookup for reuse detection ──────────────────────
+    const existingNameToCode = new Map<string, string>();
+    for (const a of coaAccounts) {
+      if (a.account_name && a.account_code) {
+        existingNameToCode.set(a.account_name.toLowerCase().trim(), a.account_code);
+      }
+    }
+
     // ─── Pattern-aware, Revenue/Expense-partitioned gap fill ─────────
     // 1. Detect the customer's existing code pattern from AI suggestions
     // 2. Use generateCodeFromPattern to extend each category's neighbourhood
@@ -277,6 +285,20 @@ export default function AccountMapperCard() {
           const key = `${displayCat}:${mp}`;
           if (suggestions.has(key)) continue;
 
+          // Check if an account with this exact name already exists in Xero
+          const expectedName = `${mp} ${displayCat}`;
+          const existingCode = existingNameToCode.get(expectedName.toLowerCase().trim());
+          if (existingCode) {
+            // Reuse existing Xero account instead of generating a phantom code
+            globalClaimed.add(existingCode);
+            const existingAcc = coaAccounts.find(a => a.account_code === existingCode);
+            suggestions.set(key, {
+              code: existingCode,
+              name: existingAcc?.account_name || expectedName,
+            });
+            continue;
+          }
+
           const accountType = getAccountTypeForCategory(displayCat);
           let codeStr: string;
 
@@ -301,7 +323,7 @@ export default function AccountMapperCard() {
           globalClaimed.add(codeStr);
           suggestions.set(key, {
             code: codeStr,
-            name: `${mp} ${displayCat}`,
+            name: expectedName,
             isGapFill: true,
           });
         }
