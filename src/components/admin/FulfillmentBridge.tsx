@@ -585,6 +585,17 @@ function OrderMonitorTab() {
                                   </div>
                                 </div>
                               )}
+                              {order.status === 'tracking_sent' && (
+                                <div className="flex items-start gap-2 p-3 rounded-md bg-green-50 border border-green-200 text-green-800">
+                                  <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+                                  <div className="text-sm">
+                                    <p className="font-medium">Tracking sent to Amazon</p>
+                                    <p className="text-xs mt-1 text-green-600">
+                                      Fulfillment tracking has been pushed back to Amazon via confirmShipment. The order is now complete.
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
                               {/* PII Access Diagnostic Card */}
                               {order.raw_amazon_payload?.pii_access && (
                                 <PiiAccessCard payload={order.raw_amazon_payload} />
