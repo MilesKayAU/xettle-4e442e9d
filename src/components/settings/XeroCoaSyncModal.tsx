@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, AlertTriangle, CheckCircle2, Upload, ShieldAlert } from 'lucide-react';
+import { Loader2, AlertTriangle, CheckCircle2, Upload, ShieldAlert, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSettingsPin } from '@/hooks/use-settings-pin';
 import SettingsPinDialog from '@/components/shared/SettingsPinDialog';
@@ -45,6 +45,8 @@ interface Props {
   onSyncComplete: () => Promise<void>;
 }
 
+const BATCH_SIZE = 2;
+
 export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaAccounts, onSyncComplete }: Props) {
   const [mode, setMode] = useState<'create_only' | 'create_and_update'>('create_only');
   const [riskConsent, setRiskConsent] = useState(false);
@@ -78,6 +80,8 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
     if (mode === 'create_only') return previewRows.filter(r => r.status === 'new');
     return previewRows.filter(r => r.status === 'new' || r.status === 'changed');
   }, [previewRows, mode]);
+
+  const totalBatches = Math.ceil(actionableRows.length / BATCH_SIZE);
 
   const canSync = actionableRows.length > 0 && (mode === 'create_only' || riskConsent);
 
@@ -129,10 +133,68 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
     ? Math.round((progress.batchIndex / progress.totalBatches) * 100)
     : 0;
 
+  // Determine per-row sync status based on current batch progress
+  const getRowSyncState = (row: SyncPreviewRow): 'idle' | 'queued' | 'sending' | 'sent' | 'skipped' => {
+    if (!syncing || !progress) return 'idle';
+
+    const isActionable = row.status === 'new' || (row.status === 'changed' && mode === 'create_and_update');
+    if (!isActionable) return 'skipped';
+
+    const idx = actionableRows.findIndex(r => r.code === row.code);
+    if (idx === -1) return 'skipped';
+
+    const rowBatch = Math.floor(idx / BATCH_SIZE);
+    const currentBatch = progress.batchIndex;
+
+    if (rowBatch < currentBatch) return 'sent';
+    if (rowBatch === currentBatch && currentBatch < progress.totalBatches) return 'sending';
+    return 'queued';
+  };
+
   const renderStatusBadge = (status: SyncStatus) => {
     if (status === 'new') return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-300 text-[10px]">New</Badge>;
     if (status === 'changed') return <Badge className="bg-amber-100 text-amber-700 border-amber-300 text-[10px]">Changed</Badge>;
     return <Badge variant="outline" className="text-muted-foreground text-[10px]">Unchanged</Badge>;
+  };
+
+  const renderActionCell = (row: SyncPreviewRow) => {
+    const isActionable = row.status === 'new' || (row.status === 'changed' && mode === 'create_and_update');
+    const isSkipped = row.status === 'changed' && mode === 'create_only';
+
+    if (!syncing) {
+      if (isActionable) return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" />;
+      if (isSkipped) return <span className="text-[10px] text-muted-foreground">Skipped</span>;
+      return null;
+    }
+
+    const state = getRowSyncState(row);
+    switch (state) {
+      case 'sent':
+        return (
+          <span className="inline-flex items-center gap-1 text-emerald-600">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            <span className="text-[10px] font-medium">Sent</span>
+          </span>
+        );
+      case 'sending':
+        return (
+          <span className="inline-flex items-center gap-1 text-primary">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <span className="text-[10px] font-medium">Sending</span>
+          </span>
+        );
+      case 'queued':
+        return (
+          <span className="inline-flex items-center gap-1 text-muted-foreground">
+            <Clock className="h-3 w-3" />
+            <span className="text-[10px]">Queued</span>
+          </span>
+        );
+      case 'skipped':
+        return <span className="text-[10px] text-muted-foreground">Skipped</span>;
+      default:
+        return isActionable ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" /> : null;
+    }
   };
 
   return (
@@ -193,6 +255,45 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
             </Alert>
           )}
 
+          {/* Pre-sync info strip */}
+          {!syncing && actionableRows.length > 0 && (
+            <div className="flex items-center gap-2 text-xs bg-primary/5 border border-primary/20 rounded-md px-3 py-2">
+              <Upload className="h-3.5 w-3.5 text-primary shrink-0" />
+              <span>
+                This will push <strong>{actionableRows.length} account{actionableRows.length !== 1 ? 's' : ''}</strong> to Xero in batches of {BATCH_SIZE}
+                {' '}(~{totalBatches} API call{totalBatches !== 1 ? 's' : ''}) to stay within rate limits.
+              </span>
+            </div>
+          )}
+
+          {/* Progress strip — prominent during sync */}
+          {syncing && progress && (
+            <div className="space-y-2 bg-muted/40 border border-border/50 rounded-md px-3 py-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium">
+                  {rateLimitWait
+                    ? `⏳ Rate limited — retrying in ${rateLimitWait}s…`
+                    : progress.batchIndex < progress.totalBatches
+                      ? <>Pushing 2 at a time · <strong>Batch {progress.batchIndex + 1} of {progress.totalBatches}</strong></>
+                      : '✓ All batches sent'}
+                </span>
+                <span className="text-xs text-muted-foreground">{progressPct}%</span>
+              </div>
+              <Progress value={progressPct} className="h-2" />
+              <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                {progress.createdSoFar > 0 && (
+                  <span className="text-emerald-600">{progress.createdSoFar} created</span>
+                )}
+                {progress.updatedSoFar > 0 && (
+                  <span className="text-amber-600">{progress.updatedSoFar} updated</span>
+                )}
+                {progress.errorsSoFar > 0 && (
+                  <span className="text-destructive">{progress.errorsSoFar} error{progress.errorsSoFar !== 1 ? 's' : ''}</span>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Preview table */}
           <div className="border rounded-lg overflow-auto flex-1 min-h-0">
             <table className="w-full text-xs">
@@ -202,19 +303,22 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
                   <th className="text-left p-2 font-medium">Name</th>
                   <th className="text-left p-2 font-medium">Type</th>
                   <th className="text-center p-2 font-medium w-24">Status</th>
-                  <th className="text-center p-2 font-medium w-20">Action</th>
+                  <th className="text-center p-2 font-medium w-24">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {previewRows.map((row) => {
                   const isActionable = row.status === 'new' || (row.status === 'changed' && mode === 'create_and_update');
                   const isSkipped = row.status === 'changed' && mode === 'create_only';
+                  const syncState = syncing ? getRowSyncState(row) : null;
                   return (
                     <tr
                       key={row.code}
                       className={`border-b last:border-b-0 ${
                         row.status === 'unchanged' ? 'opacity-50' : ''
-                      } ${isSkipped ? 'bg-muted/20' : ''}`}
+                      } ${isSkipped ? 'bg-muted/20' : ''} ${
+                        syncState === 'sending' ? 'bg-primary/5' : ''
+                      } ${syncState === 'sent' ? 'bg-emerald-50/50' : ''}`}
                     >
                       <td className="p-2 font-mono">{row.code}</td>
                       <td className="p-2">
@@ -225,12 +329,7 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
                       </td>
                       <td className="p-2">{row.type}</td>
                       <td className="p-2 text-center">{renderStatusBadge(row.status)}</td>
-                      <td className="p-2 text-center">
-                        {isActionable && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" />}
-                        {isSkipped && (
-                          <span className="text-[10px] text-muted-foreground">Skipped</span>
-                        )}
-                      </td>
+                      <td className="p-2 text-center">{renderActionCell(row)}</td>
                     </tr>
                   );
                 })}
@@ -251,23 +350,6 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
               <Label htmlFor="risk-consent" className="text-xs text-amber-900 cursor-pointer">
                 I understand this will modify {summary.changedCount} existing account{summary.changedCount !== 1 ? 's' : ''} in my Xero Chart of Accounts
               </Label>
-            </div>
-          )}
-
-          {/* Progress bar */}
-          {syncing && progress && (
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>
-                  {rateLimitWait
-                    ? `Rate limited — retrying in ${rateLimitWait}s…`
-                    : progress.batchIndex < progress.totalBatches
-                      ? `Sending batch ${progress.batchIndex + 1} of ${progress.totalBatches}…`
-                      : 'Finishing up…'}
-                </span>
-                <span>{progressPct}%</span>
-              </div>
-              <Progress value={progressPct} className="h-2" />
             </div>
           )}
 
