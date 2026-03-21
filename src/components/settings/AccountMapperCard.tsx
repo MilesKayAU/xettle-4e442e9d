@@ -1351,7 +1351,7 @@ export default function AccountMapperCard() {
                 <span className="text-muted-foreground ml-1">— {suggestion.name}</span>
                 {isGapFill && (
                   <Badge variant="outline" className="ml-1.5 text-[9px] border-amber-300 text-amber-700">
-                    Needs account
+                    Create if missing
                   </Badge>
                 )}
               </span>
