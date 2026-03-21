@@ -94,10 +94,38 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
     return { newCount, changedCount, unchangedCount };
   }, [previewRows]);
 
+  // Build a name→code map from the existing Xero COA for duplicate-name detection
+  const existingNameMap = useMemo(() => {
+    const map = new Map<string, string>(); // lowercase name → code
+    for (const a of coaAccounts) {
+      if (a.account_name && a.account_code) {
+        map.set(a.account_name.toLowerCase().trim(), a.account_code);
+      }
+    }
+    return map;
+  }, [coaAccounts]);
+
+  // Detect name conflicts: rows wanting to create an account whose name already
+  // exists in Xero under a DIFFERENT code (Xero enforces globally unique names)
+  const nameConflictMap = useMemo(() => {
+    const conflicts = new Map<string, string>(); // code → existing code with same name
+    for (const row of previewRows) {
+      if (row.status !== 'new') continue;
+      const existingCode = existingNameMap.get(row.name.toLowerCase().trim());
+      if (existingCode && existingCode !== row.code) {
+        conflicts.set(row.code, existingCode);
+      }
+    }
+    return conflicts;
+  }, [previewRows, existingNameMap]);
+
   const actionableRows = useMemo(() => {
-    if (mode === 'create_only') return previewRows.filter(r => r.status === 'new');
-    return previewRows.filter(r => r.status === 'new' || r.status === 'changed');
-  }, [previewRows, mode]);
+    const rows = mode === 'create_only'
+      ? previewRows.filter(r => r.status === 'new')
+      : previewRows.filter(r => r.status === 'new' || r.status === 'changed');
+    // Exclude rows with name conflicts — they'd fail at Xero anyway
+    return rows.filter(r => !nameConflictMap.has(r.code));
+  }, [previewRows, mode, nameConflictMap]);
 
   // Remaining actionable rows (skip already completed)
   const remainingRows = useMemo(
@@ -217,9 +245,20 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
   };
 
   const renderActionCell = (row: SyncPreviewRow) => {
-    const state = getRunState(row);
+    const runState = getRunState(row);
 
-    switch (state) {
+    // Name conflict takes priority — show before any run state
+    const conflictCode = nameConflictMap.get(row.code);
+    if (conflictCode) {
+      return (
+        <span className="inline-flex items-center gap-1 text-destructive" title={`Name "${row.name}" already exists under code ${conflictCode}`}>
+          <AlertTriangle className="h-3.5 w-3.5" />
+          <span className="text-[10px] font-medium">Name clash ({conflictCode})</span>
+        </span>
+      );
+    }
+
+    switch (runState) {
       case 'done':
         return (
           <span className="inline-flex items-center gap-1 text-emerald-600">
@@ -350,6 +389,27 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
                     {remainingRows.length} account{remainingRows.length !== 1 ? 's' : ''} remaining — tick the consent below and push the next batch.
                   </div>
                 )}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Name conflict warning */}
+          {nameConflictMap.size > 0 && (
+            <Alert className="border-amber-300 bg-amber-50">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-xs text-amber-900 space-y-1">
+                <div><strong>{nameConflictMap.size} account{nameConflictMap.size !== 1 ? 's' : ''} skipped</strong> — names already exist in Xero under different codes:</div>
+                <div className="space-y-0.5">
+                  {[...nameConflictMap.entries()].map(([code, existingCode]) => {
+                    const row = previewRows.find(r => r.code === code);
+                    return (
+                      <div key={code} className="text-[10px]">
+                        <span className="font-mono">{code}</span> "{row?.name}" → already exists as code <span className="font-mono font-medium">{existingCode}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="text-[10px] text-amber-700 mt-1">Rename the account in your mapping or use the existing code instead.</div>
               </AlertDescription>
             </Alert>
           )}
