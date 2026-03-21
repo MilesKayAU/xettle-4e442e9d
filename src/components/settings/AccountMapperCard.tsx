@@ -1947,7 +1947,7 @@ export default function AccountMapperCard() {
                 <span className="flex items-center gap-1.5">
                   <span className="font-mono">{code || '—'}</span>
                   {coaEntry && <span className="text-muted-foreground truncate max-w-[100px]">{coaEntry.name}</span>}
-                  {renderValidationBadge(code, cat)}
+                  {renderValidationBadge(code, cat, entry?.name)}
                 </span>
               </div>
             );
