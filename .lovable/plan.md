@@ -1,51 +1,65 @@
 
 
-# Phase 1 (Beta-scoped): Hardening the FBM Bridge
+# FBM Bridge: API Audit Log for Amazon SP-API Approval
 
-Given your framing — this is a personal-use feature that earns Amazon app approval as a byproduct, parked as admin-only beta — the scope narrows significantly. Here is a minimal, focused plan.
+## Context
 
-## What gets built
+The circuit breaker, retry queue, shipping passthrough, dynamic store resolution, cancellation detection, and email alerts are **already implemented and deployed**. What's missing for Amazon approval is a **structured API call audit log** — a record of every SP-API request made on behalf of the seller, demonstrating responsible API usage.
 
-### 1. Error Retry Queue + Email Alerts
-**Database migration:** Add `retry_count` (int, default 0) and `last_retry_at` (timestamptz) to `amazon_fbm_orders`.
+Currently, `system_events` captures business-level events (order created, poll completed, circuit open), but doesn't log individual API calls with request/response metadata that Amazon's review team wants to see.
 
-**`sync-amazon-fbm-orders`:** During each poll, pick up `failed` rows where `retry_count < 3` and backoff has elapsed (5m / 15m / 60m). Re-attempt Shopify creation. After 3 failures, set status to `manual_review` and enqueue an alert email via existing `enqueue_email` RPC.
+## What Gets Built
 
-**`FulfillmentBridge.tsx`:** Add a "Retry All Failed" button in the Order Monitor tab.
+### 1. API Call Audit Table
+**Database migration:** New `api_call_log` table optimized for write-heavy, read-occasional audit queries.
 
-### 2. Shipping Service Level Passthrough
-**Database migration:** Add `shipping_service_level` (text, nullable) to `amazon_fbm_orders`.
+```
+api_call_log
+├── id (uuid, PK)
+├── user_id (uuid, NOT NULL)
+├── integration (text) — 'amazon_sp_api', 'shopify', etc.
+├── endpoint (text) — '/orders/v2026-01-01/orders', '/shipping/v2/shipments'
+├── method (text) — 'GET', 'POST'
+├── status_code (int)
+├── latency_ms (int)
+├── request_context (jsonb) — marketplace_id, order_id, page number (NO PII)
+├── error_summary (text, nullable) — truncated error for failed calls
+├── rate_limit_remaining (int, nullable) — from x-amzn-RateLimit-Remaining header
+├── created_at (timestamptz, default now())
+```
 
-**`sync-amazon-fbm-orders`:** Extract `shipmentServiceLevelCategory` from the Amazon order payload and store it. Tag the Shopify draft order with `shipping:Expedited` (or whatever the value is).
+RLS: Service role only (no user-facing reads needed outside admin). Index on `(user_id, integration, created_at DESC)`.
 
-**`shopify-fbm-fulfillment-webhook`:** Use stored shipping level instead of hardcoded `'Standard'` when calling `confirmShipment`.
+### 2. Lightweight Audit Logger Helper
+Add a shared helper `logApiCall()` in `_shared/api-audit.ts` that the edge functions call after every external API request. It captures timing, status, and rate limit headers without blocking the main flow (fire-and-forget insert).
 
-### 3. Remove Hardcoded Store Domain
-Replace `SHOPIFY_FBM_STORE = 'mileskayaustralia.myshopify.com'` in 3 locations:
-- **`sync-amazon-fbm-orders`** — query `shopify_tokens` for first active row, no domain filter
-- **`shopify-auth`** — remove fallback default
-- **`FulfillmentBridge.tsx`** — read shop domain from `shopify_tokens` instead of hardcoding
+### 3. Instrument sync-amazon-fbm-orders
+Wrap the existing `fetch()` calls to Amazon SP-API (orders list, order detail, order revalidation) with `logApiCall()`. Each call gets a row showing endpoint, status, latency, and remaining rate limit quota.
 
-### 4. Cancellation Detection (lightweight)
-**`sync-amazon-fbm-orders`:** When re-checking existing `synced`/`created` orders during a poll, detect Amazon `Canceled` status. Update row to `cancelled`, cancel the Shopify draft order via REST API, log a `system_event`, and send an alert email.
+### 4. Instrument shopify-fbm-fulfillment-webhook
+Wrap `confirmShipment` and Shopify fulfillment API calls with the same logger.
 
-No reverse flow (Shopify → Amazon cancel) in this phase.
+### 5. Audit Log Tab in FulfillmentBridge UI
+Add a new "API Audit" tab showing the last 100 API calls with filters by integration, status code, and date range. Includes a CSV export button for Amazon's review team.
 
-### 5. Circuit Breaker (Amazon approval requirement)
-Add a simple counter in memory within `sync-amazon-fbm-orders`: after 5 consecutive API failures (429s or 5xx), stop polling for that cycle and log `fbm_circuit_open` to `system_events` with an alert email. Resets on next successful call or next poll cycle.
+### 6. Auto-Purge (30-day retention)
+Add a SQL statement to clean up `api_call_log` rows older than 90 days (API audit doesn't contain PII, so longer retention is fine for compliance evidence). Can run via the existing daily cron.
 
 ---
 
-## Files changed
+## Files Changed
 
 | File | What |
 |------|------|
-| Database migration | `retry_count`, `last_retry_at`, `shipping_service_level` on `amazon_fbm_orders` |
-| `supabase/functions/sync-amazon-fbm-orders/index.ts` | Retry loop, shipping extraction, dynamic store, cancellation detection, circuit breaker, alert emails |
-| `supabase/functions/shopify-fbm-fulfillment-webhook/index.ts` | Use stored shipping level, dynamic store resolution |
-| `supabase/functions/shopify-auth/index.ts` | Remove hardcoded store fallback |
-| `src/components/admin/FulfillmentBridge.tsx` | "Retry All Failed" button, dynamic store, shipping level display |
+| Database migration | Create `api_call_log` table with index |
+| `supabase/functions/_shared/api-audit.ts` | New shared `logApiCall()` helper |
+| `supabase/functions/sync-amazon-fbm-orders/index.ts` | Instrument 4-5 fetch calls with audit logging |
+| `supabase/functions/shopify-fbm-fulfillment-webhook/index.ts` | Instrument confirmShipment + Shopify API calls |
+| `src/components/admin/FulfillmentBridge.tsx` | New "API Audit" tab with table + CSV export |
 
-## What is explicitly NOT built
-Returns/refunds, inventory sync, multi-store UI, bulk CSV import, dashboard metrics, multi-currency — all parked unless needed for your store or Amazon approval.
+## What This Proves to Amazon
+- Every API call is logged with status and latency
+- Rate limit headers are captured, proving the integration respects throttling
+- Circuit breaker evidence is visible in the audit trail (consecutive failures → circuit open)
+- No PII stored in the audit log (only order IDs, endpoints, status codes)
 
