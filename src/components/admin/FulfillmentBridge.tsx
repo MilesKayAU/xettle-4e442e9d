@@ -978,19 +978,52 @@ function OrderMonitorTab() {
                           </CollapsibleTrigger>
                         </TableCell>
                         <TableCell className="font-mono text-sm">
-                          <div className="flex items-center gap-1.5">
-                            <span>{order.amazon_order_id}</span>
-                            <a
-                              href={`https://${sellerCentralDomain}/orders-v3/order/${order.amazon_order_id}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={e => e.stopPropagation()}
-                              title="Open in Seller Central"
-                              className="text-primary hover:text-primary/80"
-                            >
-                              <ExternalLink className="h-3.5 w-3.5" />
-                            </a>
-                          </div>
+                          {editingUrlOrderId === order.id ? (
+                            <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                              <Input
+                                value={editUrlValue}
+                                onChange={e => setEditUrlValue(e.target.value)}
+                                placeholder="Paste Seller Central URL"
+                                className="h-7 text-xs w-[260px]"
+                                autoFocus
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') handleUrlEditSubmit(order.amazon_order_id);
+                                  if (e.key === 'Escape') setEditingUrlOrderId(null);
+                                }}
+                              />
+                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleUrlEditSubmit(order.amazon_order_id)}>
+                                <Check className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingUrlOrderId(null)}>
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5">
+                              <span>{order.amazon_order_id}</span>
+                              <a
+                                href={buildSellerCentralUrl(order.amazon_order_id)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                title="Open in Seller Central"
+                                className="text-primary hover:text-primary/80"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                              <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  setEditUrlValue(buildSellerCentralUrl(order.amazon_order_id));
+                                  setEditingUrlOrderId(order.id);
+                                }}
+                                title="Edit URL"
+                                className="text-muted-foreground hover:text-foreground"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="text-sm max-w-[180px]">
                           {(() => {
