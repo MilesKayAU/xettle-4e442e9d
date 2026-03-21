@@ -1966,7 +1966,7 @@ export default function AccountMapperCard() {
                     <span className="text-muted-foreground">{mp} {cat}</span>
                     <span className="flex items-center gap-1.5">
                       <span className="font-mono">{code || '—'}</span>
-                      {renderValidationBadge(code, cat || 'Sales')}
+                      {renderValidationBadge(code, cat || 'Sales', mapping[key]?.name)}
                     </span>
                   </div>
                 );
