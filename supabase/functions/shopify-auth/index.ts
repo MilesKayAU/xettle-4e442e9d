@@ -228,6 +228,15 @@ Deno.serve(async (req) => {
 
       logger.debug('Shopify token stored successfully for shop:', shop)
 
+      // Auto-register fulfillment webhook for FBM tracking
+      try {
+        await registerFulfillmentWebhook(shop, access_token)
+        logger.info('Auto-registered fulfillment webhook', { shop })
+      } catch (webhookErr: any) {
+        logger.warn('Failed to auto-register fulfillment webhook', { shop, error: webhookErr.message })
+        // Non-fatal — user can manually register later
+      }
+
       return new Response(
         JSON.stringify({ success: true, shop, scope }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
