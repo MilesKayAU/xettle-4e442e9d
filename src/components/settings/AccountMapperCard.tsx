@@ -1149,6 +1149,38 @@ export default function AccountMapperCard() {
 
     return sortedMarketplaces.map(mp => {
       const key = `${baseCat}:${mp}`;
+      const isExcluded = excludedMappings.has(key) || excludedMarketplaces.has(mp);
+
+      // Skip excluded rows entirely if in filter mode
+      if (isExcluded) {
+        return (
+          <tr key={key} className="border-b last:border-b-0 bg-muted/10 opacity-40">
+            <td className="p-2 pl-6">
+              <div className="text-xs text-muted-foreground line-through">↳ {mp} {baseCat}</div>
+            </td>
+            <td className="p-2" colSpan={2}>
+              <span className="text-[10px] text-muted-foreground">Excluded from mapping</span>
+            </td>
+            <td className="p-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-5 text-[10px] px-1.5 gap-0.5"
+                onClick={() => {
+                  if (excludedMarketplaces.has(mp)) {
+                    toggleExcludeMarketplace(mp);
+                  } else {
+                    toggleExcludeMapping(key);
+                  }
+                }}
+              >
+                <Plus className="h-2.5 w-2.5" /> Restore
+              </Button>
+            </td>
+          </tr>
+        );
+      }
+
       const baseCode = editableMapping[baseCat] || mapping[baseCat]?.code || '';
       const coaSuggestion = coaSuggestions.get(key); // COA-scanned suggestion
       // Auto-apply gap-fill suggestion to editable mapping if no override set yet
@@ -1166,9 +1198,18 @@ export default function AccountMapperCard() {
       const isGapFill = coaSuggestion?.isGapFill === true;
       const suggestion = aiSuggestion || (coaSuggestion ? { code: coaSuggestion.code, name: coaSuggestion.name } : null);
       return (
-        <tr key={key} className="border-b last:border-b-0 bg-muted/20">
+        <tr key={key} className="border-b last:border-b-0 bg-muted/20 group/row">
           <td className="p-2 pl-6">
-            <div className="text-xs text-muted-foreground">↳ {mp} {baseCat}</div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">↳ {mp} {baseCat}</span>
+              <button
+                onClick={() => toggleExcludeMapping(key)}
+                className="opacity-0 group-hover/row:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                title={`Exclude ${mp} ${baseCat} from mapping`}
+              >
+                <XCircle className="h-3 w-3" />
+              </button>
+            </div>
           </td>
           <td className="p-2">
             {suggestion?.code ? (
