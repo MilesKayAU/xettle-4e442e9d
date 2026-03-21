@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { RefreshCw, Trash2, Plus, ChevronDown, Play, FlaskConical, AlertTriangle, Search, ShieldAlert, CheckCircle2, XCircle, Clock, Webhook, RotateCcw, Download, FileText, Camera, Upload, User, MapPin, Loader2, ExternalLink, Package, Pencil, Check, X, Link2 } from 'lucide-react';
+import { RefreshCw, Trash2, Plus, ChevronDown, Play, FlaskConical, AlertTriangle, Search, ShieldAlert, CheckCircle2, XCircle, Clock, Webhook, RotateCcw, Download, FileText, Camera, Upload, User, MapPin, Loader2, ExternalLink, Package, Pencil, Check, X, Link2, ClipboardPaste } from 'lucide-react';
 import { AMAZON_REGIONS, DEFAULT_AMAZON_REGION } from '@/constants/amazon-regions';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import LoadingSpinner from '@/components/ui/loading-spinner';
@@ -452,12 +452,9 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSel
   const [patching, setPatching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const processImageFile = (file: File) => {
     setError(null);
     setExtractedData(null);
-
     const reader = new FileReader();
     reader.onload = (ev) => {
       const dataUrl = ev.target?.result as string;
@@ -465,6 +462,25 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSel
       setImageBase64(dataUrl);
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    processImageFile(file);
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) processImageFile(file);
+        return;
+      }
+    }
   };
 
   const handleExtract = async () => {
@@ -554,14 +570,20 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSel
 
           {/* Upload area */}
           {!imagePreview ? (
-            <label className="flex flex-col items-center justify-center gap-3 p-8 rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 cursor-pointer transition-colors">
-              <Upload className="h-10 w-10 text-muted-foreground" />
+            <div
+              tabIndex={0}
+              onPaste={handlePaste}
+              className="flex flex-col items-center justify-center gap-3 p-8 rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 focus:border-primary focus:ring-2 focus:ring-ring cursor-pointer transition-colors outline-none"
+              onClick={() => (document.getElementById('screenshot-file-input') as HTMLInputElement)?.click()}
+              onKeyDown={(e) => { if (e.key === 'Enter') (document.getElementById('screenshot-file-input') as HTMLInputElement)?.click(); }}
+            >
+              <ClipboardPaste className="h-10 w-10 text-muted-foreground" />
               <div className="text-center">
-                <p className="font-medium">Drop screenshot here or click to upload</p>
+                <p className="font-medium">Paste screenshot (Ctrl+V) or click to upload</p>
                 <p className="text-sm text-muted-foreground mt-1">PNG, JPG — Amazon order detail page</p>
               </div>
-              <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-            </label>
+              <input id="screenshot-file-input" type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+            </div>
           ) : (
             <div className="space-y-3">
               <div className="relative">
