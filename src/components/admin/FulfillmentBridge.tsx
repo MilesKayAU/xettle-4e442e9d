@@ -857,7 +857,47 @@ function OrderMonitorTab() {
                             </Button>
                           </CollapsibleTrigger>
                         </TableCell>
-                        <TableCell className="font-mono text-sm">{order.amazon_order_id}</TableCell>
+                        <TableCell className="font-mono text-sm">
+                          <div className="flex items-center gap-1.5">
+                            <span>{order.amazon_order_id}</span>
+                            <a
+                              href={`https://${sellerCentralDomain}/orders-v3/order/${order.amazon_order_id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              title="Open in Seller Central"
+                              className="text-primary hover:text-primary/80"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm max-w-[180px]">
+                          {(() => {
+                            const ap = order.raw_amazon_payload;
+                            const items = ap?.orderItems || ap?.OrderItems || [];
+                            const matched = ap?.matched_skus;
+                            if (items.length > 0) {
+                              const first = items[0];
+                              const title = first.Title || first.title || first.SellerSKU || first.seller_sku || '—';
+                              const sku = first.SellerSKU || first.seller_sku;
+                              return (
+                                <div className="space-y-0.5">
+                                  <span className="block truncate font-medium" title={title}>{title}</span>
+                                  {sku && <span className="block text-xs text-muted-foreground font-mono">{sku}</span>}
+                                  {items.length > 1 && (
+                                    <Badge variant="outline" className="text-xs">+ {items.length - 1} more</Badge>
+                                  )}
+                                </div>
+                              );
+                            }
+                            if (matched && Object.keys(matched).length > 0) {
+                              const firstSku = Object.keys(matched)[0];
+                              return <span className="font-mono text-xs">{firstSku}</span>;
+                            }
+                            return <span className="text-muted-foreground">—</span>;
+                          })()}
+                        </TableCell>
                         <TableCell className="font-mono text-sm">{order.shopify_order_id ? `#${order.shopify_order_id}` : '—'}</TableCell>
                         <TableCell className="text-sm">
                           {(() => {
@@ -866,11 +906,18 @@ function OrderMonitorTab() {
                             if (shipping?.first_name || shipping?.last_name) {
                               const name = [shipping.first_name, shipping.last_name].filter(Boolean).join(' ');
                               const isPlaceholder = name.toLowerCase().includes('amazon fbm') || name.toLowerCase().includes('placeholder');
-                              return (
-                                <span className={isPlaceholder ? 'text-muted-foreground italic' : 'font-medium'}>
-                                  {isPlaceholder ? 'Placeholder' : name}
-                                </span>
-                              );
+                              if (isPlaceholder) {
+                                return (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-muted-foreground italic">Placeholder</span>
+                                    <Badge variant="outline" className="text-xs border-amber-300 text-amber-700 bg-amber-50">
+                                      <Camera className="h-2.5 w-2.5 mr-0.5" />
+                                      Screenshot needed
+                                    </Badge>
+                                  </div>
+                                );
+                              }
+                              return <span className="font-medium">{name}</span>;
                             }
                             const ap = order.raw_amazon_payload;
                             const buyerName = ap?.BuyerInfo?.BuyerName || ap?.buyerName;
