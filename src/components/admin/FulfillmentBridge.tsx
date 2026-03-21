@@ -823,6 +823,7 @@ function OrderMonitorTab() {
                   <TableHead></TableHead>
                   <TableHead>Amazon Order ID</TableHead>
                   <TableHead>Shopify Order ID</TableHead>
+                  <TableHead>Customer</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Shipping</TableHead>
                   <TableHead>Created</TableHead>
@@ -843,7 +844,26 @@ function OrderMonitorTab() {
                           </CollapsibleTrigger>
                         </TableCell>
                         <TableCell className="font-mono text-sm">{order.amazon_order_id}</TableCell>
-                        <TableCell className="font-mono text-sm">{order.shopify_order_id || '—'}</TableCell>
+                        <TableCell className="font-mono text-sm">{order.shopify_order_id ? `#${order.shopify_order_id}` : '—'}</TableCell>
+                        <TableCell className="text-sm">
+                          {(() => {
+                            const sp = order.raw_shopify_payload;
+                            const shipping = sp?.order?.shipping_address || sp?.shipping_address;
+                            if (shipping?.first_name || shipping?.last_name) {
+                              const name = [shipping.first_name, shipping.last_name].filter(Boolean).join(' ');
+                              const isPlaceholder = name.toLowerCase().includes('amazon fbm') || name.toLowerCase().includes('placeholder');
+                              return (
+                                <span className={isPlaceholder ? 'text-muted-foreground italic' : 'font-medium'}>
+                                  {isPlaceholder ? 'Placeholder' : name}
+                                </span>
+                              );
+                            }
+                            const ap = order.raw_amazon_payload;
+                            const buyerName = ap?.BuyerInfo?.BuyerName || ap?.buyerName;
+                            if (buyerName) return <span className="text-muted-foreground">{buyerName}</span>;
+                            return <span className="text-muted-foreground">—</span>;
+                          })()}
+                        </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={STATUS_COLORS[order.status] || ''}>
                             {order.status}
@@ -890,7 +910,7 @@ function OrderMonitorTab() {
                       </TableRow>
                       <CollapsibleContent asChild>
                         <TableRow>
-                          <TableCell colSpan={8} className="bg-muted/50 p-4">
+                          <TableCell colSpan={9} className="bg-muted/50 p-4">
                             <div className="space-y-3">
                               {/* Duplicate Detection Info */}
                               {order.status === 'pending_payment' && (
