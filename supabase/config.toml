@@ -51,3 +51,5 @@ project_id = "cegwclxbqvitkqxikpss"
     verify_jwt = false
   [functions.sync-xero-status]
     verify_jwt = false
+  [functions.shopify-fbm-fulfillment-webhook]
+    verify_jwt = false
