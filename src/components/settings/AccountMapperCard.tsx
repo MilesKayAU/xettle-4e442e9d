@@ -1158,10 +1158,15 @@ export default function AccountMapperCard() {
     return 'valid';
   };
 
-  const renderValidationBadge = (code: string | undefined, category: string) => {
+  const renderValidationBadge = (code: string | undefined, category: string, expectedName?: string) => {
     if (!code || coaMap.size === 0) return null;
-    const status = validateCode(code, category);
+    const status = validateCode(code, category, expectedName);
     if (status === 'valid') return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />;
+    if (status === 'reuse_existing') return (
+      <span className="flex items-center gap-1 text-[10px] text-amber-600">
+        <Info className="h-3.5 w-3.5 shrink-0" /> Use existing
+      </span>
+    );
     if (status === 'missing') return (
       <span className="flex items-center gap-1 text-[10px] text-destructive">
         <XCircle className="h-3.5 w-3.5 shrink-0" /> Not in Xero
@@ -1179,10 +1184,11 @@ export default function AccountMapperCard() {
     );
   };
 
-  const renderStatusBadge = (code: string | undefined, category: string) => {
+  const renderStatusBadge = (code: string | undefined, category: string, expectedName?: string) => {
     if (!code) return <Badge variant="outline" className="text-destructive border-destructive/30 text-[10px]">Unmapped</Badge>;
-    const status = validateCode(code, category);
+    const status = validateCode(code, category, expectedName);
     if (status === 'valid') return <Badge variant="outline" className="text-emerald-700 border-emerald-300 text-[10px]">Mapped</Badge>;
+    if (status === 'reuse_existing') return <Badge variant="outline" className="text-amber-700 border-amber-300 text-[10px]">Use existing</Badge>;
     if (status === 'missing') return <Badge variant="outline" className="text-destructive border-destructive/30 text-[10px]">Not in Xero</Badge>;
     if (status === 'inactive') return <Badge variant="outline" className="text-destructive border-destructive/30 text-[10px]">Inactive</Badge>;
     return <Badge variant="outline" className="text-amber-700 border-amber-300 text-[10px]">Wrong type</Badge>;
