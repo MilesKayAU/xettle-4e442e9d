@@ -1275,22 +1275,22 @@ export default function AccountMapperCard() {
             </div>
           )}
 
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center">
             <Button variant="outline" onClick={handleSaveDraft} className="gap-2">
               <Save className="h-4 w-4" />
               Save Draft
             </Button>
             <Button onClick={handleConfirm} className="gap-2">
-              <Upload className="h-4 w-4" />
-              Confirm & Push to Xero
+              <CheckCircle2 className="h-4 w-4" />
+              Confirm Mapping
             </Button>
-            <Button variant="ghost" size="sm" onClick={runMapper} className="gap-2">
+            <Button variant="ghost" size="sm" onClick={() => { const scrollY = window.scrollY; runMapper().then(() => window.scrollTo(0, scrollY)); }} className="gap-2">
               <RefreshCw className="h-4 w-4" />
               Re-run
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            <strong>Save Draft</strong> keeps your changes locally. <strong>Confirm & Push</strong> locks the mapping for all future Xero pushes.
+            <strong>Save Draft</strong> keeps your changes locally. <strong>Confirm Mapping</strong> locks these accounts for all future Xero pushes.
           </p>
         </CardContent>
       </Card>
