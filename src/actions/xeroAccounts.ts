@@ -158,6 +158,7 @@ export interface BatchCreateProgress {
   createdSoFar: number;
   updatedSoFar: number;
   errorsSoFar: number;
+  rateLimitWait?: number;
 }
 
 export interface BatchCreateResult {

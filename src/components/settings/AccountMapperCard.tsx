@@ -934,18 +934,22 @@ export default function AccountMapperCard() {
 
       const xeroEntry = coaMap.get(code);
       const accountType = getAccountTypeForCategory(category);
+      // Carry forward existing tax_type from COA cache for the account
+      const coaFull = coaAccounts.find(a => a.account_code === code);
+      const taxType = coaFull?.tax_type || undefined;
 
       if (!xeroEntry) {
-        rows.push({ code, name, type: accountType, category, marketplace, status: 'new' });
+        rows.push({ code, name, type: accountType, category, marketplace, status: 'new', tax_type: taxType });
       } else if (xeroEntry.name !== name || xeroEntry.type !== accountType) {
         rows.push({
           code, name, type: accountType, category, marketplace,
           status: 'changed',
           xeroName: xeroEntry.name,
           xeroType: xeroEntry.type,
+          tax_type: taxType,
         });
       } else {
-        rows.push({ code, name, type: accountType, category, marketplace, status: 'unchanged' });
+        rows.push({ code, name, type: accountType, category, marketplace, status: 'unchanged', tax_type: taxType });
       }
     };
 
