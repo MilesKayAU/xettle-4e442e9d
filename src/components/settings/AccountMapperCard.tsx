@@ -929,6 +929,34 @@ export default function AccountMapperCard() {
     toast.success('Applied suggestions to all unmapped categories');
   };
 
+  /** Persist exclusion settings */
+  const saveExclusions = useCallback(async (keys: Set<string>, mps: Set<string>) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase.from('app_settings').upsert(
+      { user_id: user.id, key: 'coa_excluded_mappings', value: JSON.stringify({ keys: [...keys], marketplaces: [...mps] }) },
+      { onConflict: 'user_id,key' }
+    );
+  }, []);
+
+  const toggleExcludeMapping = useCallback((key: string) => {
+    setExcludedMappings(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      saveExclusions(next, excludedMarketplaces);
+      return next;
+    });
+  }, [excludedMarketplaces, saveExclusions]);
+
+  const toggleExcludeMarketplace = useCallback((mp: string) => {
+    setExcludedMarketplaces(prev => {
+      const next = new Set(prev);
+      if (next.has(mp)) next.delete(mp); else next.add(mp);
+      saveExclusions(excludedMappings, next);
+      return next;
+    });
+  }, [excludedMappings, saveExclusions]);
+
   const getEffectiveMarketplaces = (): string[] => {
     if (activeMarketplaces.length > 0) return activeMarketplaces;
     return KNOWN_MARKETPLACES.slice(0, 3);
