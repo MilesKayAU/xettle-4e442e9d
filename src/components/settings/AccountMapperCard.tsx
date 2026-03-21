@@ -1506,7 +1506,7 @@ export default function AccountMapperCard() {
         )}
 
         <TrackingCategoryPrompt />
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={() => setState('review')} className="gap-2">
             <Search className="h-3 w-3" />
             Edit mappings
@@ -1515,11 +1515,53 @@ export default function AccountMapperCard() {
             <RefreshCw className="h-3 w-3" />
             Re-run AI mapper
           </Button>
+          {isAdmin && coaAccounts.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={async () => {
+                // Refresh COA before computing diff
+                toast.info('Refreshing COA from Xero…');
+                const result = await refreshXeroCOA();
+                if (!result.success) {
+                  toast.error(`COA refresh failed: ${result.error}`);
+                  return;
+                }
+                const [freshAccounts, freshSynced] = await Promise.all([
+                  getCachedXeroAccounts(),
+                  getCoaLastSyncedAt(),
+                ]);
+                setCoaAccounts(freshAccounts);
+                setCoaLastSynced(freshSynced);
+                setSyncModalOpen(true);
+              }}
+            >
+              <Upload className="h-3 w-3" />
+              Sync to Xero
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
     {renderCloneDialog()}
     {renderOverwriteConfirmDialog()}
+    {isAdmin && (
+      <XeroCoaSyncModal
+        open={syncModalOpen}
+        onOpenChange={setSyncModalOpen}
+        previewRows={computeSyncPreviewRows()}
+        coaAccounts={coaAccounts}
+        onSyncComplete={async () => {
+          const [accounts, lastSynced] = await Promise.all([
+            getCachedXeroAccounts(),
+            getCoaLastSyncedAt(),
+          ]);
+          setCoaAccounts(accounts);
+          setCoaLastSynced(lastSynced);
+        }}
+      />
+    )}
     </>
   );
 }
