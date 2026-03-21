@@ -1219,7 +1219,7 @@ export default function AccountMapperCard() {
               <span className="text-xs text-muted-foreground">↳ {mp} {baseCat}</span>
               <button
                 onClick={() => toggleExcludeMapping(key)}
-                className="opacity-0 group-hover/row:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                className="text-muted-foreground hover:text-destructive transition-colors"
                 title={`Exclude ${mp} ${baseCat} from mapping`}
               >
                 <XCircle className="h-3 w-3" />
