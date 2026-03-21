@@ -98,6 +98,55 @@ export default function AmazonComplianceDashboard() {
         </p>
       </div>
 
+      {/* SP-API Fee Status Banner */}
+      <Collapsible>
+        <Card className="border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20">
+          <CardContent className="py-3 px-4">
+            <CollapsibleTrigger className="flex items-center gap-3 w-full text-left group">
+              <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 text-[10px]">
+                    Fees Delayed
+                  </Badge>
+                  <span className="text-sm text-foreground font-medium">
+                    SP-API $1,400/yr annual fee + GET call usage fees — on hold indefinitely
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  New timelines expected fall 2026. Click to expand details.
+                </p>
+              </div>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="mt-3 pt-3 border-t border-amber-500/20 space-y-2 text-xs text-muted-foreground">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="flex items-start gap-1.5">
+                    <span className="text-amber-600 dark:text-amber-400 mt-0.5">•</span>
+                    <span><strong>Basic tier:</strong> 2.5M GET calls/month included</span>
+                  </div>
+                  <div className="flex items-start gap-1.5">
+                    <span className="text-amber-600 dark:text-amber-400 mt-0.5">•</span>
+                    <span><strong>Overage:</strong> $0.40 per 1,000 GET calls</span>
+                  </div>
+                  <div className="flex items-start gap-1.5">
+                    <span className="text-amber-600 dark:text-amber-400 mt-0.5">•</span>
+                    <span><strong>Exclusion:</strong> Does not apply to sellers/vendors using SP-API for own private operations</span>
+                  </div>
+                  <div className="flex items-start gap-1.5">
+                    <span className="text-amber-600 dark:text-amber-400 mt-0.5">•</span>
+                    <span><strong>Optimise:</strong> Use Notifications API instead of polling to reduce future costs</span>
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground/60 pt-1">
+                  Source: novadata.io, March 2026
+                </p>
+              </div>
+            </CollapsibleContent>
+          </CardContent>
+        </Card>
+      </Collapsible>
+
       <Tabs defaultValue="checklist">
         <TabsList>
           <TabsTrigger value="checklist" className="gap-1.5">
