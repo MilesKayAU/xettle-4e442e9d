@@ -145,7 +145,6 @@ export default function CloneCoaDialog({
   }, [templateMarketplace, open, coaAccounts, allCodes, targetMarketplace, templateEligibility.eligible, matchPattern]);
 
   // Reset on open — prefer simpler marketplace templates (non-Amazon) as defaults
-  // since most marketplaces share the same basic categories without FBA/Storage
   useEffect(() => {
     if (open) {
       const preferredOrder = ['ebay_au', 'shopify', 'catch_au', 'kogan_au', 'mydeal_au'];
@@ -155,8 +154,19 @@ export default function CloneCoaDialog({
         || '';
       setTemplateMarketplace(bestDefault);
       setAiReview(null);
+      setShowChecklist(true);
+
+      // Initialize category selections based on target marketplace
+      const isAmazonTarget = targetMarketplace.toLowerCase().includes('amazon');
+      const defaults: Record<string, boolean> = {};
+      for (const cat of OPTIONAL_CATEGORIES) {
+        defaults[cat.key] = cat.defaultFor.length === 0 
+          ? true  // Always-on categories like Advertising
+          : cat.defaultFor.some(d => isAmazonTarget || targetMarketplace.toLowerCase().includes(d));
+      }
+      setCategorySelections(defaults);
     }
-  }, [open, coveredMarketplaces]);
+  }, [open, coveredMarketplaces, targetMarketplace]);
 
   const enabledRows = cloneRows.filter(r => r.enabled);
 
