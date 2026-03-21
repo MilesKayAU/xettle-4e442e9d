@@ -8,7 +8,7 @@ import {
   API_VERSIONS,
 } from '../_shared/amazon-sp-api-policy.ts'
 import { logger } from '../_shared/logger.ts'
-import { verifyShopifyHmac } from '../_shared/shopify-hmac.ts'
+import { verifyShopifyWebhookHmac } from '../_shared/shopify-hmac.ts'
 
 // ═══════════════════════════════════════════════════════════════
 // shopify-fbm-fulfillment-webhook
