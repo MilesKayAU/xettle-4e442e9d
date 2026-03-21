@@ -147,6 +147,9 @@ export default function AccountMapperCard() {
   const [excludedMarketplaces, setExcludedMarketplaces] = useState<Set<string>>(new Set());
   const [excludedCategories, setExcludedCategories] = useState<Set<string>>(new Set());
 
+  // Ignored marketplaces — hidden from clone banner & gap detection site-wide
+  const [ignoredMarketplaces, setIgnoredMarketplaces] = useState<Set<string>>(new Set());
+
   // Confirmed (saved) codes for comparison
   const [confirmedCodes, setConfirmedCodes] = useState<Record<string, string>>({});
 
