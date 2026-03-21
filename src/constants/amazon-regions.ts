@@ -19,18 +19,20 @@ export interface AmazonRegion {
   flag: string;
   /** Marketplace code used in Xettle's internal systems */
   xettleCode: string;
+  /** Seller Central domain for deep-linking to order pages */
+  sellerCentralDomain: string;
 }
 
 export const AMAZON_REGIONS: AmazonRegion[] = [
-  { marketplaceId: 'A39IBJ37TRP1C6', region: 'fe', label: 'Amazon Australia', flag: '🇦🇺', xettleCode: 'amazon_au' },
-  { marketplaceId: 'ATVPDKIKX0DER',  region: 'na', label: 'Amazon United States', flag: '🇺🇸', xettleCode: 'amazon_us' },
-  { marketplaceId: 'A2EUQ1WTGCTBG2', region: 'na', label: 'Amazon Canada', flag: '🇨🇦', xettleCode: 'amazon_ca' },
-  { marketplaceId: 'A1F83G8C2ARO7P', region: 'eu', label: 'Amazon United Kingdom', flag: '🇬🇧', xettleCode: 'amazon_uk' },
-  { marketplaceId: 'A1PA6795UKMFR9', region: 'eu', label: 'Amazon Germany', flag: '🇩🇪', xettleCode: 'amazon_de' },
-  { marketplaceId: 'A1VC38T7YXB528', region: 'fe', label: 'Amazon Japan', flag: '🇯🇵', xettleCode: 'amazon_jp' },
-  { marketplaceId: 'A21TJRUUN4KGV',  region: 'fe', label: 'Amazon Singapore', flag: '🇸🇬', xettleCode: 'amazon_sg' },
-  { marketplaceId: 'A1805IZSGTT6HS', region: 'eu', label: 'Amazon Netherlands', flag: '🇳🇱', xettleCode: 'amazon_nl' },
-  { marketplaceId: 'A13V1IB3VIYBER', region: 'eu', label: 'Amazon France', flag: '🇫🇷', xettleCode: 'amazon_fr' },
+  { marketplaceId: 'A39IBJ37TRP1C6', region: 'fe', label: 'Amazon Australia', flag: '🇦🇺', xettleCode: 'amazon_au', sellerCentralDomain: 'sellercentral.amazon.com.au' },
+  { marketplaceId: 'ATVPDKIKX0DER',  region: 'na', label: 'Amazon United States', flag: '🇺🇸', xettleCode: 'amazon_us', sellerCentralDomain: 'sellercentral.amazon.com' },
+  { marketplaceId: 'A2EUQ1WTGCTBG2', region: 'na', label: 'Amazon Canada', flag: '🇨🇦', xettleCode: 'amazon_ca', sellerCentralDomain: 'sellercentral.amazon.ca' },
+  { marketplaceId: 'A1F83G8C2ARO7P', region: 'eu', label: 'Amazon United Kingdom', flag: '🇬🇧', xettleCode: 'amazon_uk', sellerCentralDomain: 'sellercentral.amazon.co.uk' },
+  { marketplaceId: 'A1PA6795UKMFR9', region: 'eu', label: 'Amazon Germany', flag: '🇩🇪', xettleCode: 'amazon_de', sellerCentralDomain: 'sellercentral.amazon.de' },
+  { marketplaceId: 'A1VC38T7YXB528', region: 'fe', label: 'Amazon Japan', flag: '🇯🇵', xettleCode: 'amazon_jp', sellerCentralDomain: 'sellercentral.amazon.co.jp' },
+  { marketplaceId: 'A21TJRUUN4KGV',  region: 'fe', label: 'Amazon Singapore', flag: '🇸🇬', xettleCode: 'amazon_sg', sellerCentralDomain: 'sellercentral.amazon.sg' },
+  { marketplaceId: 'A1805IZSGTT6HS', region: 'eu', label: 'Amazon Netherlands', flag: '🇳🇱', xettleCode: 'amazon_nl', sellerCentralDomain: 'sellercentral.amazon.nl' },
+  { marketplaceId: 'A13V1IB3VIYBER', region: 'eu', label: 'Amazon France', flag: '🇫🇷', xettleCode: 'amazon_fr', sellerCentralDomain: 'sellercentral.amazon.fr' },
 ];
 
 /** Default region (AU) for backward compatibility */
