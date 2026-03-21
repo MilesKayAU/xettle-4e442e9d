@@ -221,7 +221,9 @@ export default function AccountMapperCard() {
     // ─── Pattern-aware gap fill ─────────────────────────────────
     // For each category, collect the codes used by marketplaces that DO have suggestions.
     // Then for marketplaces that DON'T, suggest the next sequential code.
+    // IMPORTANT: globalClaimed is shared across ALL categories to prevent cross-category collisions.
     const allExistingCodes = new Set(coaAccounts.map(a => a.account_code).filter(Boolean) as string[]);
+    const globalClaimed = new Set<string>();
 
     for (const [internalCat, displayCat] of Object.entries(CATEGORY_DISPLAY_MAP)) {
       // Collect codes already mapped for this category across all marketplaces
@@ -231,34 +233,37 @@ export default function AccountMapperCard() {
         const existing = suggestions.get(key);
         if (existing && existing.code) {
           const num = parseFloat(existing.code);
-          if (!isNaN(num)) categoryCodes.push(num);
+          if (!isNaN(num)) {
+            categoryCodes.push(num);
+            globalClaimed.add(String(num));
+          }
         }
       }
 
       if (categoryCodes.length === 0) continue; // No pattern to detect
 
-      // Sort and find the range
+      // Sort and start from the MAX existing code + 1 for this category
+      // This prevents cross-category overlap (e.g., Sales 200-213, Shipping starts at 214+)
       categoryCodes.sort((a, b) => a - b);
-      const rangeStart = Math.floor(categoryCodes[0]);
-      const rangeEnd = Math.ceil(categoryCodes[categoryCodes.length - 1]) + 20; // lookahead
+      const startFrom = Math.floor(categoryCodes[categoryCodes.length - 1]) + 1;
+      const rangeEnd = startFrom + 20; // lookahead
 
       // For each marketplace missing a suggestion, propose the next available code
-      const claimed = new Set(categoryCodes.map(c => String(c)));
       for (const mp of activeMarketplaces) {
         const key = `${displayCat}:${mp}`;
         if (suggestions.has(key)) continue;
 
-        // Find next available integer code in the range
-        let nextCode = rangeStart;
+        // Find next available integer code starting AFTER the highest existing code for this category
+        let nextCode = startFrom;
         while (nextCode <= rangeEnd) {
           const codeStr = String(nextCode);
-          if (!allExistingCodes.has(codeStr) && !claimed.has(codeStr)) break;
+          if (!allExistingCodes.has(codeStr) && !globalClaimed.has(codeStr)) break;
           nextCode++;
         }
 
         if (nextCode <= rangeEnd) {
           const codeStr = String(nextCode);
-          claimed.add(codeStr);
+          globalClaimed.add(codeStr);
           suggestions.set(key, {
             code: codeStr,
             name: `${mp} ${displayCat}`,
