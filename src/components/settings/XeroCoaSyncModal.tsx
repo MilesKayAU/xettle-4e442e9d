@@ -115,6 +115,7 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
       const parts: string[] = [];
       if (result.created > 0) parts.push(`${result.created} created`);
       if (result.updated > 0) parts.push(`${result.updated} updated`);
+      if (result.skipped > 0) parts.push(`${result.skipped} skipped`);
       if (result.errors.length > 0) parts.push(`${result.errors.length} error${result.errors.length !== 1 ? 's' : ''}`);
       toast.success(`COA sync complete: ${parts.join(', ')}`);
       await onSyncComplete();
