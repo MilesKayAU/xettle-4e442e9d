@@ -1044,18 +1044,41 @@ export default function AccountMapperCard() {
     const rows: SyncPreviewRow[] = [];
     const seen = new Set<string>();
 
+    // Build a name→code lookup so we can detect name-already-exists scenarios
+    const coaNameToCode = new Map<string, string>();
+    for (const a of coaAccounts) {
+      if (a.account_name && a.account_code) {
+        coaNameToCode.set(a.account_name.toLowerCase().trim(), a.account_code);
+      }
+    }
+
     const addRow = (code: string, name: string, category: string, marketplace?: string) => {
       if (!code || seen.has(code)) return;
       seen.add(code);
 
       const xeroEntry = coaMap.get(code);
       const accountType = getAccountTypeForCategory(category);
-      // Carry forward existing tax_type from COA cache for the account
       const coaFull = coaAccounts.find(a => a.account_code === code);
       const taxType = coaFull?.tax_type || undefined;
 
       if (!xeroEntry) {
-        rows.push({ code, name, type: accountType, category, marketplace, status: 'new', tax_type: taxType });
+        // Code doesn't exist in Xero — but does the NAME already exist under a different code?
+        const existingCode = coaNameToCode.get(name.toLowerCase().trim());
+        if (existingCode && existingCode !== code) {
+          // Name already exists in Xero under a different code — treat as already synced
+          const existingEntry = coaMap.get(existingCode);
+          rows.push({
+            code: existingCode,
+            name,
+            type: existingEntry?.type || accountType,
+            category,
+            marketplace,
+            status: 'unchanged',
+            tax_type: coaAccounts.find(a => a.account_code === existingCode)?.tax_type || undefined,
+          });
+        } else {
+          rows.push({ code, name, type: accountType, category, marketplace, status: 'new', tax_type: taxType });
+        }
       } else if (xeroEntry.name !== name || xeroEntry.type !== accountType) {
         rows.push({
           code, name, type: accountType, category, marketplace,
