@@ -144,10 +144,19 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
   }
 
    // 4. COA mapping coverage — check per active marketplace
+  // Merge confirmed + draft mappings (draft takes precedence) so unconfirmed work counts
   const accountCodes = settingsMap.get('accounting_xero_account_codes');
-  const parsedMappings: Record<string, string> = accountCodes
+  const draftCodes = settingsMap.get('accounting_xero_account_codes_draft');
+  const confirmedMappings: Record<string, string> = accountCodes
     ? (() => { try { return JSON.parse(accountCodes); } catch { return {}; } })()
     : {};
+  const draftMappings: Record<string, string> = draftCodes
+    ? (() => { try { return JSON.parse(draftCodes); } catch { return {}; } })()
+    : {};
+  const parsedMappings: Record<string, string> = { ...confirmedMappings, ...draftMappings };
+
+  // Track whether drafts cover gaps that confirmed mappings don't
+  let hasDraftOnlyMappings = false;
 
   if (hasXeroTokens && connections.length > 0) {
     let totalMissing = 0;
@@ -162,10 +171,16 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
         // Check per-marketplace override using the same key format as AccountMapperCard
         const mpKeyByLabel = `${cat}:${keyLabel}`;
         const mpKeyByCode = `${cat}:${code}`;
-        const mapped = parsedMappings[mpKeyByLabel] || parsedMappings[mpKeyByCode] || parsedMappings[cat] || DEFAULT_FALLBACK;
-        if (mapped === DEFAULT_FALLBACK || !mapped) {
+        const merged = parsedMappings[mpKeyByLabel] || parsedMappings[mpKeyByCode] || parsedMappings[cat] || DEFAULT_FALLBACK;
+        if (merged === DEFAULT_FALLBACK || !merged) {
           missingCats.push(cat);
           totalMissing++;
+        } else {
+          // Check if this was only filled by draft (not confirmed)
+          const confirmedVal = confirmedMappings[mpKeyByLabel] || confirmedMappings[mpKeyByCode] || confirmedMappings[cat];
+          if (!confirmedVal || confirmedVal === DEFAULT_FALLBACK) {
+            hasDraftOnlyMappings = true;
+          }
         }
       }
       if (missingCats.length > 0) {
@@ -184,6 +199,16 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
         message: severity === 'blocking'
           ? `Missing mappings — ${missingDetails.join('; ')}.`
           : `Nearly there! ${totalMissing} mapping${totalMissing !== 1 ? 's' : ''} remaining — ${missingDetails.join('; ')}.`,
+        actionLabel: 'Open mapper',
+        actionTarget: 'settings:account-mapper',
+      });
+    } else if (hasDraftOnlyMappings) {
+      // All categories covered, but some only via draft — prompt to confirm
+      setupWarnings.push({
+        key: 'coa_mapping_unconfirmed',
+        label: 'Mappings ready — confirm to complete',
+        severity: 'warning',
+        message: 'All account mappings are filled in, but haven\'t been confirmed yet. Open the Account Mapper and press "Confirm Mapping" to finalise.',
         actionLabel: 'Open mapper',
         actionTarget: 'settings:account-mapper',
       });

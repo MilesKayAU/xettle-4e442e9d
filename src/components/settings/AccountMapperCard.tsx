@@ -34,6 +34,7 @@ import {
 import { generateNextCode, getAccountTypeForCategory, getRangeForType, detectCodePattern, generateCodeFromPattern, type PatternAccount } from '@/policy/accountCodePolicy';
 import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
 import { normalizeKeyLabel } from '@/utils/marketplace-codes';
+import { cn } from '@/lib/utils';
 import { Save, Upload, Copy } from 'lucide-react';
 import CloneCoaDialog from './CloneCoaDialog';
 import CoaAuditPanel from './CoaAuditPanel';
@@ -154,7 +155,15 @@ export default function AccountMapperCard() {
   // Confirmed (saved) codes for comparison
   const [confirmedCodes, setConfirmedCodes] = useState<Record<string, string>>({});
 
-  // Build CoA lookup maps
+  // Detect if editable mapping has changes not yet in confirmed codes
+  const hasDraftChanges = useMemo(() => {
+    if (state !== 'review') return false;
+    for (const [key, val] of Object.entries(editableMapping)) {
+      if (val && val !== confirmedCodes[key]) return true;
+    }
+    return false;
+  }, [editableMapping, confirmedCodes, state]);
+
   const coaMap = useMemo(() => {
     const map = new Map<string, { name: string; type: string; active: boolean }>();
     for (const acc of coaAccounts) {
@@ -1900,12 +1909,21 @@ export default function AccountMapperCard() {
             </div>
           )}
 
+          {hasDraftChanges && (
+            <Alert className="border-primary/30 bg-primary/5">
+              <AlertTriangle className="h-4 w-4 text-primary" />
+              <AlertDescription className="text-xs font-medium">
+                You have unconfirmed draft mappings. Press <strong>"Confirm Mapping"</strong> below to lock them in and clear this section.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="flex gap-2 flex-wrap items-center">
             <Button variant="outline" onClick={handleSaveDraft} className="gap-2">
               <Save className="h-4 w-4" />
               Save Draft
             </Button>
-            <Button onClick={handleConfirm} className="gap-2">
+            <Button onClick={handleConfirm} className={cn("gap-2", hasDraftChanges && "animate-pulse ring-2 ring-primary ring-offset-2")}>
               <CheckCircle2 className="h-4 w-4" />
               Confirm Mapping
             </Button>

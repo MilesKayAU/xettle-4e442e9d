@@ -121,7 +121,7 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
   const sectionStatusRules: Record<string, { completionWarnings: string[] }> = {
     api_connections: { completionWarnings: ['xero_not_connected'] },
     destination_accounts: { completionWarnings: [] },
-    account_mapper: { completionWarnings: ['coa_mapping_incomplete'] },
+    account_mapper: { completionWarnings: ['coa_mapping_incomplete', 'coa_mapping_unconfirmed'] },
     posting_mode: { completionWarnings: ['scope_not_acknowledged'] },
     accounting_boundary: { completionWarnings: [] }, // Boundary auto-sets on first upload — no longer a blocker
     payment_verification: { completionWarnings: [] },
