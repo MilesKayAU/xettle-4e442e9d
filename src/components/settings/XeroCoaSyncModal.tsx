@@ -143,7 +143,7 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
         onCancel={settingsPin.cancelDialog}
       />
 
-      <Dialog open={open} onOpenChange={(v) => { if (!syncing) onOpenChange(v); }}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
