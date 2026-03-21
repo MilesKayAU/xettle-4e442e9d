@@ -153,7 +153,7 @@ export default function AccountMapperCard() {
   // Confirmed (saved) codes for comparison
   const [confirmedCodes, setConfirmedCodes] = useState<Record<string, string>>({});
 
-  // Build CoA lookup map
+  // Build CoA lookup maps
   const coaMap = useMemo(() => {
     const map = new Map<string, { name: string; type: string; active: boolean }>();
     for (const acc of coaAccounts) {
@@ -163,6 +163,16 @@ export default function AccountMapperCard() {
           type: (acc.account_type || '').toUpperCase(),
           active: acc.is_active !== false,
         });
+      }
+    }
+    return map;
+  }, [coaAccounts]);
+
+  const coaNameToCodeMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const acc of coaAccounts) {
+      if (acc.account_code && acc.account_name) {
+        map.set(acc.account_name.toLowerCase().trim(), acc.account_code);
       }
     }
     return map;
