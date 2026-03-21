@@ -138,9 +138,20 @@ function getOrderItemTitle(item: any): string {
   return item?.title || item?.Title || item?.product?.title || item?.product?.name || getOrderItemSku(item) || 'Amazon Item'
 }
 
-const SHOPIFY_API_VERSION = '2026-01'
+/**
+ * Extract shipping service level from Amazon order payload.
+ * Supports v2026-01-01 and older payload shapes.
+ */
+function getShippingServiceLevel(order: any): string | null {
+  return order?.shipmentServiceLevelCategory
+    || order?.ShipmentServiceLevelCategory
+    || order?.shippingProgram
+    || order?.shipServiceLevel
+    || order?.ShipServiceLevel
+    || null
+}
 
-// (Token refresh is handled by amazon-auth edge function)
+const SHOPIFY_API_VERSION = '2026-01'
 
 // ═══════════════════════════════════════════════════════════════
 // Helper: upsert app_settings
@@ -174,9 +185,9 @@ async function readSetting(supabase: any, userId: string, key: string): Promise<
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Helper: Read Shopify token from DB (permanent shpca_ token)
+// Helper: Read Shopify token from DB — DYNAMIC store resolution
+// No longer hardcoded to a specific store domain.
 // ═══════════════════════════════════════════════════════════════
-const SHOPIFY_FBM_STORE = 'mileskayaustralia.myshopify.com'
 
 interface ShopifyInternalToken {
   access_token: string
@@ -189,12 +200,13 @@ async function getShopifyInternalToken(): Promise<ShopifyInternalToken> {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   )
 
-  // Look for active token for the FBM store
+  // Dynamic store resolution: find the first active Shopify token (no domain filter)
   const { data: token, error } = await supabaseAdmin
     .from('shopify_tokens')
     .select('access_token, shop_domain')
-    .eq('shop_domain', SHOPIFY_FBM_STORE)
     .eq('is_active', true)
+    .order('updated_at', { ascending: false })
+    .limit(1)
     .maybeSingle()
 
   if (error) {
@@ -203,12 +215,12 @@ async function getShopifyInternalToken(): Promise<ShopifyInternalToken> {
 
   if (!token?.access_token) {
     throw new Error(
-      `No active Shopify token found for ${SHOPIFY_FBM_STORE}. ` +
-      `Please run the internal OAuth flow first (Admin → FBM Bridge → Connect XettleInternal).`
+      `No active Shopify token found. ` +
+      `Please connect a Shopify store first (Admin → FBM Bridge → Connect XettleInternal).`
     )
   }
 
-  logger.info('fbm_shopify_token_loaded', { shop: SHOPIFY_FBM_STORE, tokenPrefix: token.access_token.substring(0, 6) })
+  logger.info('fbm_shopify_token_loaded', { shop: token.shop_domain, tokenPrefix: token.access_token.substring(0, 6) })
   return { access_token: token.access_token, shop_domain: token.shop_domain }
 }
 
@@ -237,6 +249,40 @@ async function logEvent(
     severity,
     details: enrichedDetails,
   } as any)
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Helper: Enqueue alert email via enqueue_email RPC
+// ═══════════════════════════════════════════════════════════════
+async function sendAlertEmail(
+  supabase: any,
+  userId: string,
+  storeKey: string,
+  subject: string,
+  body: string,
+) {
+  try {
+    const alertEmail = await readSetting(supabase, userId, `fbm:${storeKey}:alert_email`)
+    if (!alertEmail) return // No alert email configured
+
+    await supabase.rpc('enqueue_email', {
+      queue_name: 'transactional_emails',
+      payload: {
+        to: alertEmail,
+        subject,
+        html: `<div style="font-family:sans-serif;max-width:600px;">
+          <h2 style="color:#1a1a2e;">Xettle FBM Bridge Alert</h2>
+          <p>${body}</p>
+          <p style="color:#666;font-size:12px;margin-top:20px;">Store: ${storeKey} • ${new Date().toISOString()}</p>
+        </div>`,
+        purpose: 'transactional',
+      },
+    })
+    logger.info('fbm_alert_email_enqueued', { to: alertEmail, subject })
+  } catch (err: any) {
+    // Non-fatal — don't let email failures break the sync
+    logger.warn('fbm_alert_email_failed', { error: err.message })
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -315,6 +361,40 @@ async function checkShopifyDuplicate(
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Circuit breaker: tracks consecutive API failures
+// ═══════════════════════════════════════════════════════════════
+class CircuitBreaker {
+  private consecutiveFailures = 0
+  private readonly threshold: number
+
+  constructor(threshold = 5) {
+    this.threshold = threshold
+  }
+
+  recordSuccess() {
+    this.consecutiveFailures = 0
+  }
+
+  recordFailure() {
+    this.consecutiveFailures++
+  }
+
+  isOpen(): boolean {
+    return this.consecutiveFailures >= this.threshold
+  }
+
+  get failures(): number {
+    return this.consecutiveFailures
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Retry queue: backoff intervals for failed orders
+// ═══════════════════════════════════════════════════════════════
+const RETRY_BACKOFF_MS = [5 * 60 * 1000, 15 * 60 * 1000, 60 * 60 * 1000] // 5m, 15m, 60m
+const MAX_RETRIES = 3
+
+// ═══════════════════════════════════════════════════════════════
 // Main handler
 // ═══════════════════════════════════════════════════════════════
 Deno.serve(async (req) => {
@@ -370,6 +450,37 @@ Deno.serve(async (req) => {
     let body: any = {}
     try { body = await req.json() } catch { /* empty body OK for GET-like calls */ }
 
+    // ─── Handle "retry_all_failed" action ────────────────────
+    if (body.action === 'retry_all_failed') {
+      const userId = body.user_id || authenticatedUserId
+      if (!userId) {
+        return new Response(JSON.stringify({ error: 'user_id required' }), { status: 400, headers })
+      }
+
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      )
+
+      // Reset all failed orders back to pending for re-processing
+      const { data: resetRows, error: resetErr } = await supabase
+        .from('amazon_fbm_orders')
+        .update({
+          status: 'pending',
+          retry_count: 0,
+          last_retry_at: null,
+          error_detail: 'Manual retry — reset by admin',
+        } as any)
+        .eq('user_id', userId)
+        .in('status', ['failed', 'manual_review'])
+        .select('id')
+
+      const count = resetRows?.length || 0
+      await logEvent(supabase, userId, 'fbm_retry_all_failed', { reset_count: count }, body.store_key || 'primary')
+
+      return new Response(JSON.stringify({ status: 'reset', count }), { status: 200, headers })
+    }
+
     const userId = body.user_id || authenticatedUserId
     if (!userId) {
       return new Response(JSON.stringify({ error: 'user_id required' }), { status: 400, headers })
@@ -398,12 +509,79 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ status: 'skipped', reason: 'lock_held' }), { status: 200, headers })
     }
 
+    // Initialize circuit breaker for this poll cycle
+    const circuitBreaker = new CircuitBreaker(5)
+
     try {
       // ─── Check polling enabled (only for cron, manual runs bypass) ──
       const pollingEnabled = await readSetting(supabase, userId, `fbm:${storeKey}:polling_enabled`)
       if (isCron && pollingEnabled !== 'true') {
         await logEvent(supabase, userId, 'fbm_poll_skipped_disabled', {}, storeKey)
         return new Response(JSON.stringify({ status: 'skipped', reason: 'disabled' }), { status: 200, headers })
+      }
+
+      // ─── Retry queue: process failed orders with backoff ───────
+      let retryCount = 0
+      if (!dryRun) {
+        const { data: failedOrders } = await supabase
+          .from('amazon_fbm_orders')
+          .select('id, amazon_order_id, retry_count, last_retry_at, raw_amazon_payload')
+          .eq('user_id', userId)
+          .eq('status', 'failed')
+          .lt('retry_count', MAX_RETRIES)
+
+        for (const failedOrder of (failedOrders || [])) {
+          // Check backoff elapsed
+          const backoffMs = RETRY_BACKOFF_MS[Math.min(failedOrder.retry_count, RETRY_BACKOFF_MS.length - 1)]
+          if (failedOrder.last_retry_at) {
+            const lastRetry = new Date(failedOrder.last_retry_at).getTime()
+            if (Date.now() - lastRetry < backoffMs) continue // Not yet time to retry
+          }
+
+          // Mark as retrying
+          await supabase.from('amazon_fbm_orders').update({
+            retry_count: failedOrder.retry_count + 1,
+            last_retry_at: new Date().toISOString(),
+            status: 'pending',
+            error_detail: `Retry ${failedOrder.retry_count + 1}/${MAX_RETRIES}`,
+          } as any).eq('id', failedOrder.id)
+
+          retryCount++
+          await logEvent(supabase, userId, 'fbm_order_retry', {
+            retry_number: failedOrder.retry_count + 1,
+            max_retries: MAX_RETRIES,
+          }, storeKey, failedOrder.amazon_order_id)
+        }
+
+        // Escalate orders that hit max retries
+        const { data: maxedOut } = await supabase
+          .from('amazon_fbm_orders')
+          .select('id, amazon_order_id')
+          .eq('user_id', userId)
+          .eq('status', 'failed')
+          .gte('retry_count', MAX_RETRIES)
+
+        for (const order of (maxedOut || [])) {
+          await supabase.from('amazon_fbm_orders').update({
+            status: 'manual_review',
+            error_detail: `Exhausted ${MAX_RETRIES} retries — escalated to manual review`,
+          } as any).eq('id', order.id)
+
+          await logEvent(supabase, userId, 'fbm_retry_exhausted', {
+            retries: MAX_RETRIES,
+          }, storeKey, order.amazon_order_id, 'warn')
+
+          // Send alert email
+          await sendAlertEmail(
+            supabase, userId, storeKey,
+            `FBM Order ${order.amazon_order_id} needs attention`,
+            `Order <strong>${order.amazon_order_id}</strong> failed ${MAX_RETRIES} times and has been escalated to manual review. Please check the Fulfillment Bridge in Xettle admin.`
+          )
+        }
+
+        if (retryCount > 0) {
+          await logEvent(supabase, userId, 'fbm_retry_queue_processed', { retried: retryCount }, storeKey)
+        }
       }
 
       // ─── Force refetch: bulk-delete stale rows ─────────────────
@@ -493,6 +671,12 @@ Deno.serve(async (req) => {
         const refreshData = await refreshResponse.json()
         if (!refreshResponse.ok || !refreshData.access_token) {
           console.error('fbm_token_refresh_failed', refreshData)
+          // Circuit breaker: token refresh failure is critical
+          await sendAlertEmail(
+            supabase, userId, storeKey,
+            'FBM Bridge: Amazon token refresh failed',
+            'The Amazon SP-API token could not be refreshed. FBM polling is blocked until the token is re-authorised. Please re-connect your Amazon account in Xettle.'
+          )
           throw new Error('Amazon token refresh failed')
         }
 
@@ -546,6 +730,20 @@ Deno.serve(async (req) => {
       const MAX_ORDER_PAGES = 10
 
       do {
+        // Circuit breaker check before each API call
+        if (circuitBreaker.isOpen()) {
+          await logEvent(supabase, userId, 'fbm_circuit_open', {
+            consecutive_failures: circuitBreaker.failures,
+            reason: 'Too many consecutive API failures — stopping poll cycle',
+          }, storeKey, undefined, 'error')
+          await sendAlertEmail(
+            supabase, userId, storeKey,
+            'FBM Bridge: Circuit breaker tripped',
+            `The FBM bridge encountered ${circuitBreaker.failures} consecutive API failures and has stopped polling for this cycle. This may indicate Amazon API issues or rate limiting. The next scheduled poll will retry automatically.`
+          )
+          break
+        }
+
         const pageParams = new URLSearchParams(ordersParamsBase.toString())
         if (nextPaginationToken) {
           pageParams.set('paginationToken', nextPaginationToken)
@@ -565,14 +763,40 @@ Deno.serve(async (req) => {
           })
         } catch (fetchErr) {
           console.error('fbm_orders_fetch_failed', fetchErr)
+          circuitBreaker.recordFailure()
           throw fetchErr
         }
 
         if (!ordersResponse.ok) {
           const errText = await ordersResponse.text()
-          console.error('fbm_orders_api_error', { status: ordersResponse.status, body: errText, page: pagesFetched + 1 })
-          throw new Error(`Amazon Orders API v2026-01-01 failed: ${ordersResponse.status} ${errText}`)
+          const status = ordersResponse.status
+          console.error('fbm_orders_api_error', { status, body: errText, page: pagesFetched + 1 })
+
+          // Circuit breaker: track 429s and 5xx as consecutive failures
+          if (status === 429 || status >= 500) {
+            circuitBreaker.recordFailure()
+            if (circuitBreaker.isOpen()) {
+              await logEvent(supabase, userId, 'fbm_circuit_open', {
+                consecutive_failures: circuitBreaker.failures,
+                trigger_status: status,
+              }, storeKey, undefined, 'error')
+              await sendAlertEmail(
+                supabase, userId, storeKey,
+                'FBM Bridge: Circuit breaker tripped',
+                `The FBM bridge hit ${circuitBreaker.failures} consecutive API failures (last: HTTP ${status}). Polling stopped for this cycle.`
+              )
+              break
+            }
+            // Don't throw on 429 — just stop pagination and process what we have
+            if (status === 429) {
+              await logEvent(supabase, userId, 'fbm_rate_limited', { status, page: pagesFetched + 1 }, storeKey, undefined, 'warn')
+              break
+            }
+          }
+          throw new Error(`Amazon Orders API v2026-01-01 failed: ${status} ${errText}`)
         }
+
+        circuitBreaker.recordSuccess()
 
         const ordersData = await ordersResponse.json()
         const pageOrders = ordersData?.orders || ordersData?.Orders || ordersData?.payload?.Orders || []
@@ -635,6 +859,76 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ status: 'completed', total_orders: 0, dry_run: dryRun }), { status: 200, headers })
       }
 
+      // ─── Cancellation detection: check existing synced orders ────
+      if (!dryRun) {
+        // Look for orders we've synced that might have been cancelled on Amazon
+        const { data: syncedOrders } = await supabase
+          .from('amazon_fbm_orders')
+          .select('id, amazon_order_id, shopify_order_id, status')
+          .eq('user_id', userId)
+          .in('status', ['created', 'pending', 'creating'])
+
+        if (syncedOrders && syncedOrders.length > 0) {
+          // Check each synced order against the Amazon API for cancellation
+          for (const syncedOrder of syncedOrders) {
+            if (circuitBreaker.isOpen()) break
+
+            try {
+              const checkUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders/${syncedOrder.amazon_order_id}`
+              const checkRes = await fetch(checkUrl, {
+                headers: getSpApiHeaders(accessToken),
+              })
+
+              if (checkRes.ok) {
+                circuitBreaker.recordSuccess()
+                const checkData = await checkRes.json()
+                const currentStatus = getAmazonOrderStatus(checkData)
+
+                if (currentStatus === 'Canceled') {
+                  // Cancel the Shopify draft order if it exists
+                  if (syncedOrder.shopify_order_id) {
+                    try {
+                      const shopifyToken = await getShopifyInternalToken()
+                      const cancelUrl = `https://${shopifyToken.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/orders/${syncedOrder.shopify_order_id}/cancel.json`
+                      await fetch(cancelUrl, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'X-Shopify-Access-Token': shopifyToken.access_token,
+                        },
+                      })
+                      logger.info('fbm_shopify_order_cancelled', { shopify_order_id: syncedOrder.shopify_order_id })
+                    } catch (cancelErr: any) {
+                      logger.warn('fbm_shopify_cancel_failed', { error: cancelErr.message })
+                    }
+                  }
+
+                  await supabase.from('amazon_fbm_orders').update({
+                    status: 'cancelled',
+                    error_detail: `Amazon order cancelled — detected during poll. Shopify order ${syncedOrder.shopify_order_id ? 'cancel attempted' : 'N/A'}`,
+                  } as any).eq('id', syncedOrder.id)
+
+                  await logEvent(supabase, userId, 'fbm_order_cancelled_detected', {
+                    shopify_order_id: syncedOrder.shopify_order_id,
+                    amazon_status: currentStatus,
+                  }, storeKey, syncedOrder.amazon_order_id, 'warn')
+
+                  await sendAlertEmail(
+                    supabase, userId, storeKey,
+                    `FBM Order Cancelled: ${syncedOrder.amazon_order_id}`,
+                    `Amazon order <strong>${syncedOrder.amazon_order_id}</strong> has been cancelled. ${syncedOrder.shopify_order_id ? `The corresponding Shopify order (#${syncedOrder.shopify_order_id}) cancellation was attempted.` : 'No Shopify order existed.'}`
+                  )
+                }
+              } else if (checkRes.status === 429 || checkRes.status >= 500) {
+                circuitBreaker.recordFailure()
+              }
+            } catch {
+              // Non-fatal — continue with next order
+            }
+          }
+        }
+      }
+
       // ─── Process each order ────────────────────────────────────
       let createdCount = 0, manualReviewCount = 0, failedCount = 0, skippedCount = 0
 
@@ -662,6 +956,15 @@ Deno.serve(async (req) => {
       const financialStatus = (await readSetting(supabase, userId, `fbm:${storeKey}:shopify_financial_status`)) || 'paid'
 
       for (const order of orders) {
+        // Circuit breaker check for each order
+        if (circuitBreaker.isOpen()) {
+          await logEvent(supabase, userId, 'fbm_circuit_open_mid_processing', {
+            consecutive_failures: circuitBreaker.failures,
+            orders_remaining: orders.length - (createdCount + skippedCount + failedCount + manualReviewCount),
+          }, storeKey, undefined, 'error')
+          break
+        }
+
         const amazonOrderId = getAmazonOrderId(order)
         if (!amazonOrderId) continue
 
@@ -674,6 +977,9 @@ Deno.serve(async (req) => {
           last_updated_time: lastUpdatedTime,
           dry_run: dryRun,
         })
+
+        // ─── Extract and store shipping service level ─────────────
+        const shippingLevel = getShippingServiceLevel(order)
 
         // ─── Per-order status safety gate: filter out already-fulfilled orders ──
         // The bulk API requests Unshipped/PartiallyShipped, but orders can transition
@@ -690,7 +996,7 @@ Deno.serve(async (req) => {
         // Check if already exists — allow re-processing of unsynced orders only
         const { data: existing } = await supabase
           .from('amazon_fbm_orders')
-          .select('id, shopify_order_id, status, created_at')
+          .select('id, shopify_order_id, status, created_at, retry_count')
           .eq('user_id', userId)
           .eq('amazon_order_id', amazonOrderId)
           .maybeSingle()
@@ -752,6 +1058,7 @@ Deno.serve(async (req) => {
               await supabase.from('amazon_fbm_orders').update({
                 status: 'manual_review',
                 error_detail: `Order last updated ${Math.round(ageMs / (24 * 60 * 60 * 1000))} days ago but still ${orderStatus} — flagged for review`,
+                shipping_service_level: shippingLevel,
               } as any).eq('id', existingStale.id)
             } else {
               await supabase.from('amazon_fbm_orders').insert({
@@ -760,6 +1067,7 @@ Deno.serve(async (req) => {
                 status: 'manual_review',
                 error_detail: `Order last updated ${Math.round(ageMs / (24 * 60 * 60 * 1000))} days ago but still ${orderStatus} — flagged for review`,
                 raw_amazon_payload: order,
+                shipping_service_level: shippingLevel,
               } as any)
             }
             await logEvent(supabase, userId, 'fbm_order_stale_flagged', {
@@ -837,7 +1145,7 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Insert as pending
+        // Insert as pending with shipping service level
         const { data: insertedOrder, error: insertError } = await supabase
           .from('amazon_fbm_orders')
           .insert({
@@ -845,6 +1153,7 @@ Deno.serve(async (req) => {
             amazon_order_id: amazonOrderId,
             status: 'pending',
             raw_amazon_payload: order,
+            shipping_service_level: shippingLevel,
           } as any)
           .select('id')
           .single()
@@ -868,15 +1177,20 @@ Deno.serve(async (req) => {
 
           if (!detailResponse.ok) {
             const errText = await detailResponse.text()
+            const detailStatus = detailResponse.status
+            if (detailStatus === 429 || detailStatus >= 500) {
+              circuitBreaker.recordFailure()
+            }
             await supabase.from('amazon_fbm_orders').update({
               status: 'failed',
-              error_detail: `Order detail fetch failed (v2026-01-01): ${detailResponse.status} ${errText}`,
+              error_detail: `Order detail fetch failed (v2026-01-01): ${detailStatus} ${errText}`,
             } as any).eq('id', insertedOrder.id)
             await logEvent(supabase, userId, 'fbm_order_failed', { error: errText, api_version: '2026-01-01' }, storeKey, amazonOrderId, 'error')
             failedCount++
             continue
           }
 
+          circuitBreaker.recordSuccess()
           const detailData = await detailResponse.json()
           orderDetail = detailData || orderDetail
           orderItems = Array.isArray(orderDetail?.orderItems) ? orderDetail.orderItems : []
@@ -972,8 +1286,8 @@ Deno.serve(async (req) => {
         if (dryRun) {
           const hasPii = pii.piiPresent
           const dryRunSummary = hasPii
-            ? `Dry run OK. ${matchedSkus.length} SKU(s) matched. Buyer PII available.`
-            : `Dry run OK. ${matchedSkus.length} SKU(s) matched. No PII — will use placeholder customer.`
+            ? `Dry run OK. ${matchedSkus.length} SKU(s) matched. Buyer PII available.${shippingLevel ? ` Shipping: ${shippingLevel}` : ''}`
+            : `Dry run OK. ${matchedSkus.length} SKU(s) matched. No PII — will use placeholder customer.${shippingLevel ? ` Shipping: ${shippingLevel}` : ''}`
           await supabase.from('amazon_fbm_orders').update({
             status: 'dry_run',
             error_detail: dryRunSummary,
@@ -981,6 +1295,7 @@ Deno.serve(async (req) => {
           await logEvent(supabase, userId, 'fbm_dry_run_skipped_create', {
             matched_skus: matchedSkus.length,
             pii_available: hasPii,
+            shipping_service_level: shippingLevel,
           }, storeKey, amazonOrderId)
           continue
         }
@@ -996,6 +1311,7 @@ Deno.serve(async (req) => {
             headers: getSpApiHeaders(accessToken),
           })
           if (revalResponse.ok) {
+            circuitBreaker.recordSuccess()
             const revalData = await revalResponse.json()
             const currentStatus = revalData?.orderStatus || revalData?.OrderStatus || ''
             if (currentStatus && !VALID_FBM_STATUSES.includes(currentStatus)) {
@@ -1014,7 +1330,11 @@ Deno.serve(async (req) => {
               continue
             }
           } else {
-            console.warn('fbm_revalidation_failed', { amazonOrderId, status: revalResponse.status })
+            const revalStatus = revalResponse.status
+            if (revalStatus === 429 || revalStatus >= 500) {
+              circuitBreaker.recordFailure()
+            }
+            console.warn('fbm_revalidation_failed', { amazonOrderId, status: revalStatus })
             // Fail open — proceed with order creation if revalidation fails
           }
         } catch (revalErr: any) {
@@ -1135,6 +1455,14 @@ Deno.serve(async (req) => {
           last_name: 'FBM Customer',
         }
 
+        // Build tags including shipping service level
+        const tags = [
+          'amazon-fbm',
+          'xettle-bridge',
+          ...(pii.piiPresent ? [] : ['placeholder-customer']),
+          ...(shippingLevel ? [`shipping:${shippingLevel}`] : []),
+        ].join(',')
+
         const shopifyPayload = {
           order: {
             line_items: lineItems,
@@ -1143,16 +1471,16 @@ Deno.serve(async (req) => {
             customer,
             financial_status: financialStatus,
             fulfillment_status: 'unfulfilled',
-            tags: `amazon-fbm,xettle-bridge${pii.piiPresent ? '' : ',placeholder-customer'}`,
+            tags,
             source_name: 'amazon',
-            note: `Amazon FBM Order: ${amazonOrderId}${pii.piiPresent ? '' : ' (placeholder customer — see Amazon Seller Central for buyer details)'}`,
+            note: `Amazon FBM Order: ${amazonOrderId}${pii.piiPresent ? '' : ' (placeholder customer — see Amazon Seller Central for buyer details)'}${shippingLevel ? ` | Shipping: ${shippingLevel}` : ''}`,
           },
         }
 
         const shopifyUrl = `https://${shopifyToken.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/orders.json`
 
         try {
-          console.log('fbm_shopify_create', { amazonOrderId, shopifyUrl, lineItemCount: lineItems.length })
+          console.log('fbm_shopify_create', { amazonOrderId, shopifyUrl, lineItemCount: lineItems.length, shippingLevel })
 
           const shopifyResponse = await fetch(shopifyUrl, {
             method: 'POST',
@@ -1166,6 +1494,7 @@ Deno.serve(async (req) => {
           console.log('fbm_shopify_response', { amazonOrderId, status: shopifyResponse.status, ok: shopifyResponse.ok })
 
           if (shopifyResponse.ok) {
+            circuitBreaker.recordSuccess()
             const shopifyData = await shopifyResponse.json()
             const shopifyOrderId = shopifyData?.order?.id
             console.log('fbm_shopify_created', { amazonOrderId, shopifyOrderId })
@@ -1204,6 +1533,10 @@ Deno.serve(async (req) => {
             const errText = await shopifyResponse.text()
             const statusCode = shopifyResponse.status
 
+            if (statusCode >= 500) {
+              circuitBreaker.recordFailure()
+            }
+
             if (statusCode === 422) {
               // Unprocessable — manual review
               await supabase.from('amazon_fbm_orders').update({
@@ -1232,6 +1565,7 @@ Deno.serve(async (req) => {
           }
         } catch (shopifyErr: any) {
           // Network error / timeout
+          circuitBreaker.recordFailure()
           await supabase.from('amazon_fbm_orders').update({
             status: 'failed',
             error_detail: `Network error: ${shopifyErr.message}`,
@@ -1256,6 +1590,7 @@ Deno.serve(async (req) => {
         dry_run: dryRun,
         mode: completedMode,
         force_refetch: forceRefetch,
+        circuit_breaker_failures: circuitBreaker.failures,
       }, storeKey)
 
       return new Response(JSON.stringify({
@@ -1296,6 +1631,12 @@ Deno.serve(async (req) => {
       const storeKey = body.store_key || 'primary'
       if (userId) {
         await logEvent(supabase, userId, 'fbm_poll_error', { error: err.message }, storeKey, undefined, 'error')
+        // Send alert email on unhandled errors
+        await sendAlertEmail(
+          supabase, userId, storeKey,
+          'FBM Bridge: Polling error',
+          `An error occurred during FBM polling: <strong>${err.message}</strong>. The next scheduled poll will retry automatically.`
+        )
       }
     } catch { /* best effort */ }
 

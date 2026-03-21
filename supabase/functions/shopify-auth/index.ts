@@ -492,7 +492,13 @@ Deno.serve(async (req) => {
       }
 
       const body = parsedBody || await req.json()
-      const shop = body?.shop || 'mileskayaustralia.myshopify.com'
+      const shop = body?.shop
+      if (!shop) {
+        return new Response(
+          JSON.stringify({ error: 'shop domain is required for internal OAuth' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
 
       const nonce = crypto.randomUUID()
       const stateValue = `internal:${nonce}:${user.id}`
