@@ -344,6 +344,7 @@ export default function Admin() {
       case 'fulfillment': return <FulfillmentBridge />;
       case 'health': return <HealthScannerDashboard />;
       case 'shipping': return <ShippingEstimateSettings />;
+      case 'amazon-compliance': return <AmazonComplianceDashboard />;
       default: return null;
     }
   };
