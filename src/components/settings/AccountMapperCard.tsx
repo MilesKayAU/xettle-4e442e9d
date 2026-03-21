@@ -543,6 +543,22 @@ export default function AccountMapperCard() {
         }
       }
 
+      // Load excluded mappings
+      const { data: excludedSetting } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('user_id', user.id)
+        .eq('key', 'coa_excluded_mappings')
+        .maybeSingle();
+
+      if (excludedSetting?.value) {
+        try {
+          const parsed = JSON.parse(excludedSetting.value);
+          if (parsed.keys) setExcludedMappings(new Set(parsed.keys));
+          if (parsed.marketplaces) setExcludedMarketplaces(new Set(parsed.marketplaces));
+        } catch { /* ignore */ }
+      }
+
       // Check if confirmed mapping exists
       const { data: confirmedSetting } = await supabase
         .from('app_settings')
