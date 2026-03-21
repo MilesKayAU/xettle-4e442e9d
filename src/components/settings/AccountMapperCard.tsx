@@ -218,18 +218,30 @@ export default function AccountMapperCard() {
       }
     }
 
-    // ─── Revenue/Expense-partitioned gap fill ─────────────────────
-    // Partition categories into Revenue and Expense groups so gap-fill
-    // suggestions never cross Xero range boundaries (Revenue 200-399, Expense 400-599).
-    // Uses generateNextCode from accountCodePolicy for range-aware, COA-adaptive suggestions.
+    // ─── Pattern-aware, Revenue/Expense-partitioned gap fill ─────────
+    // 1. Detect the customer's existing code pattern from AI suggestions
+    // 2. Use generateCodeFromPattern to extend each category's neighbourhood
+    // 3. Fall back to sequential range-based generation if no pattern detected
     const allExistingCodes = coaAccounts.map(a => a.account_code).filter(Boolean) as string[];
-    const allExistingSet = new Set(allExistingCodes);
     const globalClaimed = new Set<string>();
 
     // First pass: register all codes from AI suggestions into globalClaimed
-    for (const [, entry] of suggestions) {
-      if (entry.code) globalClaimed.add(entry.code);
+    // and build PatternAccount[] for pattern detection
+    const patternAccounts: PatternAccount[] = [];
+    for (const [key, entry] of suggestions) {
+      if (entry.code) {
+        globalClaimed.add(entry.code);
+        const [category] = key.split(':');
+        patternAccounts.push({
+          code: entry.code,
+          category,
+          type: getAccountTypeForCategory(category),
+        });
+      }
     }
+
+    // Detect the customer's COA numbering pattern from existing mapped accounts
+    const codePattern = detectCodePattern(patternAccounts);
 
     // Process categories grouped by Revenue then Expense to keep ranges separate
     const categoryEntries = Object.entries(CATEGORY_DISPLAY_MAP);
@@ -242,35 +254,33 @@ export default function AccountMapperCard() {
           const key = `${displayCat}:${mp}`;
           if (suggestions.has(key)) continue;
 
-          // Use accountCodePolicy to generate a range-correct code
           const accountType = getAccountTypeForCategory(displayCat);
-          const range = getRangeForType(accountType);
+          let codeStr: string;
 
-          // Find next available code within the correct range
-          let candidate = range.start;
-          // Start from highest globalClaimed code in this range for efficiency
-          for (const code of globalClaimed) {
-            const num = parseInt(code, 10);
-            if (!isNaN(num) && num >= range.start && num <= range.end) {
-              candidate = Math.max(candidate, num + 1);
-            }
-          }
-
-          while (candidate <= range.end) {
-            const codeStr = String(candidate);
-            if (!allExistingSet.has(codeStr) && !globalClaimed.has(codeStr)) break;
-            candidate++;
-          }
-
-          if (candidate <= range.end) {
-            const codeStr = String(candidate);
-            globalClaimed.add(codeStr);
-            suggestions.set(key, {
-              code: codeStr,
-              name: `${mp} ${displayCat}`,
-              isGapFill: true,
+          if (codePattern) {
+            // Pattern-aware: extend the category's neighbourhood
+            codeStr = generateCodeFromPattern({
+              pattern: codePattern,
+              category: displayCat,
+              accountType,
+              existingCodes: allExistingCodes,
+              batchClaimed: globalClaimed,
+            });
+          } else {
+            // No pattern detected: fall back to sequential within correct range
+            codeStr = generateNextCode({
+              existingCodes: allExistingCodes,
+              accountType,
+              batchClaimed: globalClaimed,
             });
           }
+
+          globalClaimed.add(codeStr);
+          suggestions.set(key, {
+            code: codeStr,
+            name: `${mp} ${displayCat}`,
+            isGapFill: true,
+          });
         }
       }
     }
