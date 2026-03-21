@@ -790,44 +790,8 @@ export default function AccountMapperCard() {
     return finalCodes;
   };
 
-  const executeConfirm = async (finalCodes: Record<string, string>) => {
+  const executeConfirmAfterValidation = async (finalCodes: Record<string, string>, freshAccounts: CachedXeroAccount[]) => {
     try {
-      // ─── Real-time COA freshness gate ────────────────────────────────
-      // Force-refresh the Xero COA cache before confirming to ensure all
-      // codes are validated against the live Xero Chart of Accounts.
-      toast.info('Verifying accounts against live Xero data…');
-      const refreshResult = await refreshXeroCOA();
-      if (!refreshResult.success) {
-        toast.error(`Cannot verify with Xero: ${refreshResult.error}. Please try again.`);
-        return;
-      }
-
-      // Reload fresh COA into local state
-      const [freshAccounts, freshSyncedAt] = await Promise.all([
-        getCachedXeroAccounts(),
-        getCoaLastSyncedAt(),
-      ]);
-      setCoaAccounts(freshAccounts);
-      setCoaLastSynced(freshSyncedAt);
-
-      // Build fresh lookup and validate every code
-      const freshCoaSet = new Set(freshAccounts.map(a => a.account_code).filter(Boolean));
-      const invalidCodes: string[] = [];
-      for (const [key, code] of Object.entries(finalCodes)) {
-        if (code && !freshCoaSet.has(code)) {
-          invalidCodes.push(`${key} → ${code}`);
-        }
-      }
-
-      if (invalidCodes.length > 0) {
-        toast.error(
-          `${invalidCodes.length} code${invalidCodes.length > 1 ? 's' : ''} not found in Xero. ` +
-          `Create them first or choose existing accounts.`,
-          { duration: 6000 }
-        );
-        return;
-      }
-
       const { confirmMappings } = await import('@/actions/accountMappings');
       const result = await confirmMappings(finalCodes);
       if (!result.success) throw new Error(result.error);
