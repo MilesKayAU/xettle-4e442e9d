@@ -595,19 +595,22 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSel
 
           {/* Upload area */}
           {!imagePreview ? (
-            <div
-              tabIndex={0}
-              onPaste={handlePaste}
-              className="flex flex-col items-center justify-center gap-3 p-8 rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 focus:border-primary focus:ring-2 focus:ring-ring cursor-pointer transition-colors outline-none"
-              onClick={() => (document.getElementById('screenshot-file-input') as HTMLInputElement)?.click()}
-              onKeyDown={(e) => { if (e.key === 'Enter') (document.getElementById('screenshot-file-input') as HTMLInputElement)?.click(); }}
-            >
-              <ClipboardPaste className="h-10 w-10 text-muted-foreground" />
-              <div className="text-center">
-                <p className="font-medium">Paste screenshot (Ctrl+V) or click to upload</p>
-                <p className="text-sm text-muted-foreground mt-1">PNG, JPG — Amazon order detail page</p>
+            <div className="space-y-3">
+              <div
+                className="flex flex-col items-center justify-center gap-3 p-8 rounded-lg border-2 border-dashed border-primary/40 bg-primary/5 transition-colors"
+              >
+                <ClipboardPaste className="h-10 w-10 text-primary/60" />
+                <div className="text-center">
+                  <p className="font-medium">Press Ctrl+V to paste screenshot</p>
+                  <p className="text-sm text-muted-foreground mt-1">Screenshot your Amazon order detail page and paste it here</p>
+                </div>
               </div>
-              <input id="screenshot-file-input" type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+              <div className="flex justify-center">
+                <label className="text-xs text-muted-foreground hover:text-foreground cursor-pointer underline underline-offset-2">
+                  Or click to upload a file
+                  <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+                </label>
+              </div>
             </div>
           ) : (
             <div className="space-y-3">
