@@ -955,10 +955,19 @@ export default function AccountMapperCard() {
     setExcludedMarketplaces(prev => {
       const next = new Set(prev);
       if (next.has(mp)) next.delete(mp); else next.add(mp);
-      saveExclusions(excludedMappings, next);
+      saveExclusions(excludedMappings, next, excludedCategories);
       return next;
     });
-  }, [excludedMappings, saveExclusions]);
+  }, [excludedMappings, excludedCategories, saveExclusions]);
+
+  const toggleExcludeCategory = useCallback((cat: string) => {
+    setExcludedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat); else next.add(cat);
+      saveExclusions(excludedMappings, excludedMarketplaces, next);
+      return next;
+    });
+  }, [excludedMappings, excludedMarketplaces, saveExclusions]);
 
   const getEffectiveMarketplaces = (): string[] => {
     if (activeMarketplaces.length > 0) return activeMarketplaces;
