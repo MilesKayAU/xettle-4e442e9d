@@ -110,7 +110,18 @@ const CATEGORY_KEYWORDS_ORDERED: [string, string[]][] = [
   ['other_fees', ['adjustment', 'charge', 'miscellaneous', 'other fee', 'reserved']],
 ];
 
-// ─── Core Analysis ──────────────────────────────────────────────
+// ─── Account type compatibility ─────────────────────────────────
+const REVENUE_CATEGORIES = new Set(['sales', 'shipping', 'promotional_discounts', 'refunds', 'reimbursements']);
+const REVENUE_TYPES = new Set(['REVENUE', 'SALES', 'OTHERINCOME', 'DIRECTCOSTS']);
+const EXPENSE_TYPES = new Set(['EXPENSE', 'OVERHEADS', 'DIRECTCOSTS', 'CURRLIAB', 'LIABILITY']);
+
+function isTypeCompatible(category: string, accountType: string | null): boolean {
+  if (!accountType) return true; // no type info, allow it
+  const upper = accountType.toUpperCase();
+  const validTypes = REVENUE_CATEGORIES.has(category) ? REVENUE_TYPES : EXPENSE_TYPES;
+  return validTypes.has(upper);
+}
+
 
 export function analyseCoA(
   accounts: CoaAccount[],
@@ -251,7 +262,7 @@ export function analyseCoA(
         if (matchedCategory) break;
       }
 
-      if (matchedCategory) {
+      if (matchedCategory && isTypeCompatible(matchedCategory, account.account_type)) {
         // Avoid duplicate suggestions for same marketplace+category
         const exists = mapping_suggestions.some(
           ms => ms.marketplace_code === detected.marketplace_code
