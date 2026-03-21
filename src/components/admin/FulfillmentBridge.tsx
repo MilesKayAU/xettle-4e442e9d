@@ -1216,6 +1216,7 @@ function OrderMonitorTab() {
           open={!!screenshotOrder}
           onOpenChange={(v) => { if (!v) setScreenshotOrder(null); }}
           onPatched={loadOrders}
+          buildSellerCentralUrl={buildSellerCentralUrl}
         />
       )}
     </div>
