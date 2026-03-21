@@ -208,11 +208,11 @@ export async function batchCreateXeroAccounts(
     });
 
     if (error) {
-      // Network or invocation error — abort
       return {
         success: false,
         created: totalCreated,
         updated: totalUpdated,
+        skipped: totalSkipped,
         errors: allErrors,
         error: error.message,
       };
