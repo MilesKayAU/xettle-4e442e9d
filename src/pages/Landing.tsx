@@ -59,6 +59,11 @@ export default function Landing() {
             <Button variant="ghost" size="sm" asChild>
               <Link to="/amazon">Amazon AU</Link>
             </Button>
+            <Button variant="ghost" size="sm" onClick={() => {
+              document.getElementById('xero-section')?.scrollIntoView({ behavior: 'smooth' });
+            }}>
+              Xero
+            </Button>
             <Button variant="ghost" size="sm" asChild>
               <Link to="/marketplaces">Marketplaces</Link>
             </Button>
