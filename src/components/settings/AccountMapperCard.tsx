@@ -147,6 +147,9 @@ export default function AccountMapperCard() {
   const [excludedMarketplaces, setExcludedMarketplaces] = useState<Set<string>>(new Set());
   const [excludedCategories, setExcludedCategories] = useState<Set<string>>(new Set());
 
+  // Ignored marketplaces — hidden from clone banner & gap detection site-wide
+  const [ignoredMarketplaces, setIgnoredMarketplaces] = useState<Set<string>>(new Set());
+
   // Confirmed (saved) codes for comparison
   const [confirmedCodes, setConfirmedCodes] = useState<Record<string, string>>({});
 
@@ -305,11 +308,29 @@ export default function AccountMapperCard() {
   const renderCloneBanner = () => {
     if (!splitByMarketplace || !isAdmin || activeMarketplaces.length === 0 || coaAccounts.length === 0) return null;
 
-    // Only show clone options for truly uncovered marketplaces
-    const uncoveredDetails = coverageDetails.filter(d => d.status === 'uncovered');
+    // Only show clone options for truly uncovered marketplaces, excluding ignored ones
+    const uncoveredDetails = coverageDetails.filter(d => d.status === 'uncovered' && !ignoredMarketplaces.has(d.marketplace));
 
-    // If everything has at least some accounts, don't show the clone banner
-    if (uncoveredDetails.length === 0) return null;
+    // If everything has at least some accounts (or is ignored), don't show the clone banner
+    if (uncoveredDetails.length === 0 && ignoredMarketplaces.size === 0) return null;
+    if (uncoveredDetails.length === 0) {
+      // Show a small restore link if there are ignored marketplaces
+      return (
+        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+          <Info className="h-3 w-3 shrink-0" />
+          <span>{ignoredMarketplaces.size} marketplace{ignoredMarketplaces.size !== 1 ? 's' : ''} ignored.</span>
+          <button
+            onClick={() => {
+              setIgnoredMarketplaces(new Set());
+              saveExclusions(excludedMappings, excludedMarketplaces, excludedCategories, new Set());
+            }}
+            className="text-primary hover:underline"
+          >
+            Restore all
+          </button>
+        </div>
+      );
+    }
 
     // No-template-available: nothing covered at all (can't clone from anything)
     if (coveredMarketplaces.length === 0) {
@@ -332,6 +353,21 @@ export default function AccountMapperCard() {
             {uncoveredDetails.length} marketplace{uncoveredDetails.length !== 1 ? 's have' : ' has'} no
             Xero accounts yet. Select to clone from an existing template.
           </span>
+          {ignoredMarketplaces.size > 0 && (
+            <span className="text-[10px]">
+              ({ignoredMarketplaces.size} ignored —{' '}
+              <button
+                onClick={() => {
+                  setIgnoredMarketplaces(new Set());
+                  saveExclusions(excludedMappings, excludedMarketplaces, excludedCategories, new Set());
+                }}
+                className="text-primary hover:underline"
+              >
+                restore
+              </button>
+              )
+            </span>
+          )}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
           {uncoveredDetails.map(detail => {
@@ -358,7 +394,19 @@ export default function AccountMapperCard() {
                   className="rounded border-muted-foreground/30 h-3.5 w-3.5"
                 />
                 <span className="font-medium truncate">{detail.marketplace}</span>
-                <XCircle className="h-3 w-3 text-amber-500 ml-auto shrink-0" />
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleIgnoreMarketplace(detail.marketplace);
+                    toast.success(`${detail.marketplace} ignored — won't appear here again`);
+                  }}
+                  className="ml-auto shrink-0 text-muted-foreground hover:text-destructive transition-colors"
+                  title={`Ignore ${detail.marketplace} — hide from this list`}
+                >
+                  <XCircle className="h-3.5 w-3.5" />
+                </button>
               </label>
             );
           })}
@@ -559,6 +607,7 @@ export default function AccountMapperCard() {
           if (parsed.keys) setExcludedMappings(new Set(parsed.keys));
           if (parsed.marketplaces) setExcludedMarketplaces(new Set(parsed.marketplaces));
           if (parsed.categories) setExcludedCategories(new Set(parsed.categories));
+          if (parsed.ignoredMarketplaces) setIgnoredMarketplaces(new Set(parsed.ignoredMarketplaces));
         } catch { /* ignore */ }
       }
 
@@ -937,11 +986,11 @@ export default function AccountMapperCard() {
   };
 
   /** Persist exclusion settings */
-  const saveExclusions = useCallback(async (keys: Set<string>, mps: Set<string>, cats?: Set<string>) => {
+  const saveExclusions = useCallback(async (keys: Set<string>, mps: Set<string>, cats?: Set<string>, ignored?: Set<string>) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     await supabase.from('app_settings').upsert(
-      { user_id: user.id, key: 'coa_excluded_mappings', value: JSON.stringify({ keys: [...keys], marketplaces: [...mps], categories: cats ? [...cats] : [] }) },
+      { user_id: user.id, key: 'coa_excluded_mappings', value: JSON.stringify({ keys: [...keys], marketplaces: [...mps], categories: cats ? [...cats] : [], ignoredMarketplaces: ignored ? [...ignored] : [] }) },
       { onConflict: 'user_id,key' }
     );
   }, []);
@@ -950,28 +999,37 @@ export default function AccountMapperCard() {
     setExcludedMappings(prev => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
-      saveExclusions(next, excludedMarketplaces, excludedCategories);
+      saveExclusions(next, excludedMarketplaces, excludedCategories, ignoredMarketplaces);
       return next;
     });
-  }, [excludedMarketplaces, excludedCategories, saveExclusions]);
+  }, [excludedMarketplaces, excludedCategories, ignoredMarketplaces, saveExclusions]);
 
   const toggleExcludeMarketplace = useCallback((mp: string) => {
     setExcludedMarketplaces(prev => {
       const next = new Set(prev);
       if (next.has(mp)) next.delete(mp); else next.add(mp);
-      saveExclusions(excludedMappings, next, excludedCategories);
+      saveExclusions(excludedMappings, next, excludedCategories, ignoredMarketplaces);
       return next;
     });
-  }, [excludedMappings, excludedCategories, saveExclusions]);
+  }, [excludedMappings, excludedCategories, ignoredMarketplaces, saveExclusions]);
 
   const toggleExcludeCategory = useCallback((cat: string) => {
     setExcludedCategories(prev => {
       const next = new Set(prev);
       if (next.has(cat)) next.delete(cat); else next.add(cat);
-      saveExclusions(excludedMappings, excludedMarketplaces, next);
+      saveExclusions(excludedMappings, excludedMarketplaces, next, ignoredMarketplaces);
       return next;
     });
-  }, [excludedMappings, excludedMarketplaces, saveExclusions]);
+  }, [excludedMappings, excludedMarketplaces, ignoredMarketplaces, saveExclusions]);
+
+  const toggleIgnoreMarketplace = useCallback((mp: string) => {
+    setIgnoredMarketplaces(prev => {
+      const next = new Set(prev);
+      if (next.has(mp)) next.delete(mp); else next.add(mp);
+      saveExclusions(excludedMappings, excludedMarketplaces, excludedCategories, next);
+      return next;
+    });
+  }, [excludedMappings, excludedMarketplaces, excludedCategories, saveExclusions]);
 
   const getEffectiveMarketplaces = (): string[] => {
     if (activeMarketplaces.length > 0) return activeMarketplaces;
@@ -1520,7 +1578,7 @@ export default function AccountMapperCard() {
                           <button
                             onClick={() => {
                               setExcludedMarketplaces(new Set());
-                              saveExclusions(excludedMappings, new Set(), excludedCategories);
+                              saveExclusions(excludedMappings, new Set(), excludedCategories, ignoredMarketplaces);
                             }}
                             className="text-[10px] text-primary hover:underline"
                           >
@@ -1561,7 +1619,7 @@ export default function AccountMapperCard() {
                         <button
                           onClick={() => {
                             setExcludedCategories(new Set());
-                            saveExclusions(excludedMappings, excludedMarketplaces, new Set());
+                            saveExclusions(excludedMappings, excludedMarketplaces, new Set(), ignoredMarketplaces);
                           }}
                           className="text-[10px] text-primary hover:underline"
                         >
@@ -1589,6 +1647,40 @@ export default function AccountMapperCard() {
                       })}
                     </div>
                   </div>
+
+                  {/* Ignored marketplaces (site-wide) */}
+                  {ignoredMarketplaces.size > 0 && (
+                    <div className="space-y-1.5 border-t pt-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-medium flex items-center gap-1.5">
+                          <XCircle className="h-3 w-3" />
+                          Ignored marketplaces (hidden site-wide)
+                        </Label>
+                        <button
+                          onClick={() => {
+                            setIgnoredMarketplaces(new Set());
+                            saveExclusions(excludedMappings, excludedMarketplaces, excludedCategories, new Set());
+                          }}
+                          className="text-[10px] text-primary hover:underline"
+                        >
+                          Restore all
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[...ignoredMarketplaces].map(mp => (
+                          <button
+                            key={mp}
+                            onClick={() => toggleIgnoreMarketplace(mp)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] border bg-muted/50 border-border text-muted-foreground hover:bg-accent transition-colors"
+                          >
+                            <XCircle className="h-2.5 w-2.5" />
+                            {mp}
+                            <span className="text-primary ml-0.5">restore</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {(excludedMarketplaces.size > 0 || excludedCategories.size > 0) && (
                     <p className="text-[10px] text-muted-foreground">
