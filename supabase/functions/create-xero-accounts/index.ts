@@ -225,7 +225,7 @@ Deno.serve(async (req) => {
     const skipped: { code: string; reason: string }[] = []
 
     for (const acc of accounts) {
-      const existing = existingMap.get(acc.code)
+      const existing = existingByCode.get(acc.code)
       const isUpdate = !!existing && mode === 'create_and_update'
 
       // Guard: Xero Account Type is immutable — skip if type changed
