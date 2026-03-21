@@ -621,6 +621,12 @@ function OrderMonitorTab() {
                           <Badge variant="outline" className={STATUS_COLORS[order.status] || ''}>
                             {order.status}
                           </Badge>
+                          {order.retry_count > 0 && order.status !== 'tracking_sent' && (
+                            <span className="text-xs text-muted-foreground ml-1">({order.retry_count}/{3})</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {order.shipping_service_level || '—'}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {new Date(order.created_at).toLocaleString()}
