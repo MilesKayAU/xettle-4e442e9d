@@ -984,7 +984,18 @@ export default function AccountMapperCard() {
     return marketplaces.map(mp => {
       const key = `${baseCat}:${mp}`;
       const baseCode = editableMapping[baseCat] || mapping[baseCat]?.code || '';
-      const overrideCode = editableMapping[key] || '';
+      const coaSuggestion = coaSuggestions.get(key); // COA-scanned suggestion
+      // Auto-apply gap-fill suggestion to editable mapping if no override set yet
+      if (coaSuggestion?.code && !editableMapping[key]) {
+        // Use a microtask to avoid setState during render
+        queueMicrotask(() => {
+          setEditableMapping(prev => {
+            if (prev[key]) return prev; // already set
+            return { ...prev, [key]: coaSuggestion.code };
+          });
+        });
+      }
+      const overrideCode = editableMapping[key] || coaSuggestion?.code || '';
       const aiSuggestion = mapping[key]; // AI-suggested per-rail mapping
       const coaSuggestion = coaSuggestions.get(key); // COA-scanned suggestion
       const isGapFill = coaSuggestion?.isGapFill === true;
