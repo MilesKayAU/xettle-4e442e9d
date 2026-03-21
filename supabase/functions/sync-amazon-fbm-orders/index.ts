@@ -631,7 +631,7 @@ Deno.serve(async (req) => {
         await logEvent(supabase, userId, 'fbm_poll_completed', { total_orders: 0, dry_run: dryRun }, storeKey)
         await upsertSetting(supabase, userId, `fbm:${storeKey}:last_poll_at`, new Date().toISOString())
         // Release lock
-        await supabase.rpc('release_sync_lock', { p_user_id: userId, p_lock_key: lockKey })
+        await supabase.rpc('release_sync_lock', { p_user_id: userId, p_integration: 'amazon', p_lock_key: lockKey })
         return new Response(JSON.stringify({ status: 'completed', total_orders: 0, dry_run: dryRun }), { status: 200, headers })
       }
 
