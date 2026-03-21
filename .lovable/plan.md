@@ -1,34 +1,27 @@
 
 
-# Smart URL Pattern Learning for Amazon Order Links
 
-## Idea
-Instead of just letting the admin paste a corrected URL once, the system **learns the URL pattern** from their correction and applies it to all future orders. If the admin fixes one link, every other order link updates automatically — and it persists across sessions.
+# Smart URL Pattern Learning for Amazon Order Links — IMPLEMENTED
 
-## How It Works
+## What Was Built
 
-1. **Admin corrects a URL** — e.g. pastes `https://sellercentral.amazon.com.au/orders-v3/order/112-1234567-1234567`
-2. **System extracts the template** — replaces the order ID with a `{orderId}` placeholder: `https://sellercentral.amazon.com.au/orders-v3/order/{orderId}`
-3. **Saves the template** to `app_settings` (key: `amazon_seller_central_url_template`, value: the template string)
-4. **All order links** now use this template instead of the auto-generated one
-5. **Next login** — template loads from DB, all links are correct immediately
+### URL Template Learning
+- When an admin edits an Amazon Order link and pastes a corrected URL, the system detects the order ID within the URL and extracts a reusable `{orderId}` template
+- A prompt appears: "Apply this URL format to all orders?" — if confirmed, the template is saved to `app_settings` (key: `amazon_seller_central_url_template`)
+- All order links immediately use the saved template
+- Template persists across sessions — loads from DB on component mount
 
-## Detection Logic
-When the admin pastes a URL, search for any known Amazon order ID within the string. If found, replace it with `{orderId}` to derive the template. If no order ID is found in the URL, just save it as a one-off override for that specific order (current behaviour).
+### UI Elements
+- **Pencil icon** next to each Amazon Order ID link — click to edit/paste a custom URL
+- **Inline input** with Enter to submit, Escape to cancel
+- **"Custom URL pattern active" banner** when a saved template is in use, with a Reset button
+- **"Apply to all?" prompt** when a new template is detected from a pasted URL
 
-## Changes
+### No Database Migration Needed
+Uses existing `app_settings` table with `user_id + key` uniqueness.
 
-### `src/components/admin/FulfillmentBridge.tsx`
-- After admin edits a URL and it contains a recognised order ID, extract the template pattern
-- Prompt: "Apply this URL format to all orders?" with a Save button
-- If confirmed, save to `app_settings` via Supabase
-- On mount, check `app_settings` for a saved template; if found, use it instead of the region-based default
-- Show a small "Custom URL pattern active" indicator with a reset option
+## Files Changed
 
-### No database migration needed
-`app_settings` table already exists with `user_id + key` uniqueness — just insert a new key.
-
-| File | Change |
-|------|--------|
-| `src/components/admin/FulfillmentBridge.tsx` | URL template learning, persistence, and apply-to-all logic |
-
+| File | What |
+|------|------|
+| `src/components/admin/FulfillmentBridge.tsx` | URL template learning, per-row edit, persistence, apply-to-all prompt, reset |

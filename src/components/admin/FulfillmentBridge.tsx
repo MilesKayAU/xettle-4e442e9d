@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { RefreshCw, Trash2, Plus, ChevronDown, Play, FlaskConical, AlertTriangle, Search, ShieldAlert, CheckCircle2, XCircle, Clock, Webhook, RotateCcw, Download, FileText, Camera, Upload, User, MapPin, Loader2, ExternalLink, Package } from 'lucide-react';
+import { RefreshCw, Trash2, Plus, ChevronDown, Play, FlaskConical, AlertTriangle, Search, ShieldAlert, CheckCircle2, XCircle, Clock, Webhook, RotateCcw, Download, FileText, Camera, Upload, User, MapPin, Loader2, ExternalLink, Package, Pencil, Check, X, Link2 } from 'lucide-react';
 import { AMAZON_REGIONS, DEFAULT_AMAZON_REGION } from '@/constants/amazon-regions';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import LoadingSpinner from '@/components/ui/loading-spinner';
@@ -672,13 +672,103 @@ function OrderMonitorTab() {
   const [screenshotOrder, setScreenshotOrder] = useState<any | null>(null);
   const [sellerCentralDomain, setSellerCentralDomain] = useState(DEFAULT_AMAZON_REGION.sellerCentralDomain);
 
-  // Resolve Seller Central domain from user's amazon_tokens
+  // Smart URL template learning
+  const URL_TEMPLATE_KEY = 'amazon_seller_central_url_template';
+  const [savedUrlTemplate, setSavedUrlTemplate] = useState<string | null>(null);
+  const [editingUrlOrderId, setEditingUrlOrderId] = useState<string | null>(null);
+  const [editUrlValue, setEditUrlValue] = useState('');
+  const [pendingTemplate, setPendingTemplate] = useState<string | null>(null);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+
+  // Build URL from template or default
+  const buildSellerCentralUrl = useCallback((amazonOrderId: string) => {
+    if (savedUrlTemplate) {
+      return savedUrlTemplate.replace('{orderId}', amazonOrderId);
+    }
+    return `https://${sellerCentralDomain}/orders-v3/order/${amazonOrderId}`;
+  }, [savedUrlTemplate, sellerCentralDomain]);
+
+  // Extract template from a pasted URL by finding the order ID within it
+  const extractTemplate = (url: string, amazonOrderId: string): string | null => {
+    if (!url.includes(amazonOrderId)) return null;
+    return url.replace(amazonOrderId, '{orderId}');
+  };
+
+  // Handle URL edit submission
+  const handleUrlEditSubmit = (amazonOrderId: string) => {
+    const url = editUrlValue.trim();
+    if (!url) { setEditingUrlOrderId(null); return; }
+
+    // Try to extract a reusable template
+    const template = extractTemplate(url, amazonOrderId);
+    if (template && template !== `https://${sellerCentralDomain}/orders-v3/order/{orderId}`) {
+      setPendingTemplate(template);
+    }
+    // Open the URL immediately regardless
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setEditingUrlOrderId(null);
+  };
+
+  // Save template to app_settings
+  const saveUrlTemplate = async (template: string) => {
+    setSavingTemplate(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Upsert the template
+      const { data: existing } = await supabase
+        .from('app_settings')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('key', URL_TEMPLATE_KEY)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase.from('app_settings').update({ value: template }).eq('id', existing.id);
+      } else {
+        await supabase.from('app_settings').insert({ user_id: user.id, key: URL_TEMPLATE_KEY, value: template });
+      }
+
+      setSavedUrlTemplate(template);
+      setPendingTemplate(null);
+      toast({ title: 'URL pattern saved', description: 'All order links will now use this format.' });
+    } catch (err: any) {
+      toast({ title: 'Failed to save URL pattern', description: err.message, variant: 'destructive' });
+    }
+    setSavingTemplate(false);
+  };
+
+  // Reset template back to auto-detected default
+  const resetUrlTemplate = async () => {
+    setSavingTemplate(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      await supabase.from('app_settings').delete().eq('user_id', user.id).eq('key', URL_TEMPLATE_KEY);
+      setSavedUrlTemplate(null);
+      toast({ title: 'URL pattern reset', description: 'Links will use the default region-based format.' });
+    } catch (err: any) {
+      toast({ title: 'Failed to reset', description: err.message, variant: 'destructive' });
+    }
+    setSavingTemplate(false);
+  };
+
+  // Load saved URL template and Seller Central domain on mount
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('amazon_tokens').select('marketplace_id').limit(1).maybeSingle();
-      if (data?.marketplace_id) {
-        const region = AMAZON_REGIONS.find(r => r.marketplaceId === data.marketplace_id);
+      const [tokenRes, settingsRes] = await Promise.all([
+        supabase.from('amazon_tokens').select('marketplace_id').limit(1).maybeSingle(),
+        supabase.from('app_settings').select('value').eq('key', URL_TEMPLATE_KEY).maybeSingle(),
+      ]);
+
+      if (tokenRes.data?.marketplace_id) {
+        const region = AMAZON_REGIONS.find(r => r.marketplaceId === tokenRes.data!.marketplace_id);
         if (region) setSellerCentralDomain(region.sellerCentralDomain);
+      }
+
+      if (settingsRes.data?.value) {
+        setSavedUrlTemplate(settingsRes.data.value);
       }
     })();
   }, []);
@@ -823,6 +913,36 @@ function OrderMonitorTab() {
         </div>
       )}
 
+      {/* Custom URL pattern indicator */}
+      {savedUrlTemplate && (
+        <div className="flex items-center gap-2 p-2 rounded-md border border-border bg-muted/50 text-sm">
+          <Link2 className="h-4 w-4 text-primary shrink-0" />
+          <span className="text-muted-foreground">Custom URL pattern active</span>
+          <code className="text-xs font-mono bg-background px-1.5 py-0.5 rounded border truncate max-w-[400px]">{savedUrlTemplate}</code>
+          <Button variant="ghost" size="sm" className="ml-auto h-7 text-xs" onClick={resetUrlTemplate} disabled={savingTemplate}>
+            Reset to default
+          </Button>
+        </div>
+      )}
+
+      {/* Pending template prompt */}
+      {pendingTemplate && (
+        <div className="flex items-center gap-2 p-3 rounded-md border border-primary/30 bg-primary/5">
+          <Link2 className="h-4 w-4 text-primary shrink-0" />
+          <div className="flex-1 text-sm">
+            <span className="font-medium">Apply this URL format to all orders?</span>
+            <code className="block text-xs font-mono text-muted-foreground mt-0.5 truncate">{pendingTemplate}</code>
+          </div>
+          <Button size="sm" onClick={() => saveUrlTemplate(pendingTemplate)} disabled={savingTemplate} className="h-7">
+            {savingTemplate ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1" />}
+            Save
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setPendingTemplate(null)} className="h-7">
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
+
       <Card>
         <CardContent className="pt-4">
           {loading ? (
@@ -858,19 +978,52 @@ function OrderMonitorTab() {
                           </CollapsibleTrigger>
                         </TableCell>
                         <TableCell className="font-mono text-sm">
-                          <div className="flex items-center gap-1.5">
-                            <span>{order.amazon_order_id}</span>
-                            <a
-                              href={`https://${sellerCentralDomain}/orders-v3/order/${order.amazon_order_id}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={e => e.stopPropagation()}
-                              title="Open in Seller Central"
-                              className="text-primary hover:text-primary/80"
-                            >
-                              <ExternalLink className="h-3.5 w-3.5" />
-                            </a>
-                          </div>
+                          {editingUrlOrderId === order.id ? (
+                            <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                              <Input
+                                value={editUrlValue}
+                                onChange={e => setEditUrlValue(e.target.value)}
+                                placeholder="Paste Seller Central URL"
+                                className="h-7 text-xs w-[260px]"
+                                autoFocus
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') handleUrlEditSubmit(order.amazon_order_id);
+                                  if (e.key === 'Escape') setEditingUrlOrderId(null);
+                                }}
+                              />
+                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleUrlEditSubmit(order.amazon_order_id)}>
+                                <Check className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingUrlOrderId(null)}>
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5">
+                              <span>{order.amazon_order_id}</span>
+                              <a
+                                href={buildSellerCentralUrl(order.amazon_order_id)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                title="Open in Seller Central"
+                                className="text-primary hover:text-primary/80"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                              <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  setEditUrlValue(buildSellerCentralUrl(order.amazon_order_id));
+                                  setEditingUrlOrderId(order.id);
+                                }}
+                                title="Edit URL"
+                                className="text-muted-foreground hover:text-foreground"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="text-sm max-w-[180px]">
                           {(() => {
