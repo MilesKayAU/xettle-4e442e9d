@@ -131,6 +131,48 @@ export type Database = {
         }
         Relationships: []
       }
+      api_call_log: {
+        Row: {
+          created_at: string
+          endpoint: string
+          error_summary: string | null
+          id: string
+          integration: string
+          latency_ms: number | null
+          method: string
+          rate_limit_remaining: number | null
+          request_context: Json | null
+          status_code: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          endpoint: string
+          error_summary?: string | null
+          id?: string
+          integration: string
+          latency_ms?: number | null
+          method?: string
+          rate_limit_remaining?: number | null
+          request_context?: Json | null
+          status_code?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          endpoint?: string
+          error_summary?: string | null
+          id?: string
+          integration?: string
+          latency_ms?: number | null
+          method?: string
+          rate_limit_remaining?: number | null
+          request_context?: Json | null
+          status_code?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           created_at: string

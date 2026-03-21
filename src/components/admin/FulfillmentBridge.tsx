@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { RefreshCw, Trash2, Plus, ChevronDown, Play, FlaskConical, AlertTriangle, Search, ShieldAlert, CheckCircle2, XCircle, Clock, Webhook, RotateCcw } from 'lucide-react';
+import { RefreshCw, Trash2, Plus, ChevronDown, Play, FlaskConical, AlertTriangle, Search, ShieldAlert, CheckCircle2, XCircle, Clock, Webhook, RotateCcw, Download, FileText } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 
 const STORE_KEY = 'primary';
@@ -957,8 +957,171 @@ function EventLogTab() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Main Component
+// Tab 5: API Audit Log
 // ═══════════════════════════════════════════════════════════════
+function ApiAuditTab() {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [integrationFilter, setIntegrationFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  const loadLogs = useCallback(async () => {
+    setLoading(true);
+    let query = supabase
+      .from('api_call_log' as any)
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (integrationFilter !== 'all') {
+      query = query.eq('integration', integrationFilter);
+    }
+    if (statusFilter === 'errors') {
+      query = query.or('status_code.gte.400,status_code.eq.0');
+    } else if (statusFilter === 'success') {
+      query = query.gte('status_code', 200).lt('status_code', 400);
+    }
+
+    const { data } = await query;
+    setLogs(data || []);
+    setLoading(false);
+  }, [integrationFilter, statusFilter]);
+
+  useEffect(() => { loadLogs(); }, [loadLogs]);
+
+  const exportCsv = () => {
+    if (logs.length === 0) return;
+    const headers = ['timestamp', 'integration', 'method', 'endpoint', 'status_code', 'latency_ms', 'rate_limit_remaining', 'error_summary', 'request_context'];
+    const rows = logs.map((log: any) => [
+      log.created_at,
+      log.integration,
+      log.method,
+      log.endpoint,
+      log.status_code,
+      log.latency_ms,
+      log.rate_limit_remaining ?? '',
+      (log.error_summary || '').replace(/"/g, '""'),
+      JSON.stringify(log.request_context || {}).replace(/"/g, '""'),
+    ]);
+    const csv = [headers.join(','), ...rows.map((r: any[]) => r.map((v: any) => `"${v}"`).join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `api-audit-log-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const getStatusColor = (code: number) => {
+    if (code === 0) return 'bg-gray-100 text-gray-800 border-gray-300';
+    if (code < 300) return 'bg-green-100 text-green-800 border-green-300';
+    if (code < 400) return 'bg-blue-100 text-blue-800 border-blue-300';
+    if (code === 429) return 'bg-amber-100 text-amber-800 border-amber-300';
+    if (code < 500) return 'bg-orange-100 text-orange-800 border-orange-300';
+    return 'bg-red-100 text-red-800 border-red-300';
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <Select value={integrationFilter} onValueChange={setIntegrationFilter}>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="Integration" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Integrations</SelectItem>
+            <SelectItem value="amazon_sp_api">Amazon SP-API</SelectItem>
+            <SelectItem value="amazon_lwa">Amazon LWA</SelectItem>
+            <SelectItem value="shopify">Shopify</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-36">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="success">Success</SelectItem>
+            <SelectItem value="errors">Errors</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button variant="outline" size="sm" onClick={exportCsv} disabled={logs.length === 0}>
+          <Download className="h-4 w-4 mr-1" />
+          Export CSV
+        </Button>
+        <Button variant="ghost" size="sm" onClick={loadLogs}>
+          <RefreshCw className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="pt-4">
+          {loading ? (
+            <LoadingSpinner size="sm" text="Loading audit log..." />
+          ) : logs.length === 0 ? (
+            <p className="text-muted-foreground text-center py-8">No API calls logged yet</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Timestamp</TableHead>
+                  <TableHead>Integration</TableHead>
+                  <TableHead>Method</TableHead>
+                  <TableHead>Endpoint</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Latency</TableHead>
+                  <TableHead>Rate Limit</TableHead>
+                  <TableHead>Context</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {logs.map((log: any) => (
+                  <TableRow key={log.id}>
+                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                      {new Date(log.created_at).toLocaleString()}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">
+                        {log.integration}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">{log.method}</TableCell>
+                    <TableCell className="font-mono text-xs max-w-[250px] truncate" title={log.endpoint}>
+                      {log.endpoint}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-xs ${getStatusColor(log.status_code)}`}>
+                        {log.status_code || 'ERR'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {log.latency_ms != null ? `${log.latency_ms}ms` : '—'}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {log.rate_limit_remaining != null ? log.rate_limit_remaining : '—'}
+                    </TableCell>
+                    <TableCell className="text-xs max-w-[200px]">
+                      {log.error_summary ? (
+                        <span className="text-destructive" title={log.error_summary}>{log.error_summary.substring(0, 60)}…</span>
+                      ) : log.request_context && Object.keys(log.request_context).length > 0 ? (
+                        <span className="text-muted-foreground" title={JSON.stringify(log.request_context)}>
+                          {Object.entries(log.request_context).map(([k, v]) => `${k}:${String(v)}`).join(', ').substring(0, 60)}
+                        </span>
+                      ) : '—'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+
 export default function FulfillmentBridge() {
   const [connectingInternal, setConnectingInternal] = useState(false);
 
@@ -1003,6 +1166,10 @@ export default function FulfillmentBridge() {
           <TabsTrigger value="orders">Order Monitor</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
           <TabsTrigger value="events">Event Log</TabsTrigger>
+          <TabsTrigger value="audit">
+            <FileText className="h-3.5 w-3.5 mr-1" />
+            API Audit
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="links">
@@ -1016,6 +1183,9 @@ export default function FulfillmentBridge() {
         </TabsContent>
         <TabsContent value="events">
           <EventLogTab />
+        </TabsContent>
+        <TabsContent value="audit">
+          <ApiAuditTab />
         </TabsContent>
       </Tabs>
     </div>

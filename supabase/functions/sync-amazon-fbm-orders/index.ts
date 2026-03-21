@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getCorsHeaders } from '../_shared/cors.ts'
+import { auditedFetch } from '../_shared/api-audit.ts'
 import {
   getEndpointForRegion,
   getSpApiHeaders,
@@ -657,7 +658,7 @@ Deno.serve(async (req) => {
 
       if (!tokenStillValid) {
         // Refresh the token — mirrors amazon-auth refresh logic exactly
-        const refreshResponse = await fetch(LWA.TOKEN_URL, {
+        const refreshResponse = await auditedFetch(LWA.TOKEN_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
@@ -666,7 +667,7 @@ Deno.serve(async (req) => {
             client_id: AMAZON_CLIENT_ID,
             client_secret: AMAZON_CLIENT_SECRET,
           }),
-        })
+        }, { user_id: userId, integration: 'amazon_lwa', context: { action: 'token_refresh' } })
 
         const refreshData = await refreshResponse.json()
         if (!refreshResponse.ok || !refreshData.access_token) {
@@ -758,9 +759,9 @@ Deno.serve(async (req) => {
 
         let ordersResponse: Response
         try {
-          ordersResponse = await fetch(ordersUrl, {
+          ordersResponse = await auditedFetch(ordersUrl, {
             headers: getSpApiHeaders(accessToken),
-          })
+          }, { user_id: userId, integration: 'amazon_sp_api', context: { action: 'list_orders', page: pagesFetched + 1, marketplace_id } })
         } catch (fetchErr) {
           console.error('fbm_orders_fetch_failed', fetchErr)
           circuitBreaker.recordFailure()
@@ -875,9 +876,9 @@ Deno.serve(async (req) => {
 
             try {
               const checkUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders/${syncedOrder.amazon_order_id}`
-              const checkRes = await fetch(checkUrl, {
+              const checkRes = await auditedFetch(checkUrl, {
                 headers: getSpApiHeaders(accessToken),
-              })
+              }, { user_id: userId, integration: 'amazon_sp_api', context: { action: 'cancel_check', order_id: syncedOrder.amazon_order_id } })
 
               if (checkRes.ok) {
                 circuitBreaker.recordSuccess()
@@ -1171,9 +1172,9 @@ Deno.serve(async (req) => {
 
         if (orderItems.length === 0) {
           const detailUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders/${amazonOrderId}?includedData=BUYER,RECIPIENT`
-          const detailResponse = await fetch(detailUrl, {
+          const detailResponse = await auditedFetch(detailUrl, {
             headers: getSpApiHeaders(accessToken),
-          })
+          }, { user_id: userId, integration: 'amazon_sp_api', context: { action: 'order_detail', order_id: amazonOrderId } })
 
           if (!detailResponse.ok) {
             const errText = await detailResponse.text()
@@ -1307,9 +1308,9 @@ Deno.serve(async (req) => {
         const VALID_FBM_STATUSES = ['Unshipped', 'PartiallyShipped']
         const revalidateUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders/${amazonOrderId}`
         try {
-          const revalResponse = await fetch(revalidateUrl, {
+          const revalResponse = await auditedFetch(revalidateUrl, {
             headers: getSpApiHeaders(accessToken),
-          })
+          }, { user_id: userId, integration: 'amazon_sp_api', context: { action: 'revalidate_status', order_id: amazonOrderId } })
           if (revalResponse.ok) {
             circuitBreaker.recordSuccess()
             const revalData = await revalResponse.json()
@@ -1482,14 +1483,14 @@ Deno.serve(async (req) => {
         try {
           console.log('fbm_shopify_create', { amazonOrderId, shopifyUrl, lineItemCount: lineItems.length, shippingLevel })
 
-          const shopifyResponse = await fetch(shopifyUrl, {
+          const shopifyResponse = await auditedFetch(shopifyUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'X-Shopify-Access-Token': shopifyToken.access_token,
             },
             body: JSON.stringify(shopifyPayload),
-          })
+          }, { user_id: userId, integration: 'shopify', context: { action: 'create_order', order_id: amazonOrderId } })
 
           console.log('fbm_shopify_response', { amazonOrderId, status: shopifyResponse.status, ok: shopifyResponse.ok })
 

@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getCorsHeaders } from '../_shared/cors.ts'
+import { auditedFetch } from '../_shared/api-audit.ts'
 import {
   getEndpointForRegion,
   getSpApiHeaders,
@@ -147,7 +148,7 @@ Deno.serve(async (req) => {
         throw new Error('Missing AMAZON_SP_CLIENT_ID or AMAZON_SP_CLIENT_SECRET')
       }
 
-      const refreshResponse = await fetch(LWA.TOKEN_URL, {
+      const refreshResponse = await auditedFetch(LWA.TOKEN_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
@@ -156,7 +157,7 @@ Deno.serve(async (req) => {
           client_id: AMAZON_CLIENT_ID,
           client_secret: AMAZON_CLIENT_SECRET,
         }),
-      })
+      }, { user_id: fbmOrder.user_id, integration: 'amazon_lwa', context: { action: 'token_refresh_webhook' } })
 
       const refreshData = await refreshResponse.json()
       if (!refreshResponse.ok || !refreshData.access_token) {
@@ -208,14 +209,14 @@ Deno.serve(async (req) => {
       carrier: carrierCode,
     })
 
-    const confirmResponse = await fetch(confirmUrl, {
+    const confirmResponse = await auditedFetch(confirmUrl, {
       method: 'POST',
       headers: {
         ...getSpApiHeaders(accessToken),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(confirmPayload),
-    })
+    }, { user_id: fbmOrder.user_id, integration: 'amazon_sp_api', context: { action: 'confirm_shipment', order_id: fbmOrder.amazon_order_id, tracking_number: trackingNumber } })
 
     if (confirmResponse.ok || confirmResponse.status === 204) {
       // Success — update status
@@ -317,9 +318,9 @@ async function handleManualRetry(
   const shopifyToken = tokenRow.access_token
   const fulfillmentsUrl = `https://${shopifyDomain}/admin/api/2024-01/orders/${fbmOrder.shopify_order_id}/fulfillments.json`
 
-  const fulfillRes = await fetch(fulfillmentsUrl, {
+  const fulfillRes = await auditedFetch(fulfillmentsUrl, {
     headers: { 'X-Shopify-Access-Token': shopifyToken, 'Content-Type': 'application/json' },
-  })
+  }, { user_id: fbmOrder.user_id, integration: 'shopify', context: { action: 'fetch_fulfillments', shopify_order_id: fbmOrder.shopify_order_id } })
 
   if (!fulfillRes.ok) {
     const errText = await fulfillRes.text()
@@ -364,7 +365,7 @@ async function handleManualRetry(
       return new Response(JSON.stringify({ error: 'Missing Amazon SP credentials' }), { status: 500, headers })
     }
 
-    const refreshResponse = await fetch(LWA.TOKEN_URL, {
+    const refreshResponse = await auditedFetch(LWA.TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -373,7 +374,7 @@ async function handleManualRetry(
         client_id: AMAZON_CLIENT_ID,
         client_secret: AMAZON_CLIENT_SECRET,
       }),
-    })
+    }, { user_id: fbmOrder.user_id, integration: 'amazon_lwa', context: { action: 'token_refresh_manual_retry' } })
 
     const refreshData = await refreshResponse.json()
     if (!refreshResponse.ok || !refreshData.access_token) {
@@ -415,11 +416,11 @@ async function handleManualRetry(
     carrier: carrierCode,
   })
 
-  const confirmResponse = await fetch(confirmUrl, {
+  const confirmResponse = await auditedFetch(confirmUrl, {
     method: 'POST',
     headers: { ...getSpApiHeaders(accessToken), 'Content-Type': 'application/json' },
     body: JSON.stringify(confirmPayload),
-  })
+  }, { user_id: fbmOrder.user_id, integration: 'amazon_sp_api', context: { action: 'confirm_shipment_manual_retry', order_id: fbmOrder.amazon_order_id, tracking_number: trackingNumber } })
 
   if (confirmResponse.ok || confirmResponse.status === 204) {
     await supabase.from('amazon_fbm_orders').update({
