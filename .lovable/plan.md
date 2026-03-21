@@ -1,40 +1,36 @@
-## ✅ Completed: Account Mapper Suggestion Accuracy
 
-Pattern-aware, revenue/expense-partitioned gap-fill is now live. Uses `detectCodePattern()` and `generateCodeFromPattern()` to extend category neighbourhoods.
 
----
+## Problem
 
-## ✅ Completed: Xero COA Sync — Batch-of-2 Modal
+The batch logic **is** sending 2 accounts at a time (BATCH_SIZE = 2) — the screenshot showing "batch 7 of 38" confirms this (75 accounts ÷ 2 ≈ 38 batches). However, the UI makes it look like everything fires at once because:
 
-### What was built
+1. All rows stay visible with green checkmarks during sync — no visual distinction between "sent", "sending now", and "queued"
+2. The progress text ("Sending batch 7 of 38…") is small and easy to miss
+3. No per-row feedback showing which accounts have already been pushed vs which are still waiting
 
-1. **`src/components/settings/XeroCoaSyncModal.tsx`** — Full preview + toggle + consent modal
-   - Line-by-line table: New (green) / Changed (amber) / Unchanged (grey)
-   - Summary strip: "3 new · 1 changed · 14 unchanged"
-   - Mode toggle: "Create New Only" (default) vs "Overwrite Existing"
-   - Overwrite requires PIN + checkbox consent
-   - Progress bar with batch status
-   - 429 rate-limit handling with auto-retry
+## Plan
 
-2. **`src/actions/xeroAccounts.ts`** — `batchCreateXeroAccounts()` helper
-   - Chunks into sequential groups of 2
-   - Calls edge function per batch, aggregates results
-   - `onProgress` callback for UI updates
-   - Handles 429 with pause & retry
+### 1. Add per-row sync status indicators
 
-3. **`supabase/functions/create-xero-accounts/index.ts`** — Updated
-   - MAX_BATCH: 10 → 2
-   - `mode` param: `create_only` | `create_and_update`
-   - 429 handling: returns `retry_after` seconds
-   - Audit logging with mode + action (created/updated)
+Track which batch index each row belongs to and show three states in the Action column during sync:
+- **Sent** (green check + "Sent") — batches already completed
+- **Sending** (spinner) — current batch in flight
+- **Queued** (clock/dash) — not yet sent
 
-4. **`src/components/settings/AccountMapperCard.tsx`** — Wired
-   - "Sync to Xero" button in confirmed state (admin only)
-   - Triggers live COA refresh before opening modal
-   - `computeSyncPreviewRows()` computes diff against cached COA
+This requires passing `batchIndex` from progress into the modal state and computing each row's batch membership.
 
-### Safety invariants
-- Default mode is ALWAYS "Create New Only"
-- Overwrite requires PIN + checkbox per session
-- All operations logged to `system_events`
-- Batch of 2 for conservative testing (bump to 5 later)
+### 2. Improve progress bar messaging
+
+Replace the small text with a more prominent strip:
+- "Pushing 2 accounts at a time to stay within Xero rate limits"
+- Bold the current batch count: **"Batch 7 of 38"**
+- Show running tally: "12 created so far"
+
+### 3. Add a pre-sync confirmation count
+
+Before clicking Sync, show: **"This will push 75 new accounts to Xero in batches of 2 (≈ 38 API calls)"** so the user knows what to expect.
+
+### Files changed
+
+- `src/components/settings/XeroCoaSyncModal.tsx` — all three changes above
+
