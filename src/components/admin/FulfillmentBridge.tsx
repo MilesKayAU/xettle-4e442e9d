@@ -435,6 +435,231 @@ function PiiAccessCard({ payload }: { payload: any }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Screenshot Customer Extraction Modal
+// ═══════════════════════════════════════════════════════════════
+function ScreenshotExtractModal({ order, open, onOpenChange, onPatched }: {
+  order: any;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onPatched: () => void;
+}) {
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [extractedData, setExtractedData] = useState<Record<string, string | null> | null>(null);
+  const [extracting, setExtracting] = useState(false);
+  const [patching, setPatching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null);
+    setExtractedData(null);
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      setImagePreview(dataUrl);
+      setImageBase64(dataUrl);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleExtract = async () => {
+    if (!imageBase64) return;
+    setExtracting(true);
+    setError(null);
+    try {
+      const { data, error: fnErr } = await supabase.functions.invoke('extract-order-customer', {
+        body: { image_base64: imageBase64, action: 'extract' },
+      });
+      if (fnErr) throw fnErr;
+      if (data?.error) throw new Error(data.error);
+      setExtractedData(data.data);
+    } catch (err: any) {
+      setError(err.message);
+    }
+    setExtracting(false);
+  };
+
+  const handlePatch = async () => {
+    if (!extractedData) return;
+    setPatching(true);
+    setError(null);
+    try {
+      const { data, error: fnErr } = await supabase.functions.invoke('extract-order-customer', {
+        body: { image_base64: imageBase64, fbm_order_id: order.id },
+      });
+      if (fnErr) throw fnErr;
+      if (data?.status === 'patched') {
+        toast({ title: 'Customer details updated!', description: `Shopify order ${data.shopify_order_id} patched with ${extractedData.customer_name}` });
+        onOpenChange(false);
+        onPatched();
+      } else if (data?.error) {
+        throw new Error(data.error);
+      } else {
+        throw new Error(`Unexpected: ${JSON.stringify(data)}`);
+      }
+    } catch (err: any) {
+      setError(err.message);
+    }
+    setPatching(false);
+  };
+
+  const reset = () => {
+    setImagePreview(null);
+    setImageBase64(null);
+    setExtractedData(null);
+    setError(null);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Camera className="h-5 w-5" />
+            Extract Customer from Screenshot
+          </DialogTitle>
+          <DialogDescription>
+            Upload a screenshot of the Amazon order detail page. AI will extract customer name, address, and contact info, then update the Shopify draft order.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Order context */}
+          <div className="flex items-center gap-3 p-3 rounded-md bg-muted/50 border">
+            <div className="text-sm">
+              <span className="text-muted-foreground">Amazon:</span>{' '}
+              <span className="font-mono font-medium">{order.amazon_order_id}</span>
+              {order.shopify_order_id && (
+                <>
+                  <span className="text-muted-foreground ml-3">Shopify:</span>{' '}
+                  <span className="font-mono font-medium">#{order.shopify_order_id}</span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Upload area */}
+          {!imagePreview ? (
+            <label className="flex flex-col items-center justify-center gap-3 p-8 rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 cursor-pointer transition-colors">
+              <Upload className="h-10 w-10 text-muted-foreground" />
+              <div className="text-center">
+                <p className="font-medium">Drop screenshot here or click to upload</p>
+                <p className="text-sm text-muted-foreground mt-1">PNG, JPG — Amazon order detail page</p>
+              </div>
+              <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+            </label>
+          ) : (
+            <div className="space-y-3">
+              <div className="relative">
+                <img src={imagePreview} alt="Order screenshot" className="w-full rounded-md border max-h-64 object-contain bg-muted" />
+                <Button variant="ghost" size="sm" className="absolute top-2 right-2 bg-background/80" onClick={reset}>
+                  <XCircle className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {!extractedData && (
+                <Button onClick={handleExtract} disabled={extracting} className="w-full">
+                  {extracting ? (
+                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Extracting customer data…</>
+                  ) : (
+                    <><Search className="h-4 w-4 mr-2" /> Extract Customer Details</>
+                  )}
+                </Button>
+              )}
+            </div>
+          )}
+
+          {/* Extracted data preview */}
+          {extractedData && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <User className="h-4 w-4" />
+                  Extracted Customer Data
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Name:</span>
+                    <span className="ml-2 font-medium">{extractedData.customer_name || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Email:</span>
+                    <span className="ml-2">{extractedData.email || '—'}</span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-muted-foreground">Address:</span>
+                    <span className="ml-2">
+                      {[extractedData.address1, extractedData.address2].filter(Boolean).join(', ')}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">City:</span>
+                    <span className="ml-2">{extractedData.city || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">State:</span>
+                    <span className="ml-2">{extractedData.province || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Postcode:</span>
+                    <span className="ml-2">{extractedData.zip || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Country:</span>
+                    <span className="ml-2">{extractedData.country_code || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Phone:</span>
+                    <span className="ml-2">{extractedData.phone || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Amazon ID:</span>
+                    <span className="ml-2 font-mono text-xs">{extractedData.amazon_order_id || '—'}</span>
+                  </div>
+                </div>
+
+                {extractedData.amazon_order_id && extractedData.amazon_order_id !== order.amazon_order_id && (
+                  <div className="flex items-start gap-2 p-2 rounded bg-amber-50 border border-amber-200 text-amber-800 text-xs">
+                    <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                    <span>
+                      Extracted order ID (<strong>{extractedData.amazon_order_id}</strong>) doesn't match selected order (<strong>{order.amazon_order_id}</strong>). Double-check the screenshot.
+                    </span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {error && (
+            <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-sm">
+              <XCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          {extractedData && (
+            <Button onClick={handlePatch} disabled={patching || !order.shopify_order_id}>
+              {patching ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Updating Shopify…</>
+              ) : (
+                <><MapPin className="h-4 w-4 mr-2" /> Patch Shopify Order</>
+              )}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Tab 2: Order Monitor
 // ═══════════════════════════════════════════════════════════════
 function OrderMonitorTab() {
