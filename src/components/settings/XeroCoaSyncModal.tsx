@@ -94,10 +94,38 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
     return { newCount, changedCount, unchangedCount };
   }, [previewRows]);
 
+  // Build a name→code map from the existing Xero COA for duplicate-name detection
+  const existingNameMap = useMemo(() => {
+    const map = new Map<string, string>(); // lowercase name → code
+    for (const a of coaAccounts) {
+      if (a.account_name && a.account_code) {
+        map.set(a.account_name.toLowerCase().trim(), a.account_code);
+      }
+    }
+    return map;
+  }, [coaAccounts]);
+
+  // Detect name conflicts: rows wanting to create an account whose name already
+  // exists in Xero under a DIFFERENT code (Xero enforces globally unique names)
+  const nameConflictMap = useMemo(() => {
+    const conflicts = new Map<string, string>(); // code → existing code with same name
+    for (const row of previewRows) {
+      if (row.status !== 'new') continue;
+      const existingCode = existingNameMap.get(row.name.toLowerCase().trim());
+      if (existingCode && existingCode !== row.code) {
+        conflicts.set(row.code, existingCode);
+      }
+    }
+    return conflicts;
+  }, [previewRows, existingNameMap]);
+
   const actionableRows = useMemo(() => {
-    if (mode === 'create_only') return previewRows.filter(r => r.status === 'new');
-    return previewRows.filter(r => r.status === 'new' || r.status === 'changed');
-  }, [previewRows, mode]);
+    const rows = mode === 'create_only'
+      ? previewRows.filter(r => r.status === 'new')
+      : previewRows.filter(r => r.status === 'new' || r.status === 'changed');
+    // Exclude rows with name conflicts — they'd fail at Xero anyway
+    return rows.filter(r => !nameConflictMap.has(r.code));
+  }, [previewRows, mode, nameConflictMap]);
 
   // Remaining actionable rows (skip already completed)
   const remainingRows = useMemo(
