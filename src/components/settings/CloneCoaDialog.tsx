@@ -396,7 +396,11 @@ export default function CloneCoaDialog({
                           )}
                         </td>
                         <td className="p-2 text-muted-foreground">
-                          <span className="font-mono">{row.templateCode}</span> — {row.templateName}
+                          {row.templateCode === '—' ? (
+                            <span className="text-xs italic">best practice default</span>
+                          ) : (
+                            <><span className="font-mono">{row.templateCode}</span> — {row.templateName}</>
+                          )}
                         </td>
                         <td className="p-2 text-muted-foreground">
                           <ArrowRight className="h-3 w-3" />
