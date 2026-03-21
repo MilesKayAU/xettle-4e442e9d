@@ -631,7 +631,7 @@ Deno.serve(async (req) => {
         await logEvent(supabase, userId, 'fbm_poll_completed', { total_orders: 0, dry_run: dryRun }, storeKey)
         await upsertSetting(supabase, userId, `fbm:${storeKey}:last_poll_at`, new Date().toISOString())
         // Release lock
-        await supabase.rpc('release_sync_lock', { p_user_id: userId, p_lock_key: lockKey })
+        await supabase.rpc('release_sync_lock', { p_user_id: userId, p_integration: 'amazon', p_lock_key: lockKey })
         return new Response(JSON.stringify({ status: 'completed', total_orders: 0, dry_run: dryRun }), { status: 200, headers })
       }
 
@@ -1024,9 +1024,11 @@ Deno.serve(async (req) => {
         if (dedupEnabled && shopifyToken) {
           const existingShopifyId = await checkShopifyDuplicate(shopifyToken, amazonOrderId)
           if (existingShopifyId) {
+            // Extract numeric ID from GraphQL GID (gid://shopify/Order/12345 → 12345)
+            const numericId = existingShopifyId.match(/\/(\d+)$/)?.[1]
             await supabase.from('amazon_fbm_orders').update({
               status: 'duplicate_detected',
-              shopify_order_id: existingShopifyId,
+              ...(numericId ? { shopify_order_id: parseInt(numericId) } : {}),
               error_detail: `Existing Shopify order found (likely created by another app). Shopify GID: ${existingShopifyId}`,
             } as any).eq('id', insertedOrder.id)
             await logEvent(supabase, userId, 'fbm_duplicate_shopify_detected', {
@@ -1037,7 +1039,6 @@ Deno.serve(async (req) => {
             continue
           }
         }
-
 
 
         // ─── Create Shopify order ────────────────────────────────

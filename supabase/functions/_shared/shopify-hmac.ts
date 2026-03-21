@@ -174,3 +174,27 @@ export async function verifyShopifyHmac({
 
   return { valid: false, matchedStrategy: null }
 }
+
+/**
+ * Verify Shopify webhook HMAC (base64-encoded SHA-256 of raw body).
+ * Used for webhook endpoints — different from OAuth query-string HMAC.
+ */
+export async function verifyShopifyWebhookHmac(
+  rawBody: string,
+  providedHmacBase64: string,
+  secret: string,
+): Promise<boolean> {
+  const encoder = new TextEncoder()
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(rawBody))
+  const computedBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
+
+  return timingSafeEqual(computedBase64, providedHmacBase64)
+}
