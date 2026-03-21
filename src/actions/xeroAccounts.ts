@@ -262,6 +262,7 @@ export async function batchCreateXeroAccounts(
     const batchCreated = (data.created || []) as { action?: string }[];
     totalCreated += batchCreated.filter(c => c.action !== 'updated').length;
     totalUpdated += batchCreated.filter(c => c.action === 'updated').length;
+    totalSkipped += (data.skipped || []).length;
 
     if (data.errors) {
       allErrors.push(...data.errors);
