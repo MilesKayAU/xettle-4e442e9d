@@ -965,6 +965,15 @@ function OrderMonitorTab() {
           )}
         </CardContent>
       </Card>
+
+      {screenshotOrder && (
+        <ScreenshotExtractModal
+          order={screenshotOrder}
+          open={!!screenshotOrder}
+          onOpenChange={(v) => { if (!v) setScreenshotOrder(null); }}
+          onPatched={loadOrders}
+        />
+      )}
     </div>
   );
 }
