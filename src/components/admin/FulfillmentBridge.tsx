@@ -21,6 +21,7 @@ const STATUS_COLORS: Record<string, string> = {
   pending_payment: 'bg-amber-50 text-amber-700 border-amber-200',
   creating: 'bg-yellow-100 text-yellow-800 border-yellow-300',
   created: 'bg-blue-100 text-blue-800 border-blue-300',
+  tracking_sent: 'bg-green-100 text-green-800 border-green-300',
   dry_run: 'bg-purple-100 text-purple-800 border-purple-300',
   duplicate_detected: 'bg-violet-100 text-violet-800 border-violet-300',
   manual_review: 'bg-orange-100 text-orange-800 border-orange-300',
@@ -580,6 +581,17 @@ function OrderMonitorTab() {
                                     <p className="text-xs mt-1 text-violet-600">
                                       A Shopify order for this Amazon order already exists — likely created by another app (CedCommerce, etc.). Review before proceeding.
                                       {order.shopify_order_id && <span className="block mt-1 font-mono">Shopify ID: {order.shopify_order_id}</span>}
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                              {order.status === 'tracking_sent' && (
+                                <div className="flex items-start gap-2 p-3 rounded-md bg-green-50 border border-green-200 text-green-800">
+                                  <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+                                  <div className="text-sm">
+                                    <p className="font-medium">Tracking sent to Amazon</p>
+                                    <p className="text-xs mt-1 text-green-600">
+                                      Fulfillment tracking has been pushed back to Amazon via confirmShipment. The order is now complete.
                                     </p>
                                   </div>
                                 </div>

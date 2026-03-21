@@ -665,6 +665,67 @@ Deno.serve(async (req) => {
         const amazonOrderId = getAmazonOrderId(order)
         if (!amazonOrderId) continue
 
+        // ─── Per-order status safety gate: filter out already-fulfilled orders ──
+        // The bulk API requests Unshipped/PartiallyShipped, but orders can transition
+        // between the poll and processing. This gate catches any that slipped through.
+        const orderStatus = getAmazonOrderStatus(order)
+        if (orderStatus === 'Shipped' || orderStatus === 'Canceled') {
+          await logEvent(supabase, userId, 'fbm_order_skipped_already_fulfilled', {
+            amazon_status: orderStatus,
+            reason: `Order is ${orderStatus} on Amazon — not actionable`,
+          }, storeKey, amazonOrderId)
+          skippedCount++
+          continue
+        }
+
+        // ─── Stale order check: flag orders last updated >7 days ago ──
+        // If an order has been "Unshipped" for over 7 days, something unusual
+        // may have happened. Flag for manual review rather than auto-creating.
+        const lastUpdatedTime = order?.lastUpdatedTime || order?.LastUpdatedDate || null
+        if (lastUpdatedTime && (orderStatus === 'Unshipped' || orderStatus === 'PartiallyShipped')) {
+          const lastUpdated = new Date(lastUpdatedTime)
+          const ageMs = Date.now() - lastUpdated.getTime()
+          const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000
+          if (ageMs > SEVEN_DAYS) {
+            // Check if already exists and is in manual_review — don't duplicate
+            const { data: existingStale } = await supabase
+              .from('amazon_fbm_orders')
+              .select('id, status')
+              .eq('user_id', userId)
+              .eq('amazon_order_id', amazonOrderId)
+              .maybeSingle()
+
+            if (existingStale?.status === 'manual_review') {
+              skippedCount++
+              continue
+            }
+
+            // Insert or update as manual_review
+            if (existingStale) {
+              await supabase.from('amazon_fbm_orders').update({
+                status: 'manual_review',
+                error_detail: `Order last updated ${Math.round(ageMs / (24 * 60 * 60 * 1000))} days ago but still ${orderStatus} — flagged for review`,
+              } as any).eq('id', existingStale.id)
+            } else {
+              await supabase.from('amazon_fbm_orders').insert({
+                user_id: userId,
+                amazon_order_id: amazonOrderId,
+                status: 'manual_review',
+                error_detail: `Order last updated ${Math.round(ageMs / (24 * 60 * 60 * 1000))} days ago but still ${orderStatus} — flagged for review`,
+                raw_amazon_payload: order,
+              } as any)
+            }
+            await logEvent(supabase, userId, 'fbm_order_stale_flagged', {
+              amazon_status: orderStatus,
+              last_updated: lastUpdatedTime,
+              age_days: Math.round(ageMs / (24 * 60 * 60 * 1000)),
+              reason: 'Unshipped for >7 days — flagged for manual review',
+            }, storeKey, amazonOrderId, 'warn')
+            manualReviewCount++
+            continue
+          }
+        }
+
         // ─── Early SKU pre-filter: skip orders with no mapped SKUs BEFORE any DB writes ──
         // If order has inline items, check them against the pre-loaded map immediately
         const inlineItems = Array.isArray(order?.orderItems) ? order.orderItems : []
