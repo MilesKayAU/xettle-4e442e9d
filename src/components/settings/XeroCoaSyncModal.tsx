@@ -93,6 +93,7 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
       mode,
       onProgress: (p) => {
         setProgress(p);
+        setRateLimitWait(p.rateLimitWait ?? null);
       },
     });
 

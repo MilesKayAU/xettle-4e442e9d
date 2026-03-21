@@ -158,6 +158,7 @@ export interface BatchCreateProgress {
   createdSoFar: number;
   updatedSoFar: number;
   errorsSoFar: number;
+  rateLimitWait?: number;
 }
 
 export interface BatchCreateResult {
@@ -180,6 +181,7 @@ export async function batchCreateXeroAccounts(
   },
 ): Promise<BatchCreateResult> {
   const BATCH_SIZE = 2;
+  const MAX_RETRIES_PER_BATCH = 3;
   const batches: CreateXeroAccountInput[][] = [];
   for (let i = 0; i < accounts.length; i += BATCH_SIZE) {
     batches.push(accounts.slice(i, i + BATCH_SIZE));
@@ -188,6 +190,7 @@ export async function batchCreateXeroAccounts(
   let totalCreated = 0;
   let totalUpdated = 0;
   const allErrors: { code: string; error: string }[] = [];
+  const retryCount = new Map<number, number>();
 
   for (let i = 0; i < batches.length; i++) {
     opts.onProgress?.({
@@ -213,8 +216,19 @@ export async function batchCreateXeroAccounts(
       };
     }
 
-    // Handle 429 rate limiting — pause and retry this batch
+    // Handle 429 rate limiting — pause and retry this batch (max 3 retries)
     if (data?.error === 'rate_limited' && data?.retry_after) {
+      const attempts = (retryCount.get(i) || 0) + 1;
+      if (attempts > MAX_RETRIES_PER_BATCH) {
+        return {
+          success: false,
+          created: totalCreated,
+          updated: totalUpdated,
+          errors: allErrors,
+          error: `Rate limited on batch ${i + 1} after ${MAX_RETRIES_PER_BATCH} retries`,
+        };
+      }
+      retryCount.set(i, attempts);
       const waitSec = Math.min(data.retry_after, 120);
       opts.onProgress?.({
         batchIndex: i,
@@ -222,6 +236,7 @@ export async function batchCreateXeroAccounts(
         createdSoFar: totalCreated,
         updatedSoFar: totalUpdated,
         errorsSoFar: allErrors.length,
+        rateLimitWait: waitSec,
       });
       await new Promise(resolve => setTimeout(resolve, waitSec * 1000));
       // Retry this batch

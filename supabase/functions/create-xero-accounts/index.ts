@@ -97,13 +97,13 @@ Deno.serve(async (req) => {
     // Check for duplicate codes against cached COA
     const { data: existingAccounts } = await supabase
       .from('xero_chart_of_accounts')
-      .select('account_code, account_name, account_type')
+      .select('account_code, account_name, account_type, xero_account_id')
       .eq('user_id', userId)
       .eq('is_active', true)
 
-    const existingMap = new Map<string, { name: string; type: string }>()
+    const existingMap = new Map<string, { name: string; type: string; xero_account_id: string }>()
     for (const a of (existingAccounts || [])) {
-      if (a.account_code) existingMap.set(a.account_code, { name: a.account_name, type: a.account_type || '' })
+      if (a.account_code) existingMap.set(a.account_code, { name: a.account_name, type: a.account_type || '', xero_account_id: a.xero_account_id })
     }
 
     // In create_only mode, reject duplicates
@@ -188,13 +188,22 @@ Deno.serve(async (req) => {
         xeroPayload.TaxType = acc.tax_type
       }
 
-      const resp = await fetch('https://api.xero.com/api.xro/2.0/Accounts', {
-        method: 'PUT',
+      // PUT creates new accounts; POST to /Accounts/{ID} updates existing
+      let url = 'https://api.xero.com/api.xro/2.0/Accounts'
+      let method = 'PUT'
+      if (isUpdate && existing?.xero_account_id) {
+        url = `https://api.xero.com/api.xro/2.0/Accounts/${existing.xero_account_id}`
+        method = 'POST'
+      }
+
+      const resp = await fetch(url, {
+        method,
         headers: xeroHeaders,
         body: JSON.stringify(xeroPayload),
       })
 
-      // Handle 429 rate limiting
+      // Handle 429 rate limiting — return 200 with error field so
+      // supabase.functions.invoke delivers it via `data` not `error`
       if (resp.status === 429) {
         const retryAfter = parseInt(resp.headers.get('Retry-After') || '60', 10)
         console.warn(`Xero 429 rate limited. Retry-After: ${retryAfter}s`)
@@ -205,7 +214,7 @@ Deno.serve(async (req) => {
           created,
           errors,
         }), {
-          status: 429,
+          status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })
       }
