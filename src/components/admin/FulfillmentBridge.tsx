@@ -668,6 +668,7 @@ function OrderMonitorTab() {
   const [syncing, setSyncing] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [screenshotOrder, setScreenshotOrder] = useState<any | null>(null);
 
   const retryTracking = async (order: any) => {
     setRetryingId(order.id);
