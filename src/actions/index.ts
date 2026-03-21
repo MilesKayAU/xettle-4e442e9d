@@ -118,11 +118,14 @@ export {
   getCachedXeroTaxRates,
   getCoaLastSyncedAt,
   createXeroAccounts,
+  batchCreateXeroAccounts,
   type CachedXeroAccount,
   type CachedXeroTaxRate,
   type RefreshCoaResult,
   type CreateXeroAccountInput,
   type CreateXeroAccountsResult,
+  type BatchCreateProgress,
+  type BatchCreateResult,
 } from './xeroAccounts';
 
 // ─── COA Coverage (gap detection) ───────────────────────────────────────────
