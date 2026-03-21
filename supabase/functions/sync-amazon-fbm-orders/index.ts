@@ -1172,9 +1172,9 @@ Deno.serve(async (req) => {
 
         if (orderItems.length === 0) {
           const detailUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders/${amazonOrderId}?includedData=BUYER,RECIPIENT`
-          const detailResponse = await fetch(detailUrl, {
+          const detailResponse = await auditedFetch(detailUrl, {
             headers: getSpApiHeaders(accessToken),
-          })
+          }, { user_id: userId, integration: 'amazon_sp_api', context: { action: 'order_detail', order_id: amazonOrderId } })
 
           if (!detailResponse.ok) {
             const errText = await detailResponse.text()
