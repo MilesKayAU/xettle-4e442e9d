@@ -365,7 +365,7 @@ async function handleManualRetry(
       return new Response(JSON.stringify({ error: 'Missing Amazon SP credentials' }), { status: 500, headers })
     }
 
-    const refreshResponse = await fetch(LWA.TOKEN_URL, {
+    const refreshResponse = await auditedFetch(LWA.TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -374,7 +374,7 @@ async function handleManualRetry(
         client_id: AMAZON_CLIENT_ID,
         client_secret: AMAZON_CLIENT_SECRET,
       }),
-    })
+    }, { user_id: fbmOrder.user_id, integration: 'amazon_lwa', context: { action: 'token_refresh_manual_retry' } })
 
     const refreshData = await refreshResponse.json()
     if (!refreshResponse.ok || !refreshData.access_token) {
