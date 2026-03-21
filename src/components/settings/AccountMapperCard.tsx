@@ -1199,10 +1199,25 @@ export default function AccountMapperCard() {
         <XCircle className="h-3.5 w-3.5 shrink-0" /> Inactive
       </span>
     );
+    const isRevenue = REVENUE_CATEGORIES_SET.has(category);
+    const expectedType = isRevenue ? 'Revenue / Sales' : 'Expense / Direct Costs';
+    const entry = coaMap.get(code!);
+    const actualType = entry?.type || 'unknown';
     return (
-      <span className="flex items-center gap-1 text-[10px] text-amber-600">
-        <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> Wrong type
-      </span>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="flex items-center gap-1 text-[10px] text-amber-600 cursor-help">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> Wrong type
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-[280px] text-xs">
+            <p className="font-medium mb-1">Account type mismatch</p>
+            <p>This category expects a <strong>{expectedType}</strong> account, but <strong>{code}</strong> is set as <strong>{actualType}</strong> in Xero.</p>
+            <p className="mt-1 text-muted-foreground">Pick a different account from the dropdown, or change the account type in Xero directly (types can't be changed via API).</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   };
 
