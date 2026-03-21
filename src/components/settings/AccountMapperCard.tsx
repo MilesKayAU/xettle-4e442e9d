@@ -171,7 +171,7 @@ export default function AccountMapperCard() {
 
   // ─── COA-based suggestions via coa-intelligence scanner ─────────
   const coaSuggestions = useMemo(() => {
-    if (!splitByMarketplace || coaAccounts.length === 0) return new Map<string, { code: string; name: string }>();
+    if (!splitByMarketplace || coaAccounts.length === 0) return new Map<string, { code: string; name: string; isGapFill?: boolean }>();
 
     // Map coa-intelligence lowercase categories → AccountMapper display names
     const CATEGORY_DISPLAY_MAP: Record<string, string> = {
@@ -203,21 +203,68 @@ export default function AccountMapperCard() {
       codeToKeyLabel.set(entry.marketplace_code, normalizeKeyLabel(entry.marketplace_code));
     }
 
-    const suggestions = new Map<string, { code: string; name: string }>();
+    const suggestions = new Map<string, { code: string; name: string; isGapFill?: boolean }>();
 
     for (const s of signals.mapping_suggestions) {
       const displayCategory = CATEGORY_DISPLAY_MAP[s.category];
       if (!displayCategory) continue;
 
-      // Convert marketplace_code to canonical key label
       const keyLabel = codeToKeyLabel.get(s.marketplace_code) || normalizeKeyLabel(s.marketplace_code);
-      // Only suggest for active marketplaces (which are also normalized)
       if (!activeMarketplaces.includes(keyLabel)) continue;
 
       const key = `${displayCategory}:${keyLabel}`;
-      // Keep highest confidence match
       if (!suggestions.has(key)) {
         suggestions.set(key, { code: s.account_code, name: s.account_name });
+      }
+    }
+
+    // ─── Pattern-aware gap fill ─────────────────────────────────
+    // For each category, collect the codes used by marketplaces that DO have suggestions.
+    // Then for marketplaces that DON'T, suggest the next sequential code.
+    const allExistingCodes = new Set(coaAccounts.map(a => a.account_code).filter(Boolean) as string[]);
+
+    for (const [internalCat, displayCat] of Object.entries(CATEGORY_DISPLAY_MAP)) {
+      // Collect codes already mapped for this category across all marketplaces
+      const categoryCodes: number[] = [];
+      for (const mp of activeMarketplaces) {
+        const key = `${displayCat}:${mp}`;
+        const existing = suggestions.get(key);
+        if (existing && existing.code) {
+          const num = parseFloat(existing.code);
+          if (!isNaN(num)) categoryCodes.push(num);
+        }
+      }
+
+      if (categoryCodes.length === 0) continue; // No pattern to detect
+
+      // Sort and find the range
+      categoryCodes.sort((a, b) => a - b);
+      const rangeStart = Math.floor(categoryCodes[0]);
+      const rangeEnd = Math.ceil(categoryCodes[categoryCodes.length - 1]) + 20; // lookahead
+
+      // For each marketplace missing a suggestion, propose the next available code
+      const claimed = new Set(categoryCodes.map(c => String(c)));
+      for (const mp of activeMarketplaces) {
+        const key = `${displayCat}:${mp}`;
+        if (suggestions.has(key)) continue;
+
+        // Find next available integer code in the range
+        let nextCode = rangeStart;
+        while (nextCode <= rangeEnd) {
+          const codeStr = String(nextCode);
+          if (!allExistingCodes.has(codeStr) && !claimed.has(codeStr)) break;
+          nextCode++;
+        }
+
+        if (nextCode <= rangeEnd) {
+          const codeStr = String(nextCode);
+          claimed.add(codeStr);
+          suggestions.set(key, {
+            code: codeStr,
+            name: `${mp} ${displayCat}`,
+            isGapFill: true,
+          });
+        }
       }
     }
 
@@ -935,6 +982,7 @@ export default function AccountMapperCard() {
       const overrideCode = editableMapping[key] || '';
       const aiSuggestion = mapping[key]; // AI-suggested per-rail mapping
       const coaSuggestion = coaSuggestions.get(key); // COA-scanned suggestion
+      const isGapFill = coaSuggestion?.isGapFill === true;
       const suggestion = aiSuggestion || (coaSuggestion ? { code: coaSuggestion.code, name: coaSuggestion.name } : null);
       return (
         <tr key={key} className="border-b last:border-b-0 bg-muted/20">
@@ -946,6 +994,11 @@ export default function AccountMapperCard() {
               <span className="text-xs">
                 <span className="font-mono">{suggestion.code}</span>
                 <span className="text-muted-foreground ml-1">— {suggestion.name}</span>
+                {isGapFill && (
+                  <Badge variant="outline" className="ml-1.5 text-[9px] border-amber-300 text-amber-700">
+                    Needs account
+                  </Badge>
+                )}
               </span>
             ) : (
               <span className="text-xs text-muted-foreground">
