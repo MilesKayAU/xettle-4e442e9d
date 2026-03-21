@@ -287,11 +287,11 @@ export function buildClonePreview(input: ClonePreviewInput & { matchPattern?: bo
 
 // ─── Execute (Calls Xero) ───────────────────────────────────────────────────
 
-const MAX_BATCH = 10;
+const MAX_BATCH = 2;
 
 /**
  * Execute a COA clone — creates accounts in Xero via the canonical action.
- * Batches in groups of 10 (Xero limit).
+ * Hard-limited to groups of 2 so one run cannot bypass the Xero create cap.
  */
 export async function executeCoaClone(input: CloneExecuteInput): Promise<CloneResult> {
   const enabledRows = input.rows.filter(r => r.enabled);
