@@ -209,14 +209,14 @@ Deno.serve(async (req) => {
       carrier: carrierCode,
     })
 
-    const confirmResponse = await fetch(confirmUrl, {
+    const confirmResponse = await auditedFetch(confirmUrl, {
       method: 'POST',
       headers: {
         ...getSpApiHeaders(accessToken),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(confirmPayload),
-    })
+    }, { user_id: fbmOrder.user_id, integration: 'amazon_sp_api', context: { action: 'confirm_shipment', order_id: fbmOrder.amazon_order_id, tracking_number: trackingNumber } })
 
     if (confirmResponse.ok || confirmResponse.status === 204) {
       // Success — update status
