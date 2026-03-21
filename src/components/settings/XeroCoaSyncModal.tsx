@@ -393,6 +393,27 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
             </Alert>
           )}
 
+          {/* Name conflict warning */}
+          {nameConflictMap.size > 0 && (
+            <Alert className="border-amber-300 bg-amber-50">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-xs text-amber-900 space-y-1">
+                <div><strong>{nameConflictMap.size} account{nameConflictMap.size !== 1 ? 's' : ''} skipped</strong> — names already exist in Xero under different codes:</div>
+                <div className="space-y-0.5">
+                  {[...nameConflictMap.entries()].map(([code, existingCode]) => {
+                    const row = previewRows.find(r => r.code === code);
+                    return (
+                      <div key={code} className="text-[10px]">
+                        <span className="font-mono">{code}</span> "{row?.name}" → already exists as code <span className="font-mono font-medium">{existingCode}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="text-[10px] text-amber-700 mt-1">Rename the account in your mapping or use the existing code instead.</div>
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* All done banner */}
           {allDone && lastRunResult && (
             <Alert className="border-emerald-300 bg-emerald-50">
