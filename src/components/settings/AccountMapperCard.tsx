@@ -1867,7 +1867,7 @@ export default function AccountMapperCard() {
             <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20 px-3 py-2.5">
               <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
               <span className="text-xs text-amber-800 dark:text-amber-200 flex-1">
-                {notInXeroCount} account code{notInXeroCount > 1 ? 's' : ''} not yet in Xero — create them before confirming.
+                {notInXeroCount} account code{notInXeroCount > 1 ? 's are' : ' is'} genuinely missing in Xero and can be created automatically. Name clashes or wrong-type accounts need you to pick the existing account instead.
               </span>
               <Button
                 variant="outline"
