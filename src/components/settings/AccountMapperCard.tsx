@@ -120,6 +120,7 @@ export default function AccountMapperCard() {
   const [coaLastSynced, setCoaLastSynced] = useState<string | null>(null);
   const [refreshingCoa, setRefreshingCoa] = useState(false);
   const [showOnlyMissing, setShowOnlyMissing] = useState(false);
+  const [searchKeyword, setSearchKeyword] = useState('');
 
   // Marketplace split state
   const [splitByMarketplace, setSplitByMarketplace] = useState(false);
@@ -1169,6 +1170,17 @@ export default function AccountMapperCard() {
       const key = `${baseCat}:${mp}`;
       const isExcluded = excludedMappings.has(key) || excludedMarketplaces.has(mp);
 
+      // Filter by search keyword at sub-row level
+      if (searchKeyword.trim()) {
+        const lowerSearch = searchKeyword.toLowerCase().trim();
+        const rowLabel = `${mp} ${baseCat}`.toLowerCase();
+        const code = editableMapping[key] || mapping[key]?.code || coaSuggestions.get(key)?.code || '';
+        const name = mapping[key]?.name || coaSuggestions.get(key)?.name || '';
+        if (!rowLabel.includes(lowerSearch) && !code.toLowerCase().includes(lowerSearch) && !name.toLowerCase().includes(lowerSearch)) {
+          return null;
+        }
+      }
+
       // Skip excluded rows entirely if in filter mode
       if (isExcluded) {
         return (
@@ -1403,12 +1415,31 @@ export default function AccountMapperCard() {
 
   // ─── REVIEW STATE ────────────────────────────────────────────────
   if (state === 'review') {
-    const categoriesToShow = showOnlyMissing
-      ? CATEGORIES.filter(cat => {
-          const code = editableMapping[cat] || mapping[cat]?.code;
-          return !code || validateCode(code, cat) !== 'valid';
-        })
-      : [...CATEGORIES];
+    const lowerSearch = searchKeyword.toLowerCase().trim();
+    const categoriesToShow = CATEGORIES.filter(cat => {
+      if (showOnlyMissing) {
+        const code = editableMapping[cat] || mapping[cat]?.code;
+        if (code && validateCode(code, cat) === 'valid') return false;
+      }
+      if (lowerSearch) {
+        // Match on category name, description, or any marketplace sub-row label/code/name
+        const catMatch = cat.toLowerCase().includes(lowerSearch) ||
+          (CATEGORY_DESCRIPTIONS[cat] || '').toLowerCase().includes(lowerSearch);
+        if (catMatch) return true;
+        // Check marketplace overrides
+        if (splitByMarketplace) {
+          for (const mp of getEffectiveMarketplaces()) {
+            const key = `${cat}:${mp}`;
+            const rowLabel = `${mp} ${cat}`.toLowerCase();
+            const code = editableMapping[key] || mapping[key]?.code || coaSuggestions.get(key)?.code || '';
+            const name = mapping[key]?.name || coaSuggestions.get(key)?.name || '';
+            if (rowLabel.includes(lowerSearch) || code.toLowerCase().includes(lowerSearch) || name.toLowerCase().includes(lowerSearch)) return true;
+          }
+        }
+        return false;
+      }
+      return true;
+    });
 
     return (
       <>
@@ -1429,6 +1460,15 @@ export default function AccountMapperCard() {
           {renderCoaRefreshStrip()}
           {isAdmin && coaAccounts.length > 0 && <CoaAuditPanel />}
           {renderCloneBanner()}
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search by keyword (e.g. Catch, FBA, Advertising, 321…)"
+              value={searchKeyword}
+              onChange={e => setSearchKeyword(e.target.value)}
+              className="pl-8 h-8 text-xs"
+            />
+          </div>
           <div className="flex items-center gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={handleApplySuggestionsToMissing} className="h-7 text-xs gap-1">
               <CheckCircle2 className="h-3 w-3" />
