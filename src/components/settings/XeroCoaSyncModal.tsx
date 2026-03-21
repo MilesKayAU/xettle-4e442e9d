@@ -271,7 +271,7 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
           )}
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={syncing}>
+            <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={syncing}>
               Cancel
             </Button>
             <Button
