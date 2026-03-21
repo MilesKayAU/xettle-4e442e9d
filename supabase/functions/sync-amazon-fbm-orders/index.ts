@@ -658,7 +658,7 @@ Deno.serve(async (req) => {
 
       if (!tokenStillValid) {
         // Refresh the token — mirrors amazon-auth refresh logic exactly
-        const refreshResponse = await fetch(LWA.TOKEN_URL, {
+        const refreshResponse = await auditedFetch(LWA.TOKEN_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
@@ -667,7 +667,7 @@ Deno.serve(async (req) => {
             client_id: AMAZON_CLIENT_ID,
             client_secret: AMAZON_CLIENT_SECRET,
           }),
-        })
+        }, { user_id: userId, integration: 'amazon_lwa', context: { action: 'token_refresh' } })
 
         const refreshData = await refreshResponse.json()
         if (!refreshResponse.ok || !refreshData.access_token) {
