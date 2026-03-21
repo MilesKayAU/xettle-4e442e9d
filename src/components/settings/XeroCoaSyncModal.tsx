@@ -245,9 +245,20 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
   };
 
   const renderActionCell = (row: SyncPreviewRow) => {
-    const state = getRunState(row);
+    const runState = getRunState(row);
 
-    switch (state) {
+    // Name conflict takes priority — show before any run state
+    const conflictCode = nameConflictMap.get(row.code);
+    if (conflictCode) {
+      return (
+        <span className="inline-flex items-center gap-1 text-destructive" title={`Name "${row.name}" already exists under code ${conflictCode}`}>
+          <AlertTriangle className="h-3.5 w-3.5" />
+          <span className="text-[10px] font-medium">Name clash ({conflictCode})</span>
+        </span>
+      );
+    }
+
+    switch (runState) {
       case 'done':
         return (
           <span className="inline-flex items-center gap-1 text-emerald-600">
