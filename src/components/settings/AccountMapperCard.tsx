@@ -1362,7 +1362,7 @@ export default function AccountMapperCard() {
             )}
           </td>
           <td className="p-2">
-            {renderStatusBadge(overrideCode || baseCode, baseCat)}
+            {renderStatusBadge(overrideCode || baseCode, baseCat, suggestion?.name)}
           </td>
           <td className="p-2">
             {renderAccountSelector(key, baseCat, baseCode)}
