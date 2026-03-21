@@ -2300,6 +2300,7 @@ function CreateAccountDialog({
   const [name, setName] = useState(suggestedName);
   const [type, setType] = useState(suggestedType);
   const [creating, setCreating] = useState(false);
+  const settingsPin = useSettingsPin();
 
   // Reset when dialog opens
   useEffect(() => {
@@ -2310,7 +2311,7 @@ function CreateAccountDialog({
     }
   }, [open, suggestedCode, suggestedName, suggestedType]);
 
-  const handleCreate = async () => {
+  const executeCreate = async () => {
     if (!code || !name || !type) {
       toast.error('Code, name, and type are required');
       return;
@@ -2334,6 +2335,10 @@ function CreateAccountDialog({
     } finally {
       setCreating(false);
     }
+  };
+
+  const handleCreate = () => {
+    settingsPin.requirePin(executeCreate);
   };
 
   return (
