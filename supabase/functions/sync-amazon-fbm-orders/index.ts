@@ -1024,9 +1024,11 @@ Deno.serve(async (req) => {
         if (dedupEnabled && shopifyToken) {
           const existingShopifyId = await checkShopifyDuplicate(shopifyToken, amazonOrderId)
           if (existingShopifyId) {
+            // Extract numeric ID from GraphQL GID (gid://shopify/Order/12345 → 12345)
+            const numericId = existingShopifyId.match(/\/(\d+)$/)?.[1]
             await supabase.from('amazon_fbm_orders').update({
               status: 'duplicate_detected',
-              shopify_order_id: existingShopifyId,
+              ...(numericId ? { shopify_order_id: parseInt(numericId) } : {}),
               error_detail: `Existing Shopify order found (likely created by another app). Shopify GID: ${existingShopifyId}`,
             } as any).eq('id', insertedOrder.id)
             await logEvent(supabase, userId, 'fbm_duplicate_shopify_detected', {
