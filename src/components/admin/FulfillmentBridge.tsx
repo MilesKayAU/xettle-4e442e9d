@@ -1021,6 +1021,9 @@ export default function FulfillmentBridge() {
         <TabsContent value="events">
           <EventLogTab />
         </TabsContent>
+        <TabsContent value="audit">
+          <ApiAuditTab />
+        </TabsContent>
       </Tabs>
     </div>
   );
