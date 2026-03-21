@@ -438,11 +438,12 @@ function PiiAccessCard({ payload }: { payload: any }) {
 // ═══════════════════════════════════════════════════════════════
 // Screenshot Customer Extraction Modal
 // ═══════════════════════════════════════════════════════════════
-function ScreenshotExtractModal({ order, open, onOpenChange, onPatched }: {
+function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSellerCentralUrl }: {
   order: any;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onPatched: () => void;
+  buildSellerCentralUrl: (orderId: string) => string;
 }) {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
