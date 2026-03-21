@@ -232,9 +232,17 @@ function ComplianceChecklist() {
       ).map(([cat, catItems]) => (
         <Card key={cat}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-              {CATEGORY_LABELS[cat] || cat}
-            </CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                {CATEGORY_LABELS[cat] || cat}
+              </CardTitle>
+              {CATEGORY_BADGES[cat] && (
+                <Badge variant={CATEGORY_BADGES[cat].variant} className="text-[10px] gap-1">
+                  {CATEGORY_BADGES[cat].icon}
+                  {CATEGORY_BADGES[cat].label}
+                </Badge>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-3">
             {catItems.map(item => (
