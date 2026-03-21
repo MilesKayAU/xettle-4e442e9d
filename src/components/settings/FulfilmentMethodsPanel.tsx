@@ -195,14 +195,17 @@ export default function FulfilmentMethodsPanel() {
   };
 
   const handlePostageSave = async (code: string, value: string) => {
-    const num = parseFloat(value);
+    const trimmed = value.trim();
+    const num = trimmed === '' ? 0 : parseFloat(trimmed);
     if (isNaN(num) || num < 0) return;
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       await savePostageCost(user.id, code, num);
-      toast.success(`Postage cost saved for ${code}`);
+      // Update local state to reflect cleared value
+      setPostageCosts(prev => ({ ...prev, [code]: num > 0 ? String(num) : '' }));
+      toast.success(num > 0 ? `Postage cost saved for ${code}` : `Postage cost cleared for ${code}`);
       recalcInBackground();
       queryClient.invalidateQueries({ queryKey: ['dashboard-task-counts'] });
     } catch {
@@ -253,10 +256,10 @@ export default function FulfilmentMethodsPanel() {
         }
       }
 
-      // Save all postage costs
+      // Save all postage costs (empty = 0, which clears)
       for (const mp of marketplaces) {
-        const val = postageCosts[mp.marketplace_code];
-        const num = parseFloat(val || '');
+        const val = postageCosts[mp.marketplace_code]?.trim() || '';
+        const num = val === '' ? 0 : parseFloat(val);
         if (!isNaN(num) && num >= 0) {
           await savePostageCost(user.id, mp.marketplace_code, num);
         }

@@ -188,10 +188,10 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
       if (!fulfilmentValue || fulfilmentValue === 'not_sure') {
         unconfiguredMarketplaces.push(conn.marketplace_name || conn.marketplace_code);
       } else if (fulfilmentValue === 'self_ship' || fulfilmentValue === 'third_party_logistics' || fulfilmentValue === 'mixed_fba_fbm') {
-        // Check if postage cost is set
-        const postageCost = settingsMap.get(`postage_cost:${conn.marketplace_code}`);
-        const costNum = parseFloat(postageCost || '');
-        if (!postageCost || isNaN(costNum) || costNum <= 0) {
+        // Check if postage cost setting exists at all (user may have deliberately set to 0 or cleared)
+        const postageCostKey = `postage_cost:${conn.marketplace_code}`;
+        const postageCostExists = settingsMap.has(postageCostKey);
+        if (!postageCostExists) {
           missingPostageCost.push(conn.marketplace_name || conn.marketplace_code);
         }
       }
