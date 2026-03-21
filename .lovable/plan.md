@@ -1,27 +1,29 @@
 
 
+# Add SP-API Fee Status Banner to Amazon Compliance Dashboard
 
-# Smart URL Pattern Learning for Amazon Order Links — IMPLEMENTED
+## What Gets Built
 
-## What Was Built
+An informational banner at the top of the Amazon Compliance Dashboard showing the current SP-API fee status — delayed indefinitely as of March 2026. This keeps the compliance team informed about cost implications and preparation timelines without cluttering the checklist.
 
-### URL Template Learning
-- When an admin edits an Amazon Order link and pastes a corrected URL, the system detects the order ID within the URL and extracts a reusable `{orderId}` template
-- A prompt appears: "Apply this URL format to all orders?" — if confirmed, the template is saved to `app_settings` (key: `amazon_seller_central_url_template`)
-- All order links immediately use the saved template
-- Template persists across sessions — loads from DB on component mount
+## Details
 
-### UI Elements
-- **Pencil icon** next to each Amazon Order ID link — click to edit/paste a custom URL
-- **Inline input** with Enter to submit, Escape to cancel
-- **"Custom URL pattern active" banner** when a saved template is in use, with a Reset button
-- **"Apply to all?" prompt** when a new template is detected from a pasted URL
+### `src/components/admin/AmazonComplianceDashboard.tsx`
 
-### No Database Migration Needed
-Uses existing `app_settings` table with `user_id + key` uniqueness.
+Add a collapsible info card between the header and the Tabs, containing:
 
-## Files Changed
+- **Status badge**: "Fees Delayed" in amber
+- **Summary**: The $1,400/year annual fee + GET call usage fees are on hold indefinitely. New timelines expected fall 2026.
+- **Key facts** (collapsed by default):
+  - Basic tier: 2.5M GET calls/month included
+  - Overage: $0.40 per 1,000 calls
+  - Does not apply to private sellers/vendors using SP-API for own business
+  - Recommendation: Use Notifications API instead of polling to optimise future costs
+- **Source attribution**: "Source: novadata.io, March 2026"
 
-| File | What |
+Uses existing `Collapsible` + `Card` components. No database changes needed — this is static advisory content rendered inline.
+
+| File | Change |
 |------|------|
-| `src/components/admin/FulfillmentBridge.tsx` | URL template learning, per-row edit, persistence, apply-to-all prompt, reset |
+| `src/components/admin/AmazonComplianceDashboard.tsx` | Add fee status banner between header and tabs |
+
