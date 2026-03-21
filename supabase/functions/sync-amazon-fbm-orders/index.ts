@@ -1308,9 +1308,9 @@ Deno.serve(async (req) => {
         const VALID_FBM_STATUSES = ['Unshipped', 'PartiallyShipped']
         const revalidateUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders/${amazonOrderId}`
         try {
-          const revalResponse = await fetch(revalidateUrl, {
+          const revalResponse = await auditedFetch(revalidateUrl, {
             headers: getSpApiHeaders(accessToken),
-          })
+          }, { user_id: userId, integration: 'amazon_sp_api', context: { action: 'revalidate_status', order_id: amazonOrderId } })
           if (revalResponse.ok) {
             circuitBreaker.recordSuccess()
             const revalData = await revalResponse.json()
