@@ -452,14 +452,33 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSel
   const [patching, setPatching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const processImageFile = (file: File) => {
+  // Resize image to max 1200px wide and compress as JPEG to keep payload small
+  const compressImage = (dataUrl: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX_W = 1200;
+        const scale = img.width > MAX_W ? MAX_W / img.width : 1;
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.src = dataUrl;
+    });
+  };
+
+  const processImageFile = async (file: File) => {
     setError(null);
     setExtractedData(null);
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       const dataUrl = ev.target?.result as string;
-      setImagePreview(dataUrl);
-      setImageBase64(dataUrl);
+      const compressed = await compressImage(dataUrl);
+      setImagePreview(compressed);
+      setImageBase64(compressed);
     };
     reader.readAsDataURL(file);
   };
@@ -470,18 +489,24 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSel
     processImageFile(file);
   };
 
-  const handlePaste = (e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    for (const item of Array.from(items)) {
-      if (item.type.startsWith('image/')) {
-        e.preventDefault();
-        const file = item.getAsFile();
-        if (file) processImageFile(file);
-        return;
+  // Global paste listener so Ctrl+V works as soon as dialog is open
+  useEffect(() => {
+    if (!open) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) processImageFile(file);
+          return;
+        }
       }
-    }
-  };
+    };
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+  }, [open]);
 
   const handleExtract = async () => {
     if (!imageBase64) return;
@@ -570,19 +595,22 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSel
 
           {/* Upload area */}
           {!imagePreview ? (
-            <div
-              tabIndex={0}
-              onPaste={handlePaste}
-              className="flex flex-col items-center justify-center gap-3 p-8 rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 focus:border-primary focus:ring-2 focus:ring-ring cursor-pointer transition-colors outline-none"
-              onClick={() => (document.getElementById('screenshot-file-input') as HTMLInputElement)?.click()}
-              onKeyDown={(e) => { if (e.key === 'Enter') (document.getElementById('screenshot-file-input') as HTMLInputElement)?.click(); }}
-            >
-              <ClipboardPaste className="h-10 w-10 text-muted-foreground" />
-              <div className="text-center">
-                <p className="font-medium">Paste screenshot (Ctrl+V) or click to upload</p>
-                <p className="text-sm text-muted-foreground mt-1">PNG, JPG — Amazon order detail page</p>
+            <div className="space-y-3">
+              <div
+                className="flex flex-col items-center justify-center gap-3 p-8 rounded-lg border-2 border-dashed border-primary/40 bg-primary/5 transition-colors"
+              >
+                <ClipboardPaste className="h-10 w-10 text-primary/60" />
+                <div className="text-center">
+                  <p className="font-medium">Press Ctrl+V to paste screenshot</p>
+                  <p className="text-sm text-muted-foreground mt-1">Screenshot your Amazon order detail page and paste it here</p>
+                </div>
               </div>
-              <input id="screenshot-file-input" type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+              <div className="flex justify-center">
+                <label className="text-xs text-muted-foreground hover:text-foreground cursor-pointer underline underline-offset-2">
+                  Or click to upload a file
+                  <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+                </label>
+              </div>
             </div>
           ) : (
             <div className="space-y-3">
