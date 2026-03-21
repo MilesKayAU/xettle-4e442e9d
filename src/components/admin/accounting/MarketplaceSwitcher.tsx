@@ -297,6 +297,27 @@ export default function MarketplaceSwitcher({
     }
   };
 
+  const handleTogglePause = async (um: UserMarketplace) => {
+    setTogglingPause(um.marketplace_code);
+    try {
+      const newStatus = um.connection_status === 'paused' ? 'active' : 'paused';
+      const { error } = await supabase
+        .from('marketplace_connections')
+        .update({ connection_status: newStatus })
+        .eq('id', um.id);
+
+      if (error) throw error;
+
+      const label = newStatus === 'paused' ? 'paused — excluded from COA & sync' : 'reactivated';
+      toast.success(`${um.marketplace_name} ${label}`);
+      onMarketplacesChanged();
+    } catch (err: any) {
+      toast.error(`Failed: ${err.message}`);
+    } finally {
+      setTogglingPause(null);
+    }
+  };
+
   // Merge static catalog with registry entries for the full available list
   const fullCatalog = [...MARKETPLACE_CATALOG, ...registryEntries];
   const availableToAdd = fullCatalog.filter(
