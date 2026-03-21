@@ -252,6 +252,7 @@ export async function batchCreateXeroAccounts(
         success: false,
         created: totalCreated,
         updated: totalUpdated,
+        skipped: totalSkipped,
         errors: allErrors,
         error: data?.error || 'Batch failed',
       };
