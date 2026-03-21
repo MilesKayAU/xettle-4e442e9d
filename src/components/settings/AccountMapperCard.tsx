@@ -941,11 +941,11 @@ export default function AccountMapperCard() {
   };
 
   /** Persist exclusion settings */
-  const saveExclusions = useCallback(async (keys: Set<string>, mps: Set<string>, cats?: Set<string>) => {
+  const saveExclusions = useCallback(async (keys: Set<string>, mps: Set<string>, cats?: Set<string>, ignored?: Set<string>) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     await supabase.from('app_settings').upsert(
-      { user_id: user.id, key: 'coa_excluded_mappings', value: JSON.stringify({ keys: [...keys], marketplaces: [...mps], categories: cats ? [...cats] : [] }) },
+      { user_id: user.id, key: 'coa_excluded_mappings', value: JSON.stringify({ keys: [...keys], marketplaces: [...mps], categories: cats ? [...cats] : [], ignoredMarketplaces: ignored ? [...ignored] : [] }) },
       { onConflict: 'user_id,key' }
     );
   }, []);
