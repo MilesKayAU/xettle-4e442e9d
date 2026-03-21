@@ -954,28 +954,37 @@ export default function AccountMapperCard() {
     setExcludedMappings(prev => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
-      saveExclusions(next, excludedMarketplaces, excludedCategories);
+      saveExclusions(next, excludedMarketplaces, excludedCategories, ignoredMarketplaces);
       return next;
     });
-  }, [excludedMarketplaces, excludedCategories, saveExclusions]);
+  }, [excludedMarketplaces, excludedCategories, ignoredMarketplaces, saveExclusions]);
 
   const toggleExcludeMarketplace = useCallback((mp: string) => {
     setExcludedMarketplaces(prev => {
       const next = new Set(prev);
       if (next.has(mp)) next.delete(mp); else next.add(mp);
-      saveExclusions(excludedMappings, next, excludedCategories);
+      saveExclusions(excludedMappings, next, excludedCategories, ignoredMarketplaces);
       return next;
     });
-  }, [excludedMappings, excludedCategories, saveExclusions]);
+  }, [excludedMappings, excludedCategories, ignoredMarketplaces, saveExclusions]);
 
   const toggleExcludeCategory = useCallback((cat: string) => {
     setExcludedCategories(prev => {
       const next = new Set(prev);
       if (next.has(cat)) next.delete(cat); else next.add(cat);
-      saveExclusions(excludedMappings, excludedMarketplaces, next);
+      saveExclusions(excludedMappings, excludedMarketplaces, next, ignoredMarketplaces);
       return next;
     });
-  }, [excludedMappings, excludedMarketplaces, saveExclusions]);
+  }, [excludedMappings, excludedMarketplaces, ignoredMarketplaces, saveExclusions]);
+
+  const toggleIgnoreMarketplace = useCallback((mp: string) => {
+    setIgnoredMarketplaces(prev => {
+      const next = new Set(prev);
+      if (next.has(mp)) next.delete(mp); else next.add(mp);
+      saveExclusions(excludedMappings, excludedMarketplaces, excludedCategories, next);
+      return next;
+    });
+  }, [excludedMappings, excludedMarketplaces, excludedCategories, saveExclusions]);
 
   const getEffectiveMarketplaces = (): string[] => {
     if (activeMarketplaces.length > 0) return activeMarketplaces;
