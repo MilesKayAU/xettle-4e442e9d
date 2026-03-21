@@ -597,6 +597,7 @@ function OrderMonitorTab() {
                   <TableHead>Amazon Order ID</TableHead>
                   <TableHead>Shopify Order ID</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Shipping</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Error</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
