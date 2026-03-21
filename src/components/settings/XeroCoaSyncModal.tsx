@@ -501,32 +501,40 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
                 </tr>
               </thead>
               <tbody>
-                {previewRows.map((row) => {
-                  const state = getRunState(row);
-                  return (
-                    <tr
-                      key={row.code}
-                      className={`border-b last:border-b-0 ${
-                        state === 'done' ? 'bg-emerald-50/50 opacity-60' : ''
-                      } ${state === 'error' ? 'bg-destructive/5' : ''} ${
-                        row.status === 'unchanged' ? 'opacity-50' : ''
-                      } ${state === 'sending' ? 'bg-primary/5' : ''} ${
-                        state === 'sent' ? 'bg-emerald-50/50' : ''
-                      }`}
-                    >
-                      <td className="p-2 font-mono">{row.code}</td>
-                      <td className="p-2">
-                        {row.name}
-                        {row.status === 'changed' && row.xeroName && row.xeroName !== row.name && (
-                          <span className="text-muted-foreground ml-1">(was: {row.xeroName})</span>
-                        )}
-                      </td>
-                      <td className="p-2">{row.type}</td>
-                      <td className="p-2 text-center">{renderStatusBadge(row.status)}</td>
-                      <td className="p-2 text-center">{renderActionCell(row)}</td>
-                    </tr>
-                  );
-                })}
+                {(() => {
+                  const visibleRows = previewRows.filter(row => {
+                    if (nameConflictMap.has(row.code)) return true;
+                    if (completedCodes.has(row.code)) return true;
+                    if (errorResults.some(e => e.code === row.code)) return true;
+                    if (row.status === 'new') return true;
+                    if (row.status === 'changed' && mode === 'create_and_update') return true;
+                    return false;
+                  });
+                  return visibleRows.map((row) => {
+                    const state = getRunState(row);
+                    return (
+                      <tr
+                        key={row.code}
+                        className={`border-b last:border-b-0 ${
+                          state === 'done' ? 'bg-emerald-50/50 opacity-60' : ''
+                        } ${state === 'error' ? 'bg-destructive/5' : ''} ${
+                          state === 'sending' ? 'bg-primary/5' : ''
+                        } ${state === 'sent' ? 'bg-emerald-50/50' : ''}`}
+                      >
+                        <td className="p-2 font-mono">{row.code}</td>
+                        <td className="p-2">
+                          {row.name}
+                          {row.status === 'changed' && row.xeroName && row.xeroName !== row.name && (
+                            <span className="text-muted-foreground ml-1">(was: {row.xeroName})</span>
+                          )}
+                        </td>
+                        <td className="p-2">{row.type}</td>
+                        <td className="p-2 text-center">{renderStatusBadge(row.status)}</td>
+                        <td className="p-2 text-center">{renderActionCell(row)}</td>
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
             </table>
           </div>
