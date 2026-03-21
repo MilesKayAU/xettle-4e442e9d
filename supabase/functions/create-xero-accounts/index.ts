@@ -1,6 +1,23 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 import { getCorsHeaders } from '../_shared/cors.ts'
-import { XERO_TOKEN_URL } from '../_shared/xero-api-policy.ts'
+import {
+  XERO_TOKEN_URL,
+  XERO_API_BASE,
+  buildXeroUrl,
+  getXeroHeaders,
+  isXeroTokenExpired,
+  buildXeroBasicAuth,
+  parseXeroRetryAfter,
+} from '../_shared/xero-api-policy.ts'
+
+// ══════════════════════════════════════════════════════════════
+// ACCOUNTING RULES (hardcoded, never configurable)
+// Canonical source: src/constants/accounting-rules.ts
+//
+// This function creates/updates Xero Chart of Accounts entries.
+// It never creates invoices, journals, or accounting entries.
+// ══════════════════════════════════════════════════════════════
+
 const ALLOWED_TYPES = new Set(['REVENUE', 'EXPENSE', 'DIRECTCOSTS', 'OTHERINCOME', 'OVERHEADS'])
 const MAX_BATCH = 2
 
@@ -94,7 +111,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Check for duplicate codes against cached COA
+    // Check for existing codes against cached COA
     const { data: existingAccounts } = await supabase
       .from('xero_chart_of_accounts')
       .select('account_code, account_name, account_type, xero_account_id')
@@ -136,83 +153,107 @@ Deno.serve(async (req) => {
     const xeroClientId = Deno.env.get('XERO_CLIENT_ID')!
     const xeroClientSecret = Deno.env.get('XERO_CLIENT_SECRET')!
 
-    // Refresh if expiring
-    const expiresAt = new Date(xeroToken.expires_at)
-    if (expiresAt.getTime() - Date.now() < 5 * 60 * 1000) {
+    // Refresh if expiring (uses shared policy helper)
+    if (isXeroTokenExpired(xeroToken.expires_at)) {
       const refreshResp = await fetch(XERO_TOKEN_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          'Authorization': `Basic ${btoa(`${xeroClientId}:${xeroClientSecret}`)}`,
+          'Authorization': buildXeroBasicAuth(xeroClientId, xeroClientSecret),
         },
         body: new URLSearchParams({
           grant_type: 'refresh_token',
           refresh_token: xeroToken.refresh_token,
         }),
       })
-      if (refreshResp.ok) {
-        const td = await refreshResp.json()
-        const newExp = new Date(Date.now() + td.expires_in * 1000).toISOString()
-        await supabase.from('xero_tokens').update({
-          access_token: td.access_token,
-          refresh_token: td.refresh_token,
-          expires_at: newExp,
-          updated_at: new Date().toISOString(),
-        }).eq('id', xeroToken.id)
-        xeroToken = { ...xeroToken, access_token: td.access_token }
+
+      if (!refreshResp.ok) {
+        const errText = await refreshResp.text()
+        console.error('Xero token refresh failed:', refreshResp.status, errText)
+        return new Response(JSON.stringify({ error: 'Xero token refresh failed. Please reconnect Xero.' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
       }
+
+      const td = await refreshResp.json()
+      const newExp = new Date(Date.now() + td.expires_in * 1000).toISOString()
+      await supabase.from('xero_tokens').update({
+        access_token: td.access_token,
+        refresh_token: td.refresh_token,
+        expires_at: newExp,
+        updated_at: new Date().toISOString(),
+      }).eq('id', xeroToken.id)
+      xeroToken = { ...xeroToken, access_token: td.access_token }
     }
 
-    const xeroHeaders = {
-      'Authorization': `Bearer ${xeroToken.access_token}`,
-      'Accept': 'application/json',
-      'Content-Type': 'application/json',
-      'Xero-tenant-id': xeroToken.tenant_id,
-    }
+    // Use shared header builder
+    const xeroApiHeaders = getXeroHeaders(xeroToken.access_token, xeroToken.tenant_id)
 
     // ─── Create/update accounts in Xero ──────────────────────────────
+    // IMPORTANT Xero API constraints:
+    //   - PUT /Accounts creates a new account (one at a time)
+    //   - POST /Accounts/{AccountID} updates an existing account (one at a time)
+    //   - Account Type (REVENUE, EXPENSE, etc.) is IMMUTABLE after creation
+    //   - Bank Account Type is also immutable
     const created: { code: string; name: string; xero_account_id: string; action: string }[] = []
     const errors: { code: string; error: string }[] = []
+    const skipped: { code: string; reason: string }[] = []
 
     for (const acc of accounts) {
       const existing = existingMap.get(acc.code)
       const isUpdate = !!existing && mode === 'create_and_update'
 
-      const xeroPayload: any = {
+      // Guard: Xero Account Type is immutable — skip if type changed
+      if (isUpdate && existing && existing.type.toUpperCase() !== acc.type.toUpperCase()) {
+        skipped.push({
+          code: acc.code,
+          reason: `Cannot change account type from ${existing.type} to ${acc.type} (Xero limitation)`,
+        })
+        continue
+      }
+
+      // Build Xero payload — only send Name + Code for updates (Type is immutable)
+      const xeroPayload: Record<string, unknown> = {
         Code: acc.code,
         Name: acc.name,
-        Type: acc.type.toUpperCase(),
-        EnablePaymentsToAccount: false,
       }
+
+      if (!isUpdate) {
+        // Type is only set on creation
+        xeroPayload.Type = acc.type.toUpperCase()
+        xeroPayload.EnablePaymentsToAccount = false
+      }
+
       if (acc.tax_type) {
         xeroPayload.TaxType = acc.tax_type
       }
 
-      // PUT creates new accounts; POST to /Accounts/{ID} updates existing
-      let url = 'https://api.xero.com/api.xro/2.0/Accounts'
-      let method = 'PUT'
-      if (isUpdate && existing?.xero_account_id) {
-        url = `https://api.xero.com/api.xro/2.0/Accounts/${existing.xero_account_id}`
-        method = 'POST'
-      }
+      // PUT creates new; POST to /Accounts/{ID} updates existing
+      const url = isUpdate && existing?.xero_account_id
+        ? buildXeroUrl(`Accounts/${existing.xero_account_id}`)
+        : buildXeroUrl('Accounts')
+      const method = isUpdate ? 'POST' : 'PUT'
 
       const resp = await fetch(url, {
         method,
-        headers: xeroHeaders,
+        headers: xeroApiHeaders,
         body: JSON.stringify(xeroPayload),
       })
 
       // Handle 429 rate limiting — return 200 with error field so
       // supabase.functions.invoke delivers it via `data` not `error`
       if (resp.status === 429) {
-        const retryAfter = parseInt(resp.headers.get('Retry-After') || '60', 10)
+        const retryAfter = parseXeroRetryAfter(resp.headers.get('Retry-After'))
         console.warn(`Xero 429 rate limited. Retry-After: ${retryAfter}s`)
+        // Consume response body to prevent Deno resource leak
+        await resp.text()
         return new Response(JSON.stringify({
           success: false,
           error: 'rate_limited',
           retry_after: retryAfter,
           created,
           errors,
+          skipped: skipped.length > 0 ? skipped : undefined,
         }), {
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -239,16 +280,18 @@ Deno.serve(async (req) => {
     }
 
     // ─── Refresh COA cache ───────────────────────────────────────────
-    const refreshResp = await fetch('https://api.xero.com/api.xro/2.0/Accounts?where=Status%3D%3D%22ACTIVE%22', {
+    const coaRefreshUrl = buildXeroUrl('Accounts', 'where=Status%3D%3D%22ACTIVE%22')
+    const refreshCoaResp = await fetch(coaRefreshUrl, {
       headers: {
         'Authorization': `Bearer ${xeroToken.access_token}`,
         'Accept': 'application/json',
-        'Xero-tenant-id': xeroToken.tenant_id,
+        'Xero-Tenant-Id': xeroToken.tenant_id,
       },
     })
 
-    if (refreshResp.ok) {
-      const refreshData = await refreshResp.json()
+    let coaRefreshed = false
+    if (refreshCoaResp.ok) {
+      const refreshData = await refreshCoaResp.json()
       const xeroAccounts = refreshData.Accounts || []
       const coaRows = xeroAccounts
         .filter((a: any) => a.AccountID)
@@ -270,7 +313,7 @@ Deno.serve(async (req) => {
           { onConflict: 'user_id,xero_account_id' }
         )
 
-        // Soft-delete missing accounts
+        // Soft-delete missing accounts (only if Xero returned a non-empty list)
         const currentIds = coaRows.map((r: any) => r.xero_account_id)
         await supabase
           .from('xero_chart_of_accounts')
@@ -278,11 +321,17 @@ Deno.serve(async (req) => {
           .eq('user_id', userId)
           .eq('is_active', true)
           .not('xero_account_id', 'in', `(${currentIds.join(',')})`)
+
+        coaRefreshed = true
       }
+    } else {
+      // Consume response body to prevent Deno resource leak
+      await refreshCoaResp.text()
+      console.warn('COA refresh after account creation failed:', refreshCoaResp.status)
     }
 
     // ─── Log system events ───────────────────────────────────────────
-    if (created.length > 0) {
+    if (created.length > 0 || skipped.length > 0) {
       await supabase.from('system_events').insert({
         user_id: userId,
         event_type: mode === 'create_and_update' ? 'coa_sync' : 'xero_account_created',
@@ -291,7 +340,9 @@ Deno.serve(async (req) => {
           mode,
           created_count: created.filter(c => c.action === 'created').length,
           updated_count: created.filter(c => c.action === 'updated').length,
+          skipped_count: skipped.length,
           accounts: created,
+          skipped: skipped.length > 0 ? skipped : undefined,
           errors: errors.length > 0 ? errors : undefined,
         },
       })
@@ -301,7 +352,8 @@ Deno.serve(async (req) => {
       success: true,
       created,
       errors: errors.length > 0 ? errors : undefined,
-      coa_refreshed: refreshResp.ok,
+      skipped: skipped.length > 0 ? skipped : undefined,
+      coa_refreshed: coaRefreshed,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

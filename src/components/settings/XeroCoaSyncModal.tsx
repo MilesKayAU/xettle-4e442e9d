@@ -53,6 +53,18 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
   const [rateLimitWait, setRateLimitWait] = useState<number | null>(null);
   const settingsPin = useSettingsPin();
 
+  // Reset state when modal closes
+  const handleOpenChange = (v: boolean) => {
+    if (syncing) return;
+    if (!v) {
+      setMode('create_only');
+      setRiskConsent(false);
+      setProgress(null);
+      setRateLimitWait(null);
+    }
+    onOpenChange(v);
+  };
+
   // Compute summary
   const summary = useMemo(() => {
     const newCount = previewRows.filter(r => r.status === 'new').length;
@@ -103,18 +115,14 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
       const parts: string[] = [];
       if (result.created > 0) parts.push(`${result.created} created`);
       if (result.updated > 0) parts.push(`${result.updated} updated`);
+      if (result.skipped > 0) parts.push(`${result.skipped} skipped`);
       if (result.errors.length > 0) parts.push(`${result.errors.length} error${result.errors.length !== 1 ? 's' : ''}`);
       toast.success(`COA sync complete: ${parts.join(', ')}`);
       await onSyncComplete();
-      onOpenChange(false);
+      handleOpenChange(false);
     } else {
       toast.error(`Sync failed: ${result.error || 'Unknown error'}`);
     }
-
-    // Reset state
-    setMode('create_only');
-    setRiskConsent(false);
-    setProgress(null);
   };
 
   const progressPct = progress
@@ -136,7 +144,7 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
         onCancel={settingsPin.cancelDialog}
       />
 
-      <Dialog open={open} onOpenChange={(v) => { if (!syncing) onOpenChange(v); }}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
@@ -264,7 +272,7 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
           )}
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={syncing}>
+            <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={syncing}>
               Cancel
             </Button>
             <Button

@@ -165,6 +165,7 @@ export interface BatchCreateResult {
   success: boolean;
   created: number;
   updated: number;
+  skipped: number;
   errors: { code: string; error: string }[];
   error?: string;
 }
@@ -189,6 +190,7 @@ export async function batchCreateXeroAccounts(
 
   let totalCreated = 0;
   let totalUpdated = 0;
+  let totalSkipped = 0;
   const allErrors: { code: string; error: string }[] = [];
   const retryCount = new Map<number, number>();
 
@@ -206,11 +208,11 @@ export async function batchCreateXeroAccounts(
     });
 
     if (error) {
-      // Network or invocation error — abort
       return {
         success: false,
         created: totalCreated,
         updated: totalUpdated,
+        skipped: totalSkipped,
         errors: allErrors,
         error: error.message,
       };
@@ -224,6 +226,7 @@ export async function batchCreateXeroAccounts(
           success: false,
           created: totalCreated,
           updated: totalUpdated,
+          skipped: totalSkipped,
           errors: allErrors,
           error: `Rate limited on batch ${i + 1} after ${MAX_RETRIES_PER_BATCH} retries`,
         };
@@ -249,6 +252,7 @@ export async function batchCreateXeroAccounts(
         success: false,
         created: totalCreated,
         updated: totalUpdated,
+        skipped: totalSkipped,
         errors: allErrors,
         error: data?.error || 'Batch failed',
       };
@@ -258,6 +262,7 @@ export async function batchCreateXeroAccounts(
     const batchCreated = (data.created || []) as { action?: string }[];
     totalCreated += batchCreated.filter(c => c.action !== 'updated').length;
     totalUpdated += batchCreated.filter(c => c.action === 'updated').length;
+    totalSkipped += (data.skipped || []).length;
 
     if (data.errors) {
       allErrors.push(...data.errors);
@@ -277,6 +282,7 @@ export async function batchCreateXeroAccounts(
     success: true,
     created: totalCreated,
     updated: totalUpdated,
+    skipped: totalSkipped,
     errors: allErrors,
   };
 }
