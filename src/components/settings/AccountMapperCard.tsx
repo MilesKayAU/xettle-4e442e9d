@@ -1539,7 +1539,7 @@ export default function AccountMapperCard() {
                       <button
                         onClick={() => {
                           setExcludedMarketplaces(new Set());
-                          saveExclusions(excludedMappings, new Set());
+                          saveExclusions(excludedMappings, new Set(), excludedCategories);
                         }}
                         className="text-[10px] text-primary hover:underline"
                       >
