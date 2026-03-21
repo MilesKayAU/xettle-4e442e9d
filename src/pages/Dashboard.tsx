@@ -222,11 +222,15 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
         <p className="text-sm text-muted-foreground mt-1">
           Manage connections, account mappings, posting rules, and reconciliation preferences.
         </p>
-        {incompleteCount > 0 && (
-          <div className="mt-3 flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-4 py-2.5">
-            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+       {incompleteCount > 0 && (
+          <div className={`mt-3 flex items-center gap-2 rounded-lg px-4 py-2.5 ${blockingCount > 0 ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-blue-500/10 border border-blue-500/20'}`}>
+            <AlertTriangle className={`h-4 w-4 shrink-0 ${blockingCount > 0 ? 'text-amber-600' : 'text-blue-600'}`} />
             <p className="text-sm text-foreground">
-              <strong>{incompleteCount} section{incompleteCount !== 1 ? 's' : ''}</strong> need{incompleteCount === 1 ? 's' : ''} your attention before settlements can post to Xero. Look for highlighted sections below.
+              {blockingCount > 0 ? (
+                <><strong>{blockingCount} section{blockingCount !== 1 ? 's' : ''}</strong> need{blockingCount === 1 ? 's' : ''} your attention before settlements can post to Xero.{warningOnlyCount > 0 && ` ${warningOnlyCount} more with optional improvements.`}</>
+              ) : (
+                <>Everything essential is set up! <strong>{warningOnlyCount} section{warningOnlyCount !== 1 ? 's' : ''}</strong> {warningOnlyCount === 1 ? 'has' : 'have'} optional improvements you can review.</>
+              )}
             </p>
           </div>
         )}

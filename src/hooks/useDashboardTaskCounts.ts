@@ -211,7 +211,7 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
         key: 'postage_cost_missing',
         label: 'Postage cost not set',
         severity: 'warning',
-        message: `Set your average postage cost for: ${missingPostageCost.join(', ')} in Settings → Fulfilment Methods.`,
+        message: `For more accurate profit, set your average postage cost for: ${missingPostageCost.join(', ')}.`,
         actionLabel: 'Set costs',
         actionTarget: 'settings:fulfilment',
       });
