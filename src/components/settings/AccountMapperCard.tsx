@@ -1024,6 +1024,7 @@ export default function AccountMapperCard() {
       for (const mp of getEffectiveMarketplaces()) {
         if (excludedMarketplaces.has(mp)) continue;
         for (const cat of SPLITTABLE_CATEGORIES) {
+          if (excludedCategories.has(cat)) continue;
           const key = `${cat}:${mp}`;
           if (excludedMappings.has(key)) continue;
           const code = editableMapping[key] || mapping[key]?.code;
