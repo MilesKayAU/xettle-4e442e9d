@@ -1228,7 +1228,21 @@ export default function AccountMapperCard() {
     if (status === 'reuse_existing') return <Badge variant="outline" className="text-amber-700 border-amber-300 text-[10px]">Use existing</Badge>;
     if (status === 'missing') return <Badge variant="outline" className="text-destructive border-destructive/30 text-[10px]">Not in Xero</Badge>;
     if (status === 'inactive') return <Badge variant="outline" className="text-destructive border-destructive/30 text-[10px]">Inactive</Badge>;
-    return <Badge variant="outline" className="text-amber-700 border-amber-300 text-[10px]">Wrong type</Badge>;
+    const isRev = REVENUE_CATEGORIES_SET.has(category);
+    const expected = isRev ? 'Revenue/Sales' : 'Expense/Direct Costs';
+    const actual = coaMap.get(code!)?.type || '?';
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge variant="outline" className="text-amber-700 border-amber-300 text-[10px] cursor-help">Wrong type</Badge>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-[260px] text-xs">
+            Expects <strong>{expected}</strong> but account is <strong>{actual}</strong> in Xero. Pick a different account or fix the type in Xero.
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
   };
 
   /** Searchable COA dropdown */
