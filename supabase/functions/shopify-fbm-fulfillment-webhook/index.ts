@@ -72,10 +72,10 @@ Deno.serve(async (req) => {
 
     logger.info('fbm_fulfillment_webhook_received', { shopify_order_id: shopifyOrderId })
 
-    // Look up matching amazon_fbm_orders row
+    // Look up matching amazon_fbm_orders row (include shipping_service_level for confirmShipment)
     const { data: fbmOrder, error: lookupErr } = await supabase
       .from('amazon_fbm_orders')
-      .select('id, amazon_order_id, user_id, status')
+      .select('id, amazon_order_id, user_id, status, shipping_service_level')
       .eq('shopify_order_id', shopifyOrderId)
       .maybeSingle()
 
