@@ -1156,6 +1156,11 @@ export default function AccountMapperCard() {
     return !code || validateCode(code, cat) !== 'valid';
   }).length;
 
+  // Count codes that exist in editableMapping but are not found in Xero COA
+  const notInXeroCount = coaMap.size > 0
+    ? Object.values(editableMapping).filter(code => code && !coaMap.has(code)).length
+    : 0;
+
   const renderPinDialog = () => (
     <SettingsPinDialog
       open={settingsPin.showDialog}
@@ -1439,13 +1444,53 @@ export default function AccountMapperCard() {
               Re-run
             </Button>
           </div>
+
+          {notInXeroCount > 0 && coaAccounts.length > 0 && (
+            <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20 px-3 py-2.5">
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+              <span className="text-xs text-amber-800 dark:text-amber-200 flex-1">
+                {notInXeroCount} account code{notInXeroCount > 1 ? 's' : ''} not yet in Xero — create them before confirming.
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1 border-amber-300 hover:bg-amber-100 dark:border-amber-700 dark:hover:bg-amber-900/40"
+                onClick={async () => {
+                  toast.info('Refreshing COA from Xero…');
+                  const result = await refreshXeroCOA();
+                  if (!result.success) { toast.error(`COA refresh failed: ${result.error}`); return; }
+                  const [freshAccounts, freshSynced] = await Promise.all([getCachedXeroAccounts(), getCoaLastSyncedAt()]);
+                  setCoaAccounts(freshAccounts);
+                  setCoaLastSynced(freshSynced);
+                  setSyncModalOpen(true);
+                }}
+              >
+                <Upload className="h-3 w-3" />
+                Create in Xero
+              </Button>
+            </div>
+          )}
+
           <p className="text-xs text-muted-foreground">
-            <strong>Save Draft</strong> keeps your changes locally. <strong>Confirm Mapping</strong> locks these accounts for all future Xero pushes.
+            <strong>Save Draft</strong> saves locally without locking. <strong>Confirm Mapping</strong> verifies all codes exist in Xero, then locks them for future pushes. This only changes Xettle's internal routing — your Xero accounts are not modified.
           </p>
         </CardContent>
       </Card>
       {renderCloneDialog()}
       {renderOverwriteConfirmDialog()}
+      {syncModalOpen && (
+        <XeroCoaSyncModal
+          open={syncModalOpen}
+          onOpenChange={setSyncModalOpen}
+          previewRows={computeSyncPreviewRows()}
+          coaAccounts={coaAccounts}
+          onSyncComplete={async () => {
+            const [accounts, lastSynced] = await Promise.all([getCachedXeroAccounts(), getCoaLastSyncedAt()]);
+            setCoaAccounts(accounts);
+            setCoaLastSynced(lastSynced);
+          }}
+        />
+      )}
       </>
     );
   }
@@ -1572,13 +1617,12 @@ export default function AccountMapperCard() {
             <RefreshCw className="h-3 w-3" />
             Re-run AI mapper
           </Button>
-          {isAdmin && coaAccounts.length > 0 && (
+          {coaAccounts.length > 0 && (
             <Button
               variant="outline"
               size="sm"
               className="gap-2"
               onClick={async () => {
-                // Refresh COA before computing diff
                 toast.info('Refreshing COA from Xero…');
                 const result = await refreshXeroCOA();
                 if (!result.success) {
@@ -1595,7 +1639,7 @@ export default function AccountMapperCard() {
               }}
             >
               <Upload className="h-3 w-3" />
-              Sync to Xero
+              Sync Accounts to Xero
             </Button>
           )}
         </div>
@@ -1603,22 +1647,20 @@ export default function AccountMapperCard() {
     </Card>
     {renderCloneDialog()}
     {renderOverwriteConfirmDialog()}
-    {isAdmin && (
-      <XeroCoaSyncModal
-        open={syncModalOpen}
-        onOpenChange={setSyncModalOpen}
-        previewRows={computeSyncPreviewRows()}
-        coaAccounts={coaAccounts}
-        onSyncComplete={async () => {
-          const [accounts, lastSynced] = await Promise.all([
-            getCachedXeroAccounts(),
-            getCoaLastSyncedAt(),
-          ]);
-          setCoaAccounts(accounts);
-          setCoaLastSynced(lastSynced);
-        }}
-      />
-    )}
+    <XeroCoaSyncModal
+      open={syncModalOpen}
+      onOpenChange={setSyncModalOpen}
+      previewRows={computeSyncPreviewRows()}
+      coaAccounts={coaAccounts}
+      onSyncComplete={async () => {
+        const [accounts, lastSynced] = await Promise.all([
+          getCachedXeroAccounts(),
+          getCoaLastSyncedAt(),
+        ]);
+        setCoaAccounts(accounts);
+        setCoaLastSynced(lastSynced);
+      }}
+    />
     </>
   );
 }
