@@ -27,7 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail, Store, Bug, ShieldCheck, Rocket, BookOpen, Crosshair, BarChart3, Package, HeartPulse, Truck, ChevronRight } from 'lucide-react';
+import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail, Store, Bug, ShieldCheck, Rocket, BookOpen, Crosshair, BarChart3, Package, HeartPulse, Truck, ChevronRight, Shield } from 'lucide-react';
 import AccountResetButton from '@/components/admin/AccountResetButton';
 import { toast } from '@/hooks/use-toast';
 import MarketplaceConfigTab from '@/components/admin/marketplace/MarketplaceConfigTab';
@@ -40,6 +40,7 @@ import EmailMonitoringDashboard from '@/components/admin/EmailMonitoringDashboar
 import UserOverviewDashboard from '@/components/admin/UserOverviewDashboard';
 import FulfillmentBridge from '@/components/admin/FulfillmentBridge';
 import HealthScannerDashboard from '@/components/admin/HealthScannerDashboard';
+import AmazonComplianceDashboard from '@/components/admin/AmazonComplianceDashboard';
 import ShippingEstimateSettings from '@/components/settings/ShippingEstimateSettings';
 import { cn } from '@/lib/utils';
 
@@ -67,6 +68,7 @@ const NAV_GROUPS = [
       { id: 'marketplaces', label: 'Marketplace Config', icon: Store },
       { id: 'fulfillment', label: 'Fulfillment Bridge', icon: Package },
       { id: 'shipping', label: 'Shipping Estimates', icon: Truck },
+      { id: 'amazon-compliance', label: 'Amazon API', icon: Shield },
     ],
   },
   {
@@ -342,6 +344,7 @@ export default function Admin() {
       case 'fulfillment': return <FulfillmentBridge />;
       case 'health': return <HealthScannerDashboard />;
       case 'shipping': return <ShippingEstimateSettings />;
+      case 'amazon-compliance': return <AmazonComplianceDashboard />;
       default: return null;
     }
   };
