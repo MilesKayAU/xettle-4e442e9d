@@ -1876,6 +1876,7 @@ export default function AccountMapperCard() {
           previewRows={computeSyncPreviewRows()}
           coaAccounts={coaAccounts}
           onSyncComplete={async () => {
+            await refreshXeroCOA();
             const [accounts, lastSynced] = await Promise.all([getCachedXeroAccounts(), getCoaLastSyncedAt()]);
             setCoaAccounts(accounts);
             setCoaLastSynced(lastSynced);
@@ -2044,6 +2045,7 @@ export default function AccountMapperCard() {
       previewRows={computeSyncPreviewRows()}
       coaAccounts={coaAccounts}
       onSyncComplete={async () => {
+        await refreshXeroCOA();
         const [accounts, lastSynced] = await Promise.all([
           getCachedXeroAccounts(),
           getCoaLastSyncedAt(),
