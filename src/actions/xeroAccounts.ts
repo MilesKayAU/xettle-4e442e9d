@@ -282,6 +282,7 @@ export async function batchCreateXeroAccounts(
     success: true,
     created: totalCreated,
     updated: totalUpdated,
+    skipped: totalSkipped,
     errors: allErrors,
   };
 }
