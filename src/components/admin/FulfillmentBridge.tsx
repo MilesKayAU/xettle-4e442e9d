@@ -452,19 +452,22 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSel
   const [patching, setPatching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Resize image to max 1200px wide and compress as JPEG to keep payload small
+  // Resize image to max 800px wide and compress as JPEG 0.5 quality to keep payload small
   const compressImage = (dataUrl: string): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
-        const MAX_W = 1200;
+        const MAX_W = 800;
         const scale = img.width > MAX_W ? MAX_W / img.width : 1;
         const canvas = document.createElement('canvas');
         canvas.width = img.width * scale;
         canvas.height = img.height * scale;
         const ctx = canvas.getContext('2d')!;
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', 0.8));
+        const compressed = canvas.toDataURL('image/jpeg', 0.5);
+        // Strip data URL prefix — edge function re-adds it
+        const rawBase64 = compressed.split(',')[1];
+        resolve(rawBase64);
       };
       img.src = dataUrl;
     });
@@ -477,7 +480,8 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSel
     reader.onload = async (ev) => {
       const dataUrl = ev.target?.result as string;
       const compressed = await compressImage(dataUrl);
-      setImagePreview(compressed);
+      // Show preview using full data URL, but store raw base64 for sending
+      setImagePreview(`data:image/jpeg;base64,${compressed}`);
       setImageBase64(compressed);
     };
     reader.readAsDataURL(file);

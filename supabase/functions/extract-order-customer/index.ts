@@ -225,7 +225,7 @@ async function extractCustomerFromScreenshot(
             {
               type: 'image_url',
               image_url: {
-                url: `data:image/png;base64,${cleanBase64}`,
+                url: `data:image/jpeg;base64,${cleanBase64}`,
               },
             },
             {
