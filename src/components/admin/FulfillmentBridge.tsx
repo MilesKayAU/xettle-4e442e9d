@@ -605,10 +605,25 @@ function OrderMonitorTab() {
                         <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
                           {order.error_detail || '—'}
                         </TableCell>
+                        <TableCell className="text-right">
+                          {order.shopify_order_id && order.status !== 'tracking_sent' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => { e.stopPropagation(); retryTracking(order); }}
+                              disabled={retryingId === order.id}
+                            >
+                              {retryingId === order.id
+                                ? <RefreshCw className="h-3.5 w-3.5 mr-1 animate-spin" />
+                                : <RotateCcw className="h-3.5 w-3.5 mr-1" />}
+                              Resend Tracking
+                            </Button>
+                          )}
+                        </TableCell>
                       </TableRow>
                       <CollapsibleContent asChild>
                         <TableRow>
-                          <TableCell colSpan={6} className="bg-muted/50 p-4">
+                          <TableCell colSpan={7} className="bg-muted/50 p-4">
                             <div className="space-y-3">
                               {/* Duplicate Detection Info */}
                               {order.status === 'pending_payment' && (
