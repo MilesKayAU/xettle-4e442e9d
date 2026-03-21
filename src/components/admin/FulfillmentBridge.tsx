@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { RefreshCw, Trash2, Plus, ChevronDown, Play, FlaskConical, AlertTriangle, Search, ShieldAlert, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { RefreshCw, Trash2, Plus, ChevronDown, Play, FlaskConical, AlertTriangle, Search, ShieldAlert, CheckCircle2, XCircle, Clock, Webhook } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 
 const STORE_KEY = 'primary';
@@ -503,6 +503,29 @@ function OrderMonitorTab() {
         </Button>
         <Button variant="ghost" size="sm" onClick={loadOrders}>
           <RefreshCw className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            try {
+              const { data, error } = await supabase.functions.invoke('shopify-auth', {
+                body: { action: 'register_webhooks' },
+              });
+              if (error) throw error;
+              toast({
+                title: data?.created ? 'Webhook registered' : 'Webhook already active',
+                description: data?.created
+                  ? 'Shopify will now notify us when you fulfill an order.'
+                  : 'The fulfillment webhook is already registered.',
+              });
+            } catch (err: any) {
+              toast({ title: 'Webhook registration failed', description: err.message, variant: 'destructive' });
+            }
+          }}
+        >
+          <Webhook className="h-4 w-4 mr-1" />
+          Register Webhook
         </Button>
       </div>
 
