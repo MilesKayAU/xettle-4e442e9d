@@ -148,7 +148,7 @@ Deno.serve(async (req) => {
         throw new Error('Missing AMAZON_SP_CLIENT_ID or AMAZON_SP_CLIENT_SECRET')
       }
 
-      const refreshResponse = await fetch(LWA.TOKEN_URL, {
+      const refreshResponse = await auditedFetch(LWA.TOKEN_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
@@ -157,7 +157,7 @@ Deno.serve(async (req) => {
           client_id: AMAZON_CLIENT_ID,
           client_secret: AMAZON_CLIENT_SECRET,
         }),
-      })
+      }, { user_id: fbmOrder.user_id, integration: 'amazon_lwa', context: { action: 'token_refresh_webhook' } })
 
       const refreshData = await refreshResponse.json()
       if (!refreshResponse.ok || !refreshData.access_token) {
