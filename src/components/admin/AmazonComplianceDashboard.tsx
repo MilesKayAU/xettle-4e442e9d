@@ -203,6 +203,16 @@ function ComplianceChecklist() {
           <CardContent className="pt-4 space-y-3">
             <Input placeholder="Requirement title" value={newTitle} onChange={e => setNewTitle(e.target.value)} />
             <Input placeholder="Description (optional)" value={newDesc} onChange={e => setNewDesc(e.target.value)} />
+            <Select value={newCategory} onValueChange={setNewCategory}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
+                  <SelectItem key={key} value={key}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <div className="flex gap-2">
               <Button size="sm" onClick={addItem}>Add</Button>
               <Button size="sm" variant="ghost" onClick={() => setAddOpen(false)}>Cancel</Button>
