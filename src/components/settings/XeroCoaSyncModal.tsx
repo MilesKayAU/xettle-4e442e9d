@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, AlertTriangle, CheckCircle2, Upload, ShieldAlert, Clock } from 'lucide-react';
+import { Loader2, AlertTriangle, CheckCircle2, Upload, ShieldAlert, Clock, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSettingsPin } from '@/hooks/use-settings-pin';
 import SettingsPinDialog from '@/components/shared/SettingsPinDialog';
@@ -50,6 +50,7 @@ const BATCH_SIZE = 2;
 export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaAccounts, onSyncComplete }: Props) {
   const [mode, setMode] = useState<'create_only' | 'create_and_update'>('create_only');
   const [riskConsent, setRiskConsent] = useState(false);
+  const [createConsent, setCreateConsent] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [progress, setProgress] = useState<BatchCreateProgress | null>(null);
   const [rateLimitWait, setRateLimitWait] = useState<number | null>(null);
@@ -61,6 +62,7 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
     if (!v) {
       setMode('create_only');
       setRiskConsent(false);
+      setCreateConsent(false);
       setProgress(null);
       setRateLimitWait(null);
     }
@@ -83,14 +85,14 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
 
   const totalBatches = Math.ceil(actionableRows.length / BATCH_SIZE);
 
-  const canSync = actionableRows.length > 0 && (mode === 'create_only' || riskConsent);
+  // Both modes require explicit consent checkbox
+  const canSync = actionableRows.length > 0
+    && createConsent
+    && (mode === 'create_only' || riskConsent);
 
   const handleSync = async () => {
-    if (mode === 'create_and_update') {
-      settingsPin.requirePin(executeSync);
-    } else {
-      await executeSync();
-    }
+    // Always require PIN before creating accounts in Xero
+    settingsPin.requirePin(executeSync);
   };
 
   const executeSync = async () => {
@@ -117,15 +119,15 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
 
     if (result.success) {
       const parts: string[] = [];
-      if (result.created > 0) parts.push(`${result.created} created`);
+      if (result.created > 0) parts.push(`${result.created} created in Xero`);
       if (result.updated > 0) parts.push(`${result.updated} updated`);
       if (result.skipped > 0) parts.push(`${result.skipped} skipped`);
       if (result.errors.length > 0) parts.push(`${result.errors.length} error${result.errors.length !== 1 ? 's' : ''}`);
-      toast.success(`COA sync complete: ${parts.join(', ')}`);
+      toast.success(`Done: ${parts.join(', ')}`);
       await onSyncComplete();
       handleOpenChange(false);
     } else {
-      toast.error(`Sync failed: ${result.error || 'Unknown error'}`);
+      toast.error(`Failed: ${result.error || 'Unknown error'}`);
     }
   };
 
@@ -152,9 +154,9 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
   };
 
   const renderStatusBadge = (status: SyncStatus) => {
-    if (status === 'new') return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-300 text-[10px]">New</Badge>;
+    if (status === 'new') return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-300 text-[10px]">Will Create</Badge>;
     if (status === 'changed') return <Badge className="bg-amber-100 text-amber-700 border-amber-300 text-[10px]">Changed</Badge>;
-    return <Badge variant="outline" className="text-muted-foreground text-[10px]">Unchanged</Badge>;
+    return <Badge variant="outline" className="text-muted-foreground text-[10px]">Already in Xero</Badge>;
   };
 
   const renderActionCell = (row: SyncPreviewRow) => {
@@ -162,8 +164,9 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
     const isSkipped = row.status === 'changed' && mode === 'create_only';
 
     if (!syncing) {
-      if (isActionable) return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" />;
+      if (isActionable) return <Badge className="bg-blue-100 text-blue-700 border-blue-300 text-[10px]">Will push</Badge>;
       if (isSkipped) return <span className="text-[10px] text-muted-foreground">Skipped</span>;
+      if (row.status === 'unchanged') return <span className="text-[10px] text-muted-foreground">No action</span>;
       return null;
     }
 
@@ -173,14 +176,14 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
         return (
           <span className="inline-flex items-center gap-1 text-emerald-600">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            <span className="text-[10px] font-medium">Sent</span>
+            <span className="text-[10px] font-medium">Created</span>
           </span>
         );
       case 'sending':
         return (
           <span className="inline-flex items-center gap-1 text-primary">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            <span className="text-[10px] font-medium">Sending</span>
+            <span className="text-[10px] font-medium">Creating…</span>
           </span>
         );
       case 'queued':
@@ -193,9 +196,14 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
       case 'skipped':
         return <span className="text-[10px] text-muted-foreground">Skipped</span>;
       default:
-        return isActionable ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" /> : null;
+        return null;
     }
   };
+
+  // Actionable label for button
+  const actionLabel = mode === 'create_only'
+    ? `Create ${actionableRows.length} Account${actionableRows.length !== 1 ? 's' : ''} in Xero`
+    : `Push ${actionableRows.length} Account${actionableRows.length !== 1 ? 's' : ''} to Xero`;
 
   return (
     <>
@@ -211,20 +219,29 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
               <Upload className="h-4 w-4 text-primary" />
-              Sync Accounts to Xero
+              Create Accounts in Xero
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Preview which accounts will be created or updated in your Xero Chart of Accounts.
+              This will <strong>create new accounts</strong> in your live Xero Chart of Accounts. Review carefully before proceeding.
             </DialogDescription>
           </DialogHeader>
 
+          {/* Warning banner */}
+          <Alert className="border-amber-300 bg-amber-50">
+            <AlertCircle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-xs text-amber-900">
+              <strong>This modifies your Xero account.</strong> New accounts will be permanently added to your Xero Chart of Accounts.
+              They can only be removed from within Xero directly.
+            </AlertDescription>
+          </Alert>
+
           {/* Summary strip */}
           <div className="flex items-center gap-3 text-xs bg-muted/30 rounded-md px-3 py-2 border border-border/50">
-            <span className="text-emerald-700 font-medium">{summary.newCount} new</span>
+            <span className="text-emerald-700 font-medium">{summary.newCount} to create</span>
             <span className="text-muted-foreground">·</span>
             <span className="text-amber-700 font-medium">{summary.changedCount} changed</span>
             <span className="text-muted-foreground">·</span>
-            <span className="text-muted-foreground">{summary.unchangedCount} unchanged</span>
+            <span className="text-muted-foreground">{summary.unchangedCount} already in Xero</span>
           </div>
 
           {/* Mode toggle */}
@@ -240,16 +257,16 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
             />
             <Label htmlFor="sync-mode" className="text-xs cursor-pointer">
               {mode === 'create_only'
-                ? 'Create New Only — existing accounts are skipped'
+                ? 'Create New Only — existing accounts are left untouched'
                 : 'Overwrite Existing — changed accounts will be updated in Xero'}
             </Label>
           </div>
 
           {/* Overwrite warning */}
           {mode === 'create_and_update' && (
-            <Alert className="border-amber-300 bg-amber-50">
-              <AlertTriangle className="h-4 w-4 text-amber-600" />
-              <AlertDescription className="text-xs text-amber-900">
+            <Alert className="border-destructive/50 bg-destructive/5">
+              <AlertTriangle className="h-4 w-4 text-destructive" />
+              <AlertDescription className="text-xs text-destructive">
                 Overwriting will modify existing Xero accounts. This cannot be undone from Xettle.
               </AlertDescription>
             </Alert>
@@ -260,7 +277,7 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
             <div className="flex items-center gap-2 text-xs bg-primary/5 border border-primary/20 rounded-md px-3 py-2">
               <Upload className="h-3.5 w-3.5 text-primary shrink-0" />
               <span>
-                This will push <strong>{actionableRows.length} account{actionableRows.length !== 1 ? 's' : ''}</strong> to Xero in batches of {BATCH_SIZE}
+                Will create <strong>{actionableRows.length} account{actionableRows.length !== 1 ? 's' : ''}</strong> in Xero, pushed in batches of {BATCH_SIZE}
                 {' '}(~{totalBatches} API call{totalBatches !== 1 ? 's' : ''}) to stay within rate limits.
               </span>
             </div>
@@ -274,15 +291,15 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
                   {rateLimitWait
                     ? `⏳ Rate limited — retrying in ${rateLimitWait}s…`
                     : progress.batchIndex < progress.totalBatches
-                      ? <>Pushing 2 at a time · <strong>Batch {progress.batchIndex + 1} of {progress.totalBatches}</strong></>
-                      : '✓ All batches sent'}
+                      ? <>Creating 2 at a time · <strong>Batch {progress.batchIndex + 1} of {progress.totalBatches}</strong></>
+                      : '✓ All accounts created'}
                 </span>
                 <span className="text-xs text-muted-foreground">{progressPct}%</span>
               </div>
               <Progress value={progressPct} className="h-2" />
               <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                 {progress.createdSoFar > 0 && (
-                  <span className="text-emerald-600">{progress.createdSoFar} created</span>
+                  <span className="text-emerald-600">{progress.createdSoFar} created in Xero</span>
                 )}
                 {progress.updatedSoFar > 0 && (
                   <span className="text-amber-600">{progress.updatedSoFar} updated</span>
@@ -302,7 +319,7 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
                   <th className="text-left p-2 font-medium">Code</th>
                   <th className="text-left p-2 font-medium">Name</th>
                   <th className="text-left p-2 font-medium">Type</th>
-                  <th className="text-center p-2 font-medium w-24">Status</th>
+                  <th className="text-center p-2 font-medium w-28">Status</th>
                   <th className="text-center p-2 font-medium w-24">Action</th>
                 </tr>
               </thead>
@@ -337,9 +354,9 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
             </table>
           </div>
 
-          {/* Overwrite consent gate */}
+          {/* Overwrite consent gate (for update mode) */}
           {mode === 'create_and_update' && summary.changedCount > 0 && (
-            <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50/50 px-3 py-2">
+            <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
               <Checkbox
                 id="risk-consent"
                 checked={riskConsent}
@@ -347,8 +364,24 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
                 disabled={syncing}
                 className="mt-0.5"
               />
-              <Label htmlFor="risk-consent" className="text-xs text-amber-900 cursor-pointer">
-                I understand this will modify {summary.changedCount} existing account{summary.changedCount !== 1 ? 's' : ''} in my Xero Chart of Accounts
+              <Label htmlFor="risk-consent" className="text-xs text-destructive cursor-pointer">
+                I understand this will modify {summary.changedCount} existing account{summary.changedCount !== 1 ? 's' : ''} in my live Xero Chart of Accounts
+              </Label>
+            </div>
+          )}
+
+          {/* MANDATORY consent gate for ALL creates */}
+          {!syncing && actionableRows.length > 0 && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50/50 px-3 py-2">
+              <Checkbox
+                id="create-consent"
+                checked={createConsent}
+                onCheckedChange={(checked) => setCreateConsent(checked === true)}
+                disabled={syncing}
+                className="mt-0.5"
+              />
+              <Label htmlFor="create-consent" className="text-xs text-amber-900 cursor-pointer">
+                I confirm I want to create {actionableRows.length} new account{actionableRows.length !== 1 ? 's' : ''} in my live Xero — this cannot be undone from Xettle
               </Label>
             </div>
           )}
@@ -360,18 +393,24 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
             <Button
               onClick={handleSync}
               disabled={!canSync || syncing}
+              variant={mode === 'create_and_update' ? 'destructive' : 'default'}
               className="gap-1.5"
             >
               {syncing ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : mode === 'create_and_update' ? (
-                <ShieldAlert className="h-3.5 w-3.5" />
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Creating in Xero…
+                </>
               ) : (
-                <Upload className="h-3.5 w-3.5" />
+                <>
+                  {mode === 'create_and_update' ? (
+                    <ShieldAlert className="h-3.5 w-3.5" />
+                  ) : (
+                    <Upload className="h-3.5 w-3.5" />
+                  )}
+                  {actionLabel}
+                </>
               )}
-              {syncing
-                ? 'Syncing…'
-                : `Sync ${actionableRows.length} account${actionableRows.length !== 1 ? 's' : ''}`}
             </Button>
           </DialogFooter>
         </DialogContent>
