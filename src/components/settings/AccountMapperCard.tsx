@@ -1482,29 +1482,59 @@ export default function AccountMapperCard() {
                     const isSplittable = (SPLITTABLE_CATEGORIES as readonly string[]).includes(cat);
                     return (
                       <React.Fragment key={cat}>
-                        <tr className="border-b last:border-b-0">
-                          <td className="p-2">
-                            <div className="font-medium">{cat}</div>
-                            <div className="text-xs text-muted-foreground">{CATEGORY_DESCRIPTIONS[cat]}</div>
-                          </td>
-                          <td className="p-2">
-                            {entry?.code ? (
-                              <span className="text-xs">
-                                <span className="font-mono">{entry.code}</span>
-                                <span className="text-muted-foreground ml-1">— {entry.name}</span>
-                              </span>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">—</span>
-                            )}
-                          </td>
-                          <td className="p-2 text-center">
-                            {renderStatusBadge(currentCode, cat)}
-                          </td>
-                          <td className="p-2">
-                            {renderAccountSelector(cat, cat)}
-                          </td>
-                        </tr>
-                        {isSplittable && renderMarketplaceOverrides(cat)}
+                        {excludedCategories.has(cat) ? (
+                          <tr className="border-b last:border-b-0 bg-muted/10 opacity-40">
+                            <td className="p-2">
+                              <div className="font-medium line-through">{cat}</div>
+                              <div className="text-xs text-muted-foreground">{CATEGORY_DESCRIPTIONS[cat]}</div>
+                            </td>
+                            <td className="p-2" colSpan={2}>
+                              <span className="text-[10px] text-muted-foreground">Entire category excluded</span>
+                            </td>
+                            <td className="p-2">
+                              <Button variant="ghost" size="sm" className="h-5 text-[10px] px-1.5 gap-0.5" onClick={() => toggleExcludeCategory(cat)}>
+                                <Plus className="h-2.5 w-2.5" /> Restore
+                              </Button>
+                            </td>
+                          </tr>
+                        ) : (
+                          <>
+                            <tr className="border-b last:border-b-0">
+                              <td className="p-2">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-medium">{cat}</span>
+                                  {splitByMarketplace && isSplittable && (
+                                    <button
+                                      onClick={() => toggleExcludeCategory(cat)}
+                                      className="text-muted-foreground hover:text-destructive transition-colors"
+                                      title={`Exclude all ${cat} rows`}
+                                    >
+                                      <XCircle className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="text-xs text-muted-foreground">{CATEGORY_DESCRIPTIONS[cat]}</div>
+                              </td>
+                              <td className="p-2">
+                                {entry?.code ? (
+                                  <span className="text-xs">
+                                    <span className="font-mono">{entry.code}</span>
+                                    <span className="text-muted-foreground ml-1">— {entry.name}</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                )}
+                              </td>
+                              <td className="p-2 text-center">
+                                {renderStatusBadge(currentCode, cat)}
+                              </td>
+                              <td className="p-2">
+                                {renderAccountSelector(cat, cat)}
+                              </td>
+                            </tr>
+                            {isSplittable && renderMarketplaceOverrides(cat)}
+                          </>
+                        )}
                       </React.Fragment>
                     );
                   })
