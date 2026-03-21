@@ -1449,6 +1449,117 @@ export default function AccountMapperCard() {
             )}
           </div>
 
+          {/* Split by marketplace toggle & filters */}
+          {getEffectiveMarketplaces().length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-3 rounded-lg border border-border/50 px-3 py-2">
+                <Switch
+                  id="split-marketplace"
+                  checked={splitByMarketplace}
+                  onCheckedChange={handleSplitToggle}
+                />
+                <Label htmlFor="split-marketplace" className="text-xs text-muted-foreground cursor-pointer">
+                  Split by marketplace — map each category per channel (Sales, Fees, Refunds, etc.)
+                </Label>
+              </div>
+
+              {splitByMarketplace && (
+                <div className="rounded-lg border border-border/50 px-3 py-2.5 space-y-3">
+                  {/* Marketplace filter */}
+                  {getEffectiveMarketplaces().length > 1 && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-medium flex items-center gap-1.5">
+                          <Filter className="h-3 w-3" />
+                          Filter marketplaces
+                        </Label>
+                        {excludedMarketplaces.size > 0 && (
+                          <button
+                            onClick={() => {
+                              setExcludedMarketplaces(new Set());
+                              saveExclusions(excludedMappings, new Set(), excludedCategories);
+                            }}
+                            className="text-[10px] text-primary hover:underline"
+                          >
+                            Clear all
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {getEffectiveMarketplaces().map(mp => {
+                          const isExcluded = excludedMarketplaces.has(mp);
+                          return (
+                            <button
+                              key={mp}
+                              onClick={() => toggleExcludeMarketplace(mp)}
+                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] border transition-colors ${
+                                isExcluded
+                                  ? 'bg-destructive/10 border-destructive/30 text-destructive line-through'
+                                  : 'bg-background border-border text-foreground hover:bg-accent'
+                              }`}
+                            >
+                              {isExcluded ? <XCircle className="h-2.5 w-2.5" /> : <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" />}
+                              {mp}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Category filter */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-medium flex items-center gap-1.5">
+                        <Filter className="h-3 w-3" />
+                        Filter categories
+                      </Label>
+                      {excludedCategories.size > 0 && (
+                        <button
+                          onClick={() => {
+                            setExcludedCategories(new Set());
+                            saveExclusions(excludedMappings, excludedMarketplaces, new Set());
+                          }}
+                          className="text-[10px] text-primary hover:underline"
+                        >
+                          Clear all
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {CATEGORIES.map(cat => {
+                        const isExcluded = excludedCategories.has(cat);
+                        return (
+                          <button
+                            key={cat}
+                            onClick={() => toggleExcludeCategory(cat)}
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] border transition-colors ${
+                              isExcluded
+                                ? 'bg-destructive/10 border-destructive/30 text-destructive line-through'
+                                : 'bg-background border-border text-foreground hover:bg-accent'
+                            }`}
+                          >
+                            {isExcluded ? <XCircle className="h-2.5 w-2.5" /> : <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" />}
+                            {cat}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {(excludedMarketplaces.size > 0 || excludedCategories.size > 0) && (
+                    <p className="text-[10px] text-muted-foreground">
+                      {excludedMarketplaces.size > 0 && `${excludedMarketplaces.size} marketplace${excludedMarketplaces.size > 1 ? 's' : ''} excluded`}
+                      {excludedMarketplaces.size > 0 && excludedCategories.size > 0 && ', '}
+                      {excludedCategories.size > 0 && `${excludedCategories.size} categor${excludedCategories.size > 1 ? 'ies' : 'y'} excluded`}
+                      {' — excluded items won\'t be included in Xero sync.'}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="border rounded-lg overflow-hidden">
             <table className="w-full text-sm">
               <thead>
