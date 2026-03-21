@@ -913,6 +913,36 @@ function OrderMonitorTab() {
         </div>
       )}
 
+      {/* Custom URL pattern indicator */}
+      {savedUrlTemplate && (
+        <div className="flex items-center gap-2 p-2 rounded-md border border-border bg-muted/50 text-sm">
+          <Link2 className="h-4 w-4 text-primary shrink-0" />
+          <span className="text-muted-foreground">Custom URL pattern active</span>
+          <code className="text-xs font-mono bg-background px-1.5 py-0.5 rounded border truncate max-w-[400px]">{savedUrlTemplate}</code>
+          <Button variant="ghost" size="sm" className="ml-auto h-7 text-xs" onClick={resetUrlTemplate} disabled={savingTemplate}>
+            Reset to default
+          </Button>
+        </div>
+      )}
+
+      {/* Pending template prompt */}
+      {pendingTemplate && (
+        <div className="flex items-center gap-2 p-3 rounded-md border border-primary/30 bg-primary/5">
+          <Link2 className="h-4 w-4 text-primary shrink-0" />
+          <div className="flex-1 text-sm">
+            <span className="font-medium">Apply this URL format to all orders?</span>
+            <code className="block text-xs font-mono text-muted-foreground mt-0.5 truncate">{pendingTemplate}</code>
+          </div>
+          <Button size="sm" onClick={() => saveUrlTemplate(pendingTemplate)} disabled={savingTemplate} className="h-7">
+            {savingTemplate ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1" />}
+            Save
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setPendingTemplate(null)} className="h-7">
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
+
       <Card>
         <CardContent className="pt-4">
           {loading ? (
