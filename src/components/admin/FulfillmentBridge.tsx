@@ -441,6 +441,31 @@ function OrderMonitorTab() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+
+  const retryTracking = async (order: any) => {
+    setRetryingId(order.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('shopify-fbm-fulfillment-webhook', {
+        body: { manual_retry: true, fbm_order_id: order.id },
+      });
+      if (error) throw error;
+      if (data?.error) {
+        toast({ title: 'Retry failed', description: data.error, variant: 'destructive' });
+      } else if (data?.status === 'tracking_sent') {
+        toast({ title: 'Tracking sent to Amazon!', description: `Tracking: ${data.tracking_number} (${data.carrier})` });
+        loadOrders();
+      } else if (data?.status === 'already_sent') {
+        toast({ title: 'Already sent', description: 'Tracking was already pushed to Amazon.' });
+        loadOrders();
+      } else {
+        toast({ title: 'Unexpected response', description: JSON.stringify(data) });
+      }
+    } catch (err: any) {
+      toast({ title: 'Retry failed', description: err.message, variant: 'destructive' });
+    }
+    setRetryingId(null);
+  };
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
