@@ -218,57 +218,59 @@ export default function AccountMapperCard() {
       }
     }
 
-    // ─── Pattern-aware gap fill ─────────────────────────────────
-    // For each category, collect the codes used by marketplaces that DO have suggestions.
-    // Then for marketplaces that DON'T, suggest the next sequential code.
-    // IMPORTANT: globalClaimed is shared across ALL categories to prevent cross-category collisions.
-    const allExistingCodes = new Set(coaAccounts.map(a => a.account_code).filter(Boolean) as string[]);
+    // ─── Revenue/Expense-partitioned gap fill ─────────────────────
+    // Partition categories into Revenue and Expense groups so gap-fill
+    // suggestions never cross Xero range boundaries (Revenue 200-399, Expense 400-599).
+    // Uses generateNextCode from accountCodePolicy for range-aware, COA-adaptive suggestions.
+    const allExistingCodes = coaAccounts.map(a => a.account_code).filter(Boolean) as string[];
+    const allExistingSet = new Set(allExistingCodes);
     const globalClaimed = new Set<string>();
 
-    for (const [internalCat, displayCat] of Object.entries(CATEGORY_DISPLAY_MAP)) {
-      // Collect codes already mapped for this category across all marketplaces
-      const categoryCodes: number[] = [];
-      for (const mp of activeMarketplaces) {
-        const key = `${displayCat}:${mp}`;
-        const existing = suggestions.get(key);
-        if (existing && existing.code) {
-          const num = parseFloat(existing.code);
-          if (!isNaN(num)) {
-            categoryCodes.push(num);
-            globalClaimed.add(String(num));
+    // First pass: register all codes from AI suggestions into globalClaimed
+    for (const [, entry] of suggestions) {
+      if (entry.code) globalClaimed.add(entry.code);
+    }
+
+    // Process categories grouped by Revenue then Expense to keep ranges separate
+    const categoryEntries = Object.entries(CATEGORY_DISPLAY_MAP);
+    const revenueCategories = categoryEntries.filter(([, displayCat]) => REVENUE_CATEGORIES_SET.has(displayCat));
+    const expenseCategories = categoryEntries.filter(([, displayCat]) => !REVENUE_CATEGORIES_SET.has(displayCat));
+
+    for (const group of [revenueCategories, expenseCategories]) {
+      for (const [, displayCat] of group) {
+        for (const mp of activeMarketplaces) {
+          const key = `${displayCat}:${mp}`;
+          if (suggestions.has(key)) continue;
+
+          // Use accountCodePolicy to generate a range-correct code
+          const accountType = getAccountTypeForCategory(displayCat);
+          const range = getRangeForType(accountType);
+
+          // Find next available code within the correct range
+          let candidate = range.start;
+          // Start from highest globalClaimed code in this range for efficiency
+          for (const code of globalClaimed) {
+            const num = parseInt(code, 10);
+            if (!isNaN(num) && num >= range.start && num <= range.end) {
+              candidate = Math.max(candidate, num + 1);
+            }
           }
-        }
-      }
 
-      if (categoryCodes.length === 0) continue; // No pattern to detect
+          while (candidate <= range.end) {
+            const codeStr = String(candidate);
+            if (!allExistingSet.has(codeStr) && !globalClaimed.has(codeStr)) break;
+            candidate++;
+          }
 
-      // Sort and start from the MAX existing code + 1 for this category
-      // This prevents cross-category overlap (e.g., Sales 200-213, Shipping starts at 214+)
-      categoryCodes.sort((a, b) => a - b);
-      const startFrom = Math.floor(categoryCodes[categoryCodes.length - 1]) + 1;
-      const rangeEnd = startFrom + 20; // lookahead
-
-      // For each marketplace missing a suggestion, propose the next available code
-      for (const mp of activeMarketplaces) {
-        const key = `${displayCat}:${mp}`;
-        if (suggestions.has(key)) continue;
-
-        // Find next available integer code starting AFTER the highest existing code for this category
-        let nextCode = startFrom;
-        while (nextCode <= rangeEnd) {
-          const codeStr = String(nextCode);
-          if (!allExistingCodes.has(codeStr) && !globalClaimed.has(codeStr)) break;
-          nextCode++;
-        }
-
-        if (nextCode <= rangeEnd) {
-          const codeStr = String(nextCode);
-          globalClaimed.add(codeStr);
-          suggestions.set(key, {
-            code: codeStr,
-            name: `${mp} ${displayCat}`,
-            isGapFill: true,
-          });
+          if (candidate <= range.end) {
+            const codeStr = String(candidate);
+            globalClaimed.add(codeStr);
+            suggestions.set(key, {
+              code: codeStr,
+              name: `${mp} ${displayCat}`,
+              isGapFill: true,
+            });
+          }
         }
       }
     }
