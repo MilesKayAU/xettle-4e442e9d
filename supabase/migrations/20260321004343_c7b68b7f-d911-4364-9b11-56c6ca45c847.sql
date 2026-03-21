@@ -1,0 +1,1 @@
+DELETE FROM public.amazon_fbm_orders WHERE amazon_order_id = '250-3366733-4698245' AND status = 'dry_run';
