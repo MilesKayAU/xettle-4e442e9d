@@ -15,6 +15,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
 import { REQUIRED_CATEGORIES } from '@/actions/xeroReadiness';
+import { normalizeKeyLabel } from '@/utils/marketplace-codes';
 import { SCOPE_VERSION } from '@/policy/supportPolicy';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
