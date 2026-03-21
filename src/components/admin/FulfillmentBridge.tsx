@@ -823,6 +823,7 @@ function OrderMonitorTab() {
                   <TableHead></TableHead>
                   <TableHead>Amazon Order ID</TableHead>
                   <TableHead>Shopify Order ID</TableHead>
+                  <TableHead>Customer</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Shipping</TableHead>
                   <TableHead>Created</TableHead>
