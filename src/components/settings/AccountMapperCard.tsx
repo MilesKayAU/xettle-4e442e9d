@@ -1218,38 +1218,55 @@ export default function AccountMapperCard() {
                 </tr>
               </thead>
               <tbody>
-                {categoriesToShow.map((cat) => {
-                  const entry = mapping[cat];
-                  const currentCode = editableMapping[cat] || entry?.code || '';
-                  const isSplittable = (SPLITTABLE_CATEGORIES as readonly string[]).includes(cat);
-                  return (
-                    <React.Fragment key={cat}>
-                      <tr className="border-b last:border-b-0">
-                        <td className="p-2">
-                          <div className="font-medium">{cat}</div>
-                          <div className="text-xs text-muted-foreground">{CATEGORY_DESCRIPTIONS[cat]}</div>
-                        </td>
-                        <td className="p-2">
-                          {entry?.code ? (
-                            <span className="text-xs">
-                              <span className="font-mono">{entry.code}</span>
-                              <span className="text-muted-foreground ml-1">— {entry.name}</span>
-                            </span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="p-2 text-center">
-                          {renderStatusBadge(currentCode, cat)}
-                        </td>
-                        <td className="p-2">
-                          {renderAccountSelector(cat, cat)}
-                        </td>
-                      </tr>
-                      {isSplittable && renderMarketplaceOverrides(cat)}
-                    </React.Fragment>
-                  );
-                })}
+                {categoriesToShow.length === 0 && showOnlyMissing ? (
+                  <tr>
+                    <td colSpan={4} className="p-4 text-center text-sm text-muted-foreground">
+                      <div className="flex flex-col items-center gap-1">
+                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        <span>All base categories mapped</span>
+                        <button
+                          onClick={() => setShowOnlyMissing(false)}
+                          className="text-xs text-primary underline underline-offset-2 hover:text-primary/80"
+                        >
+                          Show all categories
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  categoriesToShow.map((cat) => {
+                    const entry = mapping[cat];
+                    const currentCode = editableMapping[cat] || entry?.code || '';
+                    const isSplittable = (SPLITTABLE_CATEGORIES as readonly string[]).includes(cat);
+                    return (
+                      <React.Fragment key={cat}>
+                        <tr className="border-b last:border-b-0">
+                          <td className="p-2">
+                            <div className="font-medium">{cat}</div>
+                            <div className="text-xs text-muted-foreground">{CATEGORY_DESCRIPTIONS[cat]}</div>
+                          </td>
+                          <td className="p-2">
+                            {entry?.code ? (
+                              <span className="text-xs">
+                                <span className="font-mono">{entry.code}</span>
+                                <span className="text-muted-foreground ml-1">— {entry.name}</span>
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="p-2 text-center">
+                            {renderStatusBadge(currentCode, cat)}
+                          </td>
+                          <td className="p-2">
+                            {renderAccountSelector(cat, cat)}
+                          </td>
+                        </tr>
+                        {isSplittable && renderMarketplaceOverrides(cat)}
+                      </React.Fragment>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
