@@ -557,6 +557,7 @@ export default function AccountMapperCard() {
           const parsed = JSON.parse(excludedSetting.value);
           if (parsed.keys) setExcludedMappings(new Set(parsed.keys));
           if (parsed.marketplaces) setExcludedMarketplaces(new Set(parsed.marketplaces));
+          if (parsed.categories) setExcludedCategories(new Set(parsed.categories));
         } catch { /* ignore */ }
       }
 
