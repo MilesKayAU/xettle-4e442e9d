@@ -64,7 +64,20 @@ const CATEGORY_LABELS: Record<string, string> = {
   code_architecture: 'Code Architecture',
   data_protection: 'Data Protection',
   operational: 'Operational',
+  security_controls: 'Security Controls',
+  documentation: 'Documentation',
+  scope_decision: 'Scope Decision',
   custom: 'Custom',
+};
+
+const CATEGORY_BADGES: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ReactNode }> = {
+  code_architecture: { label: 'Core', variant: 'outline', icon: <GitBranch className="h-3 w-3" /> },
+  data_protection: { label: 'Privacy', variant: 'destructive', icon: <Lock className="h-3 w-3" /> },
+  operational: { label: 'Ops', variant: 'secondary', icon: <Clock className="h-3 w-3" /> },
+  security_controls: { label: 'High priority', variant: 'destructive', icon: <Shield className="h-3 w-3" /> },
+  documentation: { label: 'Docs required', variant: 'default', icon: <FileCheck className="h-3 w-3" /> },
+  scope_decision: { label: 'Scope question', variant: 'secondary', icon: <AlertTriangle className="h-3 w-3" /> },
+  custom: { label: 'Custom', variant: 'outline', icon: <Plus className="h-3 w-3" /> },
 };
 
 /* ------------------------------------------------------------------ */
