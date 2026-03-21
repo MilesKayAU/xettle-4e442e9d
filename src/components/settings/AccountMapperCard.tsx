@@ -38,7 +38,7 @@ import CloneCoaDialog from './CloneCoaDialog';
 import CoaAuditPanel from './CoaAuditPanel';
 import XeroCoaSyncModal, { type SyncPreviewRow } from './XeroCoaSyncModal';
 
-type CoaValidation = 'valid' | 'missing' | 'inactive' | 'wrong_type';
+type CoaValidation = 'valid' | 'missing' | 'inactive' | 'wrong_type' | 'reuse_existing';
 
 interface MappingEntry {
   code: string;
