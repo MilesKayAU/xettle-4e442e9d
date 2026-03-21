@@ -1141,10 +1141,16 @@ export default function AccountMapperCard() {
     return <Badge variant="outline" className="text-red-700 border-red-300 bg-red-50">❌ Low</Badge>;
   };
 
-  const validateCode = (code: string | undefined, category: string): CoaValidation => {
+  const validateCode = (code: string | undefined, category: string, expectedName?: string): CoaValidation => {
     if (!code || coaMap.size === 0) return 'valid';
     const entry = coaMap.get(code);
-    if (!entry) return 'missing';
+    if (!entry) {
+      if (expectedName) {
+        const existingCode = coaNameToCodeMap.get(expectedName.toLowerCase().trim());
+        if (existingCode && existingCode !== code) return 'reuse_existing';
+      }
+      return 'missing';
+    }
     if (!entry.active) return 'inactive';
     const isRevenue = REVENUE_CATEGORIES_SET.has(category);
     const validTypes = isRevenue ? REVENUE_ACCOUNT_TYPES : EXPENSE_ACCOUNT_TYPES;
