@@ -528,8 +528,8 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched }: {
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Order context */}
-          <div className="flex items-center gap-3 p-3 rounded-md bg-muted/50 border">
+          {/* Order context with smart link */}
+          <div className="flex items-center justify-between gap-3 p-3 rounded-md bg-muted/50 border">
             <div className="text-sm">
               <span className="text-muted-foreground">Amazon:</span>{' '}
               <span className="font-mono font-medium">{order.amazon_order_id}</span>
@@ -540,6 +540,15 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched }: {
                 </>
               )}
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 gap-1.5"
+              onClick={() => window.open(buildSellerCentralUrl(order.amazon_order_id), '_blank')}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Open in Seller Central
+            </Button>
           </div>
 
           {/* Upload area */}
