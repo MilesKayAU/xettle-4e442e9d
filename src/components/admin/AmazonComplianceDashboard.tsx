@@ -163,7 +163,7 @@ function ComplianceChecklist() {
       user_id: userData.user.id,
       title: newTitle.trim(),
       description: newDesc.trim() || null,
-      category: 'custom',
+      category: newCategory,
     } as any) as any);
     if (!error) {
       setNewTitle('');
