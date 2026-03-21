@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, AlertTriangle, CheckCircle2, Upload, ShieldAlert, Clock, AlertCircle } from 'lucide-react';
+import { Loader2, AlertTriangle, CheckCircle2, Upload, ShieldAlert, Clock, AlertCircle, ChevronRight, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSettingsPin } from '@/hooks/use-settings-pin';
 import SettingsPinDialog from '@/components/shared/SettingsPinDialog';
@@ -46,6 +46,13 @@ interface Props {
 const BATCH_SIZE = 2;
 const HARD_RUN_LIMIT = 2;
 
+interface RunResult {
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: Array<{ code: string; error: string }>;
+}
+
 export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaAccounts, onSyncComplete }: Props) {
   const [mode, setMode] = useState<'create_only' | 'create_and_update'>('create_only');
   const [riskConsent, setRiskConsent] = useState(false);
@@ -55,15 +62,28 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
   const [rateLimitWait, setRateLimitWait] = useState<number | null>(null);
   const settingsPin = useSettingsPin();
 
+  // Track completed codes across multiple runs within the same modal session
+  const [completedCodes, setCompletedCodes] = useState<Set<string>>(new Set());
+  const [errorResults, setErrorResults] = useState<Array<{ code: string; error: string }>>([]);
+  const [lastRunResult, setLastRunResult] = useState<RunResult | null>(null);
+  // Offset tracks how many actionable rows have been processed across runs
+  const [runOffset, setRunOffset] = useState(0);
+
+  const resetState = useCallback(() => {
+    setMode('create_only');
+    setRiskConsent(false);
+    setCreateConsent(false);
+    setProgress(null);
+    setRateLimitWait(null);
+    setCompletedCodes(new Set());
+    setErrorResults([]);
+    setLastRunResult(null);
+    setRunOffset(0);
+  }, []);
+
   const handleOpenChange = (v: boolean) => {
     if (syncing) return;
-    if (!v) {
-      setMode('create_only');
-      setRiskConsent(false);
-      setCreateConsent(false);
-      setProgress(null);
-      setRateLimitWait(null);
-    }
+    if (!v) resetState();
     onOpenChange(v);
   };
 
@@ -79,17 +99,24 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
     return previewRows.filter(r => r.status === 'new' || r.status === 'changed');
   }, [previewRows, mode]);
 
-  const rowsForThisRun = useMemo(
-    () => actionableRows.slice(0, HARD_RUN_LIMIT),
-    [actionableRows],
+  // Remaining actionable rows (skip already completed)
+  const remainingRows = useMemo(
+    () => actionableRows.filter(r => !completedCodes.has(r.code)),
+    [actionableRows, completedCodes],
   );
 
-  const queuedForLaterCount = Math.max(actionableRows.length - rowsForThisRun.length, 0);
+  const rowsForThisRun = useMemo(
+    () => remainingRows.slice(0, HARD_RUN_LIMIT),
+    [remainingRows],
+  );
+
+  const queuedForLaterCount = Math.max(remainingRows.length - HARD_RUN_LIMIT, 0);
   const totalBatches = Math.ceil(rowsForThisRun.length / BATCH_SIZE);
 
   const canSync = rowsForThisRun.length > 0
     && createConsent
-    && (mode === 'create_only' || riskConsent);
+    && (mode === 'create_only' || riskConsent)
+    && !syncing;
 
   const handleSync = async () => {
     settingsPin.requirePin(executeSync);
@@ -99,6 +126,7 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
     setSyncing(true);
     setProgress(null);
     setRateLimitWait(null);
+    setLastRunResult(null);
 
     const accounts: CreateXeroAccountInput[] = rowsForThisRun.map(r => ({
       code: r.code,
@@ -118,17 +146,41 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
     setSyncing(false);
 
     if (result.success) {
-      const parts: string[] = [];
-      if (result.created > 0) parts.push(`${result.created} created in Xero`);
-      if (result.updated > 0) parts.push(`${result.updated} updated`);
-      if (result.skipped > 0) parts.push(`${result.skipped} skipped`);
-      if (result.errors.length > 0) parts.push(`${result.errors.length} error${result.errors.length !== 1 ? 's' : ''}`);
-      if (queuedForLaterCount > 0) parts.push(`${queuedForLaterCount} still queued for the next run`);
-      toast.success(`Done: ${parts.join(', ')}`);
+      const runResult: RunResult = {
+        created: result.created,
+        updated: result.updated,
+        skipped: result.skipped,
+        errors: result.errors,
+      };
+      setLastRunResult(runResult);
+
+      // Mark successfully processed codes as completed
+      const errorCodes = new Set(result.errors.map(e => e.code));
+      const newCompleted = new Set(completedCodes);
+      for (const row of rowsForThisRun) {
+        if (!errorCodes.has(row.code)) {
+          newCompleted.add(row.code);
+        }
+      }
+      setCompletedCodes(newCompleted);
+
+      // Accumulate errors
+      if (result.errors.length > 0) {
+        setErrorResults(prev => [...prev, ...result.errors]);
+      }
+
+      // Reset consent for next run
+      setCreateConsent(false);
+
       await onSyncComplete();
-      handleOpenChange(false);
+
+      // If nothing left, show final toast
+      const newRemaining = actionableRows.filter(r => !newCompleted.has(r.code));
+      if (newRemaining.length === 0) {
+        toast.success('All accounts synced to Xero');
+      }
     } else {
-      toast.error(`Failed: ${result.error || 'Unknown error'}`);
+      setLastRunResult({ created: 0, updated: 0, skipped: 0, errors: [{ code: 'batch', error: result.error || 'Unknown error' }] });
     }
   };
 
@@ -136,11 +188,16 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
     ? Math.round((progress.batchIndex / progress.totalBatches) * 100)
     : 0;
 
-  const getRunState = (row: SyncPreviewRow): 'idle' | 'next_run' | 'queued' | 'sending' | 'sent' | 'skipped' => {
+  const getRunState = (row: SyncPreviewRow): 'done' | 'error' | 'idle' | 'next_run' | 'queued' | 'sending' | 'sent' | 'skipped' => {
+    if (completedCodes.has(row.code)) return 'done';
+
+    const hasError = errorResults.some(e => e.code === row.code);
+    if (hasError) return 'error';
+
     const isActionable = row.status === 'new' || (row.status === 'changed' && mode === 'create_and_update');
     if (!isActionable) return 'skipped';
 
-    const idx = actionableRows.findIndex(r => r.code === row.code);
+    const idx = remainingRows.findIndex(r => r.code === row.code);
     if (idx === -1) return 'skipped';
     if (idx >= HARD_RUN_LIMIT) return 'next_run';
     if (!syncing || !progress) return 'idle';
@@ -160,18 +217,25 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
   };
 
   const renderActionCell = (row: SyncPreviewRow) => {
-    const isSkipped = row.status === 'changed' && mode === 'create_only';
     const state = getRunState(row);
 
-    if (!syncing) {
-      if (state === 'next_run') return <Badge variant="secondary" className="text-[10px]">Next run</Badge>;
-      if (state === 'idle') return <Badge className="bg-blue-100 text-blue-700 border-blue-300 text-[10px]">This run</Badge>;
-      if (isSkipped) return <span className="text-[10px] text-muted-foreground">Skipped</span>;
-      if (row.status === 'unchanged') return <span className="text-[10px] text-muted-foreground">No action</span>;
-      return null;
-    }
-
     switch (state) {
+      case 'done':
+        return (
+          <span className="inline-flex items-center gap-1 text-emerald-600">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            <span className="text-[10px] font-medium">Done</span>
+          </span>
+        );
+      case 'error': {
+        const err = errorResults.find(e => e.code === row.code);
+        return (
+          <span className="inline-flex items-center gap-1 text-destructive" title={err?.error}>
+            <XCircle className="h-3.5 w-3.5" />
+            <span className="text-[10px] font-medium">Failed</span>
+          </span>
+        );
+      }
       case 'sent':
         return (
           <span className="inline-flex items-center gap-1 text-emerald-600">
@@ -194,13 +258,21 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
           </span>
         );
       case 'next_run':
-        return <Badge variant="secondary" className="text-[10px]">Next run</Badge>;
+        return <Badge variant="secondary" className="text-[10px]">Next batch</Badge>;
+      case 'idle':
+        return <Badge className="bg-blue-100 text-blue-700 border-blue-300 text-[10px]">This batch</Badge>;
       case 'skipped':
-        return <span className="text-[10px] text-muted-foreground">Skipped</span>;
+        return <span className="text-[10px] text-muted-foreground">
+          {row.status === 'unchanged' ? 'No action' : 'Skipped'}
+        </span>;
       default:
         return null;
     }
   };
+
+  const totalCompleted = completedCodes.size;
+  const totalErrors = errorResults.length;
+  const allDone = remainingRows.length === 0;
 
   const actionLabel = mode === 'create_only'
     ? `Create ${rowsForThisRun.length} Account${rowsForThisRun.length !== 1 ? 's' : ''} in Xero`
@@ -223,25 +295,75 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
               Create Accounts in Xero
             </DialogTitle>
             <DialogDescription className="text-xs">
-              This changes your live Xero Chart of Accounts, and each click is now hard-limited to 2 total accounts.
+              Push accounts to Xero in batches of {HARD_RUN_LIMIT}. The modal stays open so you can continue pushing.
             </DialogDescription>
           </DialogHeader>
 
-          <Alert className="border-amber-300 bg-amber-50">
-            <AlertCircle className="h-4 w-4 text-amber-600" />
-            <AlertDescription className="text-xs text-amber-900">
-              <strong>Hard limit active:</strong> this run can only create or update <strong>2 accounts total</strong> in Xero.
-              {queuedForLaterCount > 0 ? ` ${queuedForLaterCount} more will stay queued for the next run.` : ''}
-            </AlertDescription>
-          </Alert>
-
+          {/* Overall progress summary */}
           <div className="flex items-center gap-3 text-xs bg-muted/30 rounded-md px-3 py-2 border border-border/50">
+            {totalCompleted > 0 && (
+              <>
+                <span className="text-emerald-700 font-medium">{totalCompleted} synced</span>
+                <span className="text-muted-foreground">·</span>
+              </>
+            )}
+            {totalErrors > 0 && (
+              <>
+                <span className="text-destructive font-medium">{totalErrors} failed</span>
+                <span className="text-muted-foreground">·</span>
+              </>
+            )}
             <span className="text-emerald-700 font-medium">{summary.newCount} to create</span>
             <span className="text-muted-foreground">·</span>
             <span className="text-amber-700 font-medium">{summary.changedCount} changed</span>
             <span className="text-muted-foreground">·</span>
             <span className="text-muted-foreground">{summary.unchangedCount} already in Xero</span>
           </div>
+
+          {/* Last run result banner */}
+          {lastRunResult && !syncing && (
+            <Alert className={lastRunResult.errors.length > 0 ? 'border-destructive/50 bg-destructive/5' : 'border-emerald-300 bg-emerald-50'}>
+              {lastRunResult.errors.length > 0 ? (
+                <XCircle className="h-4 w-4 text-destructive" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              )}
+              <AlertDescription className="text-xs space-y-1">
+                <div>
+                  <strong>Last batch:</strong>{' '}
+                  {lastRunResult.created > 0 && `${lastRunResult.created} created`}
+                  {lastRunResult.updated > 0 && `, ${lastRunResult.updated} updated`}
+                  {lastRunResult.skipped > 0 && `, ${lastRunResult.skipped} skipped`}
+                  {lastRunResult.errors.length > 0 && `, ${lastRunResult.errors.length} error${lastRunResult.errors.length !== 1 ? 's' : ''}`}
+                </div>
+                {lastRunResult.errors.length > 0 && (
+                  <div className="space-y-0.5 mt-1">
+                    {lastRunResult.errors.map((err, i) => (
+                      <div key={i} className="text-destructive text-[10px]">
+                        <span className="font-mono">{err.code}</span>: {err.error}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {remainingRows.length > 0 && (
+                  <div className="text-muted-foreground mt-1">
+                    {remainingRows.length} account{remainingRows.length !== 1 ? 's' : ''} remaining — tick the consent below and push the next batch.
+                  </div>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* All done banner */}
+          {allDone && lastRunResult && (
+            <Alert className="border-emerald-300 bg-emerald-50">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              <AlertDescription className="text-xs text-emerald-800">
+                <strong>All done!</strong> {totalCompleted} account{totalCompleted !== 1 ? 's' : ''} synced to Xero.
+                {totalErrors > 0 && ` ${totalErrors} had errors — review them above.`}
+              </AlertDescription>
+            </Alert>
+          )}
 
           <div className="flex items-center gap-3 rounded-md border border-border/50 px-3 py-2">
             <Switch
@@ -260,7 +382,7 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
             </Label>
           </div>
 
-          {mode === 'create_and_update' && (
+          {mode === 'create_and_update' && summary.changedCount > 0 && (
             <Alert className="border-destructive/50 bg-destructive/5">
               <AlertTriangle className="h-4 w-4 text-destructive" />
               <AlertDescription className="text-xs text-destructive">
@@ -269,12 +391,13 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
             </Alert>
           )}
 
-          {!syncing && rowsForThisRun.length > 0 && (
+          {/* Current batch info */}
+          {!syncing && !allDone && rowsForThisRun.length > 0 && (
             <div className="flex items-center gap-2 text-xs bg-primary/5 border border-primary/20 rounded-md px-3 py-2">
               <Upload className="h-3.5 w-3.5 text-primary shrink-0" />
               <span>
-                This run will push <strong>{rowsForThisRun.length}</strong> account{rowsForThisRun.length !== 1 ? 's' : ''} to Xero.
-                {queuedForLaterCount > 0 && <> The remaining <strong>{queuedForLaterCount}</strong> will wait for another manual run.</>}
+                Next batch: <strong>{rowsForThisRun.length}</strong> account{rowsForThisRun.length !== 1 ? 's' : ''}.
+                {queuedForLaterCount > 0 && <> Then <strong>{queuedForLaterCount}</strong> more after that.</>}
               </span>
             </div>
           )}
@@ -286,15 +409,15 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
                   {rateLimitWait
                     ? `⏳ Rate limited — retrying in ${rateLimitWait}s…`
                     : progress.batchIndex < progress.totalBatches
-                      ? <>Creating <strong>{rowsForThisRun.length}</strong> in Xero · <strong>Batch {progress.batchIndex + 1} of {progress.totalBatches}</strong></>
-                      : '✓ This run finished'}
+                      ? <>Creating · <strong>Batch {progress.batchIndex + 1} of {progress.totalBatches}</strong></>
+                      : '✓ Batch finished'}
                 </span>
                 <span className="text-xs text-muted-foreground">{progressPct}%</span>
               </div>
               <Progress value={progressPct} className="h-2" />
               <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                 {progress.createdSoFar > 0 && (
-                  <span className="text-emerald-600">{progress.createdSoFar} created in Xero</span>
+                  <span className="text-emerald-600">{progress.createdSoFar} created</span>
                 )}
                 {progress.updatedSoFar > 0 && (
                   <span className="text-amber-600">{progress.updatedSoFar} updated</span>
@@ -319,16 +442,17 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
               </thead>
               <tbody>
                 {previewRows.map((row) => {
-                  const isSkipped = row.status === 'changed' && mode === 'create_only';
-                  const runState = getRunState(row);
+                  const state = getRunState(row);
                   return (
                     <tr
                       key={row.code}
                       className={`border-b last:border-b-0 ${
+                        state === 'done' ? 'bg-emerald-50/50 opacity-60' : ''
+                      } ${state === 'error' ? 'bg-destructive/5' : ''} ${
                         row.status === 'unchanged' ? 'opacity-50' : ''
-                      } ${isSkipped ? 'bg-muted/20' : ''} ${
-                        runState === 'sending' ? 'bg-primary/5' : ''
-                      } ${runState === 'sent' ? 'bg-emerald-50/50' : ''}`}
+                      } ${state === 'sending' ? 'bg-primary/5' : ''} ${
+                        state === 'sent' ? 'bg-emerald-50/50' : ''
+                      }`}
                     >
                       <td className="p-2 font-mono">{row.code}</td>
                       <td className="p-2">
@@ -362,7 +486,7 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
             </div>
           )}
 
-          {!syncing && rowsForThisRun.length > 0 && (
+          {!syncing && !allDone && rowsForThisRun.length > 0 && (
             <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50/50 px-3 py-2">
               <Checkbox
                 id="create-consent"
@@ -372,37 +496,41 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
                 className="mt-0.5"
               />
               <Label htmlFor="create-consent" className="text-xs text-amber-900 cursor-pointer">
-                I confirm I want to push {rowsForThisRun.length} account{rowsForThisRun.length !== 1 ? 's' : ''} to live Xero in this run
+                I confirm I want to push {rowsForThisRun.length} account{rowsForThisRun.length !== 1 ? 's' : ''} to live Xero
               </Label>
             </div>
           )}
 
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={syncing}>
-              Cancel
+              {allDone ? 'Close' : 'Cancel'}
             </Button>
-            <Button
-              onClick={handleSync}
-              disabled={!canSync || syncing}
-              variant={mode === 'create_and_update' ? 'destructive' : 'default'}
-              className="gap-1.5"
-            >
-              {syncing ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Creating in Xero…
-                </>
-              ) : (
-                <>
-                  {mode === 'create_and_update' ? (
-                    <ShieldAlert className="h-3.5 w-3.5" />
-                  ) : (
-                    <Upload className="h-3.5 w-3.5" />
-                  )}
-                  {actionLabel}
-                </>
-              )}
-            </Button>
+            {!allDone && (
+              <Button
+                onClick={handleSync}
+                disabled={!canSync}
+                variant={mode === 'create_and_update' ? 'destructive' : 'default'}
+                className="gap-1.5"
+              >
+                {syncing ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Creating in Xero…
+                  </>
+                ) : (
+                  <>
+                    {lastRunResult ? (
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    ) : mode === 'create_and_update' ? (
+                      <ShieldAlert className="h-3.5 w-3.5" />
+                    ) : (
+                      <Upload className="h-3.5 w-3.5" />
+                    )}
+                    {lastRunResult ? `Push Next ${rowsForThisRun.length}` : actionLabel}
+                  </>
+                )}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
