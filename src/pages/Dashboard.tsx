@@ -148,10 +148,25 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
     none: 2,
     complete: 3,
   };
-  const sortedSections = [...sectionOrder].sort((a, b) => {
-    const byStatus = statusPriority[getStatus(a)] - statusPriority[getStatus(b)];
-    return byStatus !== 0 ? byStatus : sectionOrder.indexOf(a) - sectionOrder.indexOf(b);
-  });
+
+  // Stabilise sort order: compute once on first meaningful load, then freeze.
+  // This prevents jarring screen jumps when a section's status changes mid-session.
+  const [stableSortOrder, setStableSortOrder] = useState<string[] | null>(null);
+  const currentSort = useMemo(() => {
+    return [...sectionOrder].sort((a, b) => {
+      const byStatus = statusPriority[getStatus(a)] - statusPriority[getStatus(b)];
+      return byStatus !== 0 ? byStatus : sectionOrder.indexOf(a) - sectionOrder.indexOf(b);
+    });
+  }, [setupWarnings]);
+
+  useEffect(() => {
+    // Lock the sort order on first non-empty warnings load
+    if (!stableSortOrder && setupWarnings.length >= 0) {
+      setStableSortOrder(currentSort);
+    }
+  }, [currentSort, stableSortOrder, setupWarnings]);
+
+  const sortedSections = (stableSortOrder || currentSort) as typeof sectionOrder extends readonly (infer T)[] ? T[] : never;
 
   const blockingCount = sectionOrder.filter(k => getStatus(k) === 'incomplete').length;
   const warningOnlyCount = sectionOrder.filter(k => getStatus(k) === 'warning').length;
