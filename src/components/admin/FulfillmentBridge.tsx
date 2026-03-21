@@ -506,7 +506,7 @@ function OrderMonitorTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         {confirmLive ? (
           <div className="flex items-center gap-2 p-2 rounded-md border border-amber-300 bg-amber-50">
             <AlertTriangle className="h-4 w-4 text-amber-600" />
@@ -525,6 +525,28 @@ function OrderMonitorTab() {
         <Button onClick={() => runSync(true)} disabled={syncing} variant="outline" size="sm">
           {syncing ? <RefreshCw className="h-4 w-4 mr-1 animate-spin" /> : <FlaskConical className="h-4 w-4 mr-1" />}
           {syncing ? 'Syncing…' : 'Dry Run'}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            setSyncing(true);
+            const { data: { user } } = await supabase.auth.getUser();
+            const { data, error } = await supabase.functions.invoke('sync-amazon-fbm-orders', {
+              body: { user_id: user!.id, store_key: STORE_KEY, action: 'retry_all_failed' },
+            });
+            if (error) {
+              toast({ title: 'Retry failed', description: error.message, variant: 'destructive' });
+            } else {
+              toast({ title: 'Failed orders reset', description: `${data?.count || 0} order(s) queued for retry` });
+              loadOrders();
+            }
+            setSyncing(false);
+          }}
+          disabled={syncing || orders.filter(o => o.status === 'failed' || o.status === 'manual_review').length === 0}
+        >
+          <RotateCcw className="h-4 w-4 mr-1" />
+          Retry All Failed
         </Button>
         <Button variant="ghost" size="sm" onClick={loadOrders}>
           <RefreshCw className="h-4 w-4" />
