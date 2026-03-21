@@ -1205,14 +1205,14 @@ export default function AccountMapperCard() {
     const entry = coaMap.get(code!);
     const actualType = entry?.type || 'unknown';
     return (
-      <TooltipProvider>
+      <TooltipProvider delayDuration={100}>
         <Tooltip>
-          <TooltipTrigger asChild>
+          <TooltipTrigger>
             <span className="flex items-center gap-1 text-[10px] text-amber-600 cursor-help">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> Wrong type
             </span>
           </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-[280px] text-xs">
+          <TooltipContent side="top" className="max-w-[280px] text-xs z-[9999]">
             <p className="font-medium mb-1">Account type mismatch</p>
             <p>This category expects a <strong>{expectedType}</strong> account, but <strong>{code}</strong> is set as <strong>{actualType}</strong> in Xero.</p>
             <p className="mt-1 text-muted-foreground">Pick a different account from the dropdown, or change the account type in Xero directly (types can't be changed via API).</p>
@@ -1233,12 +1233,12 @@ export default function AccountMapperCard() {
     const expected = isRev ? 'Revenue/Sales' : 'Expense/Direct Costs';
     const actual = coaMap.get(code!)?.type || '?';
     return (
-      <TooltipProvider>
+      <TooltipProvider delayDuration={100}>
         <Tooltip>
-          <TooltipTrigger asChild>
+          <TooltipTrigger>
             <Badge variant="outline" className="text-amber-700 border-amber-300 text-[10px] cursor-help">Wrong type</Badge>
           </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-[260px] text-xs">
+          <TooltipContent side="top" className="max-w-[260px] text-xs z-[9999]">
             Expects <strong>{expected}</strong> but account is <strong>{actual}</strong> in Xero. Pick a different account or fix the type in Xero.
           </TooltipContent>
         </Tooltip>
