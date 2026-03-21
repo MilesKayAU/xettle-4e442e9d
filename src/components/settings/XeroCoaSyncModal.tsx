@@ -53,6 +53,18 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
   const [rateLimitWait, setRateLimitWait] = useState<number | null>(null);
   const settingsPin = useSettingsPin();
 
+  // Reset state when modal closes
+  const handleOpenChange = (v: boolean) => {
+    if (syncing) return;
+    if (!v) {
+      setMode('create_only');
+      setRiskConsent(false);
+      setProgress(null);
+      setRateLimitWait(null);
+    }
+    onOpenChange(v);
+  };
+
   // Compute summary
   const summary = useMemo(() => {
     const newCount = previewRows.filter(r => r.status === 'new').length;
