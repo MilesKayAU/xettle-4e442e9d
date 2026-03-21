@@ -993,7 +993,16 @@ export default function AccountMapperCard() {
     const marketplaces = getEffectiveMarketplaces();
     if (marketplaces.length === 0) return null;
 
-    return marketplaces.map(mp => {
+    // Sort marketplaces by their account code so rows display in numeric order (200, 201, 203…)
+    const sortedMarketplaces = [...marketplaces].sort((a, b) => {
+      const codeA = editableMapping[`${baseCat}:${a}`] || coaSuggestions.get(`${baseCat}:${a}`)?.code || mapping[`${baseCat}:${a}`]?.code || '';
+      const codeB = editableMapping[`${baseCat}:${b}`] || coaSuggestions.get(`${baseCat}:${b}`)?.code || mapping[`${baseCat}:${b}`]?.code || '';
+      const numA = parseFloat(codeA) || 9999;
+      const numB = parseFloat(codeB) || 9999;
+      return numA - numB;
+    });
+
+    return sortedMarketplaces.map(mp => {
       const key = `${baseCat}:${mp}`;
       const baseCode = editableMapping[baseCat] || mapping[baseCat]?.code || '';
       const coaSuggestion = coaSuggestions.get(key); // COA-scanned suggestion
