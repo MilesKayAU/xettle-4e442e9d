@@ -165,6 +165,7 @@ export interface BatchCreateResult {
   success: boolean;
   created: number;
   updated: number;
+  skipped: number;
   errors: { code: string; error: string }[];
   error?: string;
 }
