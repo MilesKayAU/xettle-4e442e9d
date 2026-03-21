@@ -799,8 +799,10 @@ export default function AccountMapperCard() {
     }
     if (splitByMarketplace) {
       for (const mp of getEffectiveMarketplaces()) {
+        if (excludedMarketplaces.has(mp)) continue;
         for (const cat of SPLITTABLE_CATEGORIES) {
           const key = `${cat}:${mp}`;
+          if (excludedMappings.has(key)) continue;
           if (editableMapping[key]) {
             finalCodes[key] = editableMapping[key];
           }
