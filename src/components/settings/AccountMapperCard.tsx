@@ -144,6 +144,7 @@ export default function AccountMapperCard() {
   // Excluded marketplace:category combos (persisted to app_settings)
   const [excludedMappings, setExcludedMappings] = useState<Set<string>>(new Set());
   const [excludedMarketplaces, setExcludedMarketplaces] = useState<Set<string>>(new Set());
+  const [excludedCategories, setExcludedCategories] = useState<Set<string>>(new Set());
 
   // Confirmed (saved) codes for comparison
   const [confirmedCodes, setConfirmedCodes] = useState<Record<string, string>>({});
@@ -556,6 +557,7 @@ export default function AccountMapperCard() {
           const parsed = JSON.parse(excludedSetting.value);
           if (parsed.keys) setExcludedMappings(new Set(parsed.keys));
           if (parsed.marketplaces) setExcludedMarketplaces(new Set(parsed.marketplaces));
+          if (parsed.categories) setExcludedCategories(new Set(parsed.categories));
         } catch { /* ignore */ }
       }
 
@@ -795,12 +797,14 @@ export default function AccountMapperCard() {
   const buildFinalCodes = () => {
     const finalCodes: Record<string, string> = {};
     for (const cat of CATEGORIES) {
+      if (excludedCategories.has(cat)) continue;
       finalCodes[cat] = editableMapping[cat] || mapping[cat]?.code || '';
     }
     if (splitByMarketplace) {
       for (const mp of getEffectiveMarketplaces()) {
         if (excludedMarketplaces.has(mp)) continue;
         for (const cat of SPLITTABLE_CATEGORIES) {
+          if (excludedCategories.has(cat)) continue;
           const key = `${cat}:${mp}`;
           if (excludedMappings.has(key)) continue;
           if (editableMapping[key]) {
@@ -932,11 +936,11 @@ export default function AccountMapperCard() {
   };
 
   /** Persist exclusion settings */
-  const saveExclusions = useCallback(async (keys: Set<string>, mps: Set<string>) => {
+  const saveExclusions = useCallback(async (keys: Set<string>, mps: Set<string>, cats?: Set<string>) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     await supabase.from('app_settings').upsert(
-      { user_id: user.id, key: 'coa_excluded_mappings', value: JSON.stringify({ keys: [...keys], marketplaces: [...mps] }) },
+      { user_id: user.id, key: 'coa_excluded_mappings', value: JSON.stringify({ keys: [...keys], marketplaces: [...mps], categories: cats ? [...cats] : [] }) },
       { onConflict: 'user_id,key' }
     );
   }, []);
@@ -945,19 +949,28 @@ export default function AccountMapperCard() {
     setExcludedMappings(prev => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
-      saveExclusions(next, excludedMarketplaces);
+      saveExclusions(next, excludedMarketplaces, excludedCategories);
       return next;
     });
-  }, [excludedMarketplaces, saveExclusions]);
+  }, [excludedMarketplaces, excludedCategories, saveExclusions]);
 
   const toggleExcludeMarketplace = useCallback((mp: string) => {
     setExcludedMarketplaces(prev => {
       const next = new Set(prev);
       if (next.has(mp)) next.delete(mp); else next.add(mp);
-      saveExclusions(excludedMappings, next);
+      saveExclusions(excludedMappings, next, excludedCategories);
       return next;
     });
-  }, [excludedMappings, saveExclusions]);
+  }, [excludedMappings, excludedCategories, saveExclusions]);
+
+  const toggleExcludeCategory = useCallback((cat: string) => {
+    setExcludedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat); else next.add(cat);
+      saveExclusions(excludedMappings, excludedMarketplaces, next);
+      return next;
+    });
+  }, [excludedMappings, excludedMarketplaces, saveExclusions]);
 
   const getEffectiveMarketplaces = (): string[] => {
     if (activeMarketplaces.length > 0) return activeMarketplaces;
@@ -1011,6 +1024,7 @@ export default function AccountMapperCard() {
       for (const mp of getEffectiveMarketplaces()) {
         if (excludedMarketplaces.has(mp)) continue;
         for (const cat of SPLITTABLE_CATEGORIES) {
+          if (excludedCategories.has(cat)) continue;
           const key = `${cat}:${mp}`;
           if (excludedMappings.has(key)) continue;
           const code = editableMapping[key] || mapping[key]?.code;
@@ -1208,7 +1222,7 @@ export default function AccountMapperCard() {
               <span className="text-xs text-muted-foreground">↳ {mp} {baseCat}</span>
               <button
                 onClick={() => toggleExcludeMapping(key)}
-                className="opacity-0 group-hover/row:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                className="text-muted-foreground hover:text-destructive transition-colors"
                 title={`Exclude ${mp} ${baseCat} from mapping`}
               >
                 <XCircle className="h-3 w-3" />
@@ -1438,6 +1452,117 @@ export default function AccountMapperCard() {
             )}
           </div>
 
+          {/* Split by marketplace toggle & filters */}
+          {getEffectiveMarketplaces().length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-3 rounded-lg border border-border/50 px-3 py-2">
+                <Switch
+                  id="split-marketplace"
+                  checked={splitByMarketplace}
+                  onCheckedChange={handleSplitToggle}
+                />
+                <Label htmlFor="split-marketplace" className="text-xs text-muted-foreground cursor-pointer">
+                  Split by marketplace — map each category per channel (Sales, Fees, Refunds, etc.)
+                </Label>
+              </div>
+
+              {splitByMarketplace && (
+                <div className="rounded-lg border border-border/50 px-3 py-2.5 space-y-3">
+                  {/* Marketplace filter */}
+                  {getEffectiveMarketplaces().length > 1 && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-medium flex items-center gap-1.5">
+                          <Filter className="h-3 w-3" />
+                          Filter marketplaces
+                        </Label>
+                        {excludedMarketplaces.size > 0 && (
+                          <button
+                            onClick={() => {
+                              setExcludedMarketplaces(new Set());
+                              saveExclusions(excludedMappings, new Set(), excludedCategories);
+                            }}
+                            className="text-[10px] text-primary hover:underline"
+                          >
+                            Clear all
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {getEffectiveMarketplaces().map(mp => {
+                          const isExcluded = excludedMarketplaces.has(mp);
+                          return (
+                            <button
+                              key={mp}
+                              onClick={() => toggleExcludeMarketplace(mp)}
+                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] border transition-colors ${
+                                isExcluded
+                                  ? 'bg-destructive/10 border-destructive/30 text-destructive line-through'
+                                  : 'bg-background border-border text-foreground hover:bg-accent'
+                              }`}
+                            >
+                              {isExcluded ? <XCircle className="h-2.5 w-2.5" /> : <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" />}
+                              {mp}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Category filter */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-medium flex items-center gap-1.5">
+                        <Filter className="h-3 w-3" />
+                        Filter categories
+                      </Label>
+                      {excludedCategories.size > 0 && (
+                        <button
+                          onClick={() => {
+                            setExcludedCategories(new Set());
+                            saveExclusions(excludedMappings, excludedMarketplaces, new Set());
+                          }}
+                          className="text-[10px] text-primary hover:underline"
+                        >
+                          Clear all
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {CATEGORIES.map(cat => {
+                        const isExcluded = excludedCategories.has(cat);
+                        return (
+                          <button
+                            key={cat}
+                            onClick={() => toggleExcludeCategory(cat)}
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] border transition-colors ${
+                              isExcluded
+                                ? 'bg-destructive/10 border-destructive/30 text-destructive line-through'
+                                : 'bg-background border-border text-foreground hover:bg-accent'
+                            }`}
+                          >
+                            {isExcluded ? <XCircle className="h-2.5 w-2.5" /> : <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" />}
+                            {cat}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {(excludedMarketplaces.size > 0 || excludedCategories.size > 0) && (
+                    <p className="text-[10px] text-muted-foreground">
+                      {excludedMarketplaces.size > 0 && `${excludedMarketplaces.size} marketplace${excludedMarketplaces.size > 1 ? 's' : ''} excluded`}
+                      {excludedMarketplaces.size > 0 && excludedCategories.size > 0 && ', '}
+                      {excludedCategories.size > 0 && `${excludedCategories.size} categor${excludedCategories.size > 1 ? 'ies' : 'y'} excluded`}
+                      {' — excluded items won\'t be included in Xero sync.'}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="border rounded-lg overflow-hidden">
             <table className="w-full text-sm">
               <thead>
@@ -1471,29 +1596,59 @@ export default function AccountMapperCard() {
                     const isSplittable = (SPLITTABLE_CATEGORIES as readonly string[]).includes(cat);
                     return (
                       <React.Fragment key={cat}>
-                        <tr className="border-b last:border-b-0">
-                          <td className="p-2">
-                            <div className="font-medium">{cat}</div>
-                            <div className="text-xs text-muted-foreground">{CATEGORY_DESCRIPTIONS[cat]}</div>
-                          </td>
-                          <td className="p-2">
-                            {entry?.code ? (
-                              <span className="text-xs">
-                                <span className="font-mono">{entry.code}</span>
-                                <span className="text-muted-foreground ml-1">— {entry.name}</span>
-                              </span>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">—</span>
-                            )}
-                          </td>
-                          <td className="p-2 text-center">
-                            {renderStatusBadge(currentCode, cat)}
-                          </td>
-                          <td className="p-2">
-                            {renderAccountSelector(cat, cat)}
-                          </td>
-                        </tr>
-                        {isSplittable && renderMarketplaceOverrides(cat)}
+                        {excludedCategories.has(cat) ? (
+                          <tr className="border-b last:border-b-0 bg-muted/10 opacity-40">
+                            <td className="p-2">
+                              <div className="font-medium line-through">{cat}</div>
+                              <div className="text-xs text-muted-foreground">{CATEGORY_DESCRIPTIONS[cat]}</div>
+                            </td>
+                            <td className="p-2" colSpan={2}>
+                              <span className="text-[10px] text-muted-foreground">Entire category excluded</span>
+                            </td>
+                            <td className="p-2">
+                              <Button variant="ghost" size="sm" className="h-5 text-[10px] px-1.5 gap-0.5" onClick={() => toggleExcludeCategory(cat)}>
+                                <Plus className="h-2.5 w-2.5" /> Restore
+                              </Button>
+                            </td>
+                          </tr>
+                        ) : (
+                          <>
+                            <tr className="border-b last:border-b-0">
+                              <td className="p-2">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-medium">{cat}</span>
+                                  {splitByMarketplace && isSplittable && (
+                                    <button
+                                      onClick={() => toggleExcludeCategory(cat)}
+                                      className="text-muted-foreground hover:text-destructive transition-colors"
+                                      title={`Exclude all ${cat} rows`}
+                                    >
+                                      <XCircle className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="text-xs text-muted-foreground">{CATEGORY_DESCRIPTIONS[cat]}</div>
+                              </td>
+                              <td className="p-2">
+                                {entry?.code ? (
+                                  <span className="text-xs">
+                                    <span className="font-mono">{entry.code}</span>
+                                    <span className="text-muted-foreground ml-1">— {entry.name}</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                )}
+                              </td>
+                              <td className="p-2 text-center">
+                                {renderStatusBadge(currentCode, cat)}
+                              </td>
+                              <td className="p-2">
+                                {renderAccountSelector(cat, cat)}
+                              </td>
+                            </tr>
+                            {isSplittable && renderMarketplaceOverrides(cat)}
+                          </>
+                        )}
                       </React.Fragment>
                     );
                   })
@@ -1502,68 +1657,7 @@ export default function AccountMapperCard() {
             </table>
           </div>
 
-          {/* Split by marketplace toggle */}
-          {getEffectiveMarketplaces().length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-3 rounded-lg border border-border/50 px-3 py-2">
-                <Switch
-                  id="split-marketplace"
-                  checked={splitByMarketplace}
-                  onCheckedChange={handleSplitToggle}
-                />
-                <Label htmlFor="split-marketplace" className="text-xs text-muted-foreground cursor-pointer">
-                  Split by marketplace — map each category per channel (Sales, Fees, Refunds, etc.)
-                </Label>
-              </div>
-
-              {/* Marketplace exclusion filter */}
-              {splitByMarketplace && getEffectiveMarketplaces().length > 1 && (
-                <div className="rounded-lg border border-border/50 px-3 py-2.5 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-medium flex items-center gap-1.5">
-                      <Filter className="h-3 w-3" />
-                      Exclude marketplaces from COA mapping
-                    </Label>
-                    {excludedMarketplaces.size > 0 && (
-                      <button
-                        onClick={() => {
-                          setExcludedMarketplaces(new Set());
-                          saveExclusions(excludedMappings, new Set());
-                        }}
-                        className="text-[10px] text-primary hover:underline"
-                      >
-                        Clear all
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {getEffectiveMarketplaces().map(mp => {
-                      const isExcluded = excludedMarketplaces.has(mp);
-                      return (
-                        <button
-                          key={mp}
-                          onClick={() => toggleExcludeMarketplace(mp)}
-                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] border transition-colors ${
-                            isExcluded
-                              ? 'bg-destructive/10 border-destructive/30 text-destructive line-through'
-                              : 'bg-background border-border text-foreground hover:bg-accent'
-                          }`}
-                        >
-                          {isExcluded ? <XCircle className="h-2.5 w-2.5" /> : <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" />}
-                          {mp}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {excludedMarketplaces.size > 0 && (
-                    <p className="text-[10px] text-muted-foreground">
-                      {excludedMarketplaces.size} marketplace{excludedMarketplaces.size > 1 ? 's' : ''} excluded — their rows won't be included in Xero sync or mapping confirmation.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+          {/* Filter panel moved above table */}
 
           {notes && (
             <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground flex gap-2">
