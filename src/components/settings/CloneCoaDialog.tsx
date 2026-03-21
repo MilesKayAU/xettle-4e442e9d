@@ -74,6 +74,8 @@ export default function CloneCoaDialog({
   const [cloneRows, setCloneRows] = useState<CloneAccountRow[]>([]);
   const [creating, setCreating] = useState(false);
   const [matchPattern, setMatchPattern] = useState(true);
+  const [showChecklist, setShowChecklist] = useState(true);
+  const [categorySelections, setCategorySelections] = useState<Record<string, boolean>>({});
 
   // AI Review state
   const [aiReview, setAiReview] = useState<AiReviewResult | null>(null);
