@@ -163,7 +163,7 @@ export default function Amazon() {
               Hidden costs most tools miss
             </div>
             <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-              Amazon charges for everything.<br />Xettle shows all of it.
+               Marketplace fees add up fast.<br />Xettle shows all of them.
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Beyond commission and FBA fees, Amazon deducts dozens of charges from your settlements. Xettle parses every line — nothing is lumped into "other".
