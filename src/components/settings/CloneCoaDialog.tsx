@@ -78,10 +78,21 @@ export default function CloneCoaDialog({
 
   const isNonAuGst = taxProfile && taxProfile !== 'AU_GST';
 
-  // Validate template eligibility (prevent clone loops)
+  // Validate template eligibility — relaxed since we supplement with best-practice defaults
   const templateEligibility = useMemo(() => {
     if (!templateMarketplace) return { eligible: true };
-    return validateTemplateEligibility(templateMarketplace, coaAccounts);
+    // Any marketplace with at least 1 account is eligible as a template
+    // since missing categories are filled from other marketplaces or defaults
+    const templates = coaAccounts.filter(a => {
+      if (!a.account_code || !a.is_active) return false;
+      const words = templateMarketplace.toLowerCase().split(/\s+/).filter(w => w.length >= 3);
+      return words.length > 0
+        ? words.every(w => a.account_name.toLowerCase().includes(w))
+        : a.account_name.toLowerCase().includes(templateMarketplace.toLowerCase());
+    });
+    return templates.length > 0
+      ? { eligible: true }
+      : { eligible: false, reason: `No matching COA accounts found for ${templateMarketplace}. Try a different template.` };
   }, [templateMarketplace, coaAccounts]);
 
   // When template changes, rebuild the clone rows via canonical action
