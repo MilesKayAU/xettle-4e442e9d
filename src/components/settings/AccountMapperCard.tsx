@@ -144,6 +144,7 @@ export default function AccountMapperCard() {
   // Excluded marketplace:category combos (persisted to app_settings)
   const [excludedMappings, setExcludedMappings] = useState<Set<string>>(new Set());
   const [excludedMarketplaces, setExcludedMarketplaces] = useState<Set<string>>(new Set());
+  const [excludedCategories, setExcludedCategories] = useState<Set<string>>(new Set());
 
   // Confirmed (saved) codes for comparison
   const [confirmedCodes, setConfirmedCodes] = useState<Record<string, string>>({});
