@@ -1,36 +1,51 @@
 
 
-## Problem
+# Phase 1 (Beta-scoped): Hardening the FBM Bridge
 
-The batch logic **is** sending 2 accounts at a time (BATCH_SIZE = 2) — the screenshot showing "batch 7 of 38" confirms this (75 accounts ÷ 2 ≈ 38 batches). However, the UI makes it look like everything fires at once because:
+Given your framing — this is a personal-use feature that earns Amazon app approval as a byproduct, parked as admin-only beta — the scope narrows significantly. Here is a minimal, focused plan.
 
-1. All rows stay visible with green checkmarks during sync — no visual distinction between "sent", "sending now", and "queued"
-2. The progress text ("Sending batch 7 of 38…") is small and easy to miss
-3. No per-row feedback showing which accounts have already been pushed vs which are still waiting
+## What gets built
 
-## Plan
+### 1. Error Retry Queue + Email Alerts
+**Database migration:** Add `retry_count` (int, default 0) and `last_retry_at` (timestamptz) to `amazon_fbm_orders`.
 
-### 1. Add per-row sync status indicators
+**`sync-amazon-fbm-orders`:** During each poll, pick up `failed` rows where `retry_count < 3` and backoff has elapsed (5m / 15m / 60m). Re-attempt Shopify creation. After 3 failures, set status to `manual_review` and enqueue an alert email via existing `enqueue_email` RPC.
 
-Track which batch index each row belongs to and show three states in the Action column during sync:
-- **Sent** (green check + "Sent") — batches already completed
-- **Sending** (spinner) — current batch in flight
-- **Queued** (clock/dash) — not yet sent
+**`FulfillmentBridge.tsx`:** Add a "Retry All Failed" button in the Order Monitor tab.
 
-This requires passing `batchIndex` from progress into the modal state and computing each row's batch membership.
+### 2. Shipping Service Level Passthrough
+**Database migration:** Add `shipping_service_level` (text, nullable) to `amazon_fbm_orders`.
 
-### 2. Improve progress bar messaging
+**`sync-amazon-fbm-orders`:** Extract `shipmentServiceLevelCategory` from the Amazon order payload and store it. Tag the Shopify draft order with `shipping:Expedited` (or whatever the value is).
 
-Replace the small text with a more prominent strip:
-- "Pushing 2 accounts at a time to stay within Xero rate limits"
-- Bold the current batch count: **"Batch 7 of 38"**
-- Show running tally: "12 created so far"
+**`shopify-fbm-fulfillment-webhook`:** Use stored shipping level instead of hardcoded `'Standard'` when calling `confirmShipment`.
 
-### 3. Add a pre-sync confirmation count
+### 3. Remove Hardcoded Store Domain
+Replace `SHOPIFY_FBM_STORE = 'mileskayaustralia.myshopify.com'` in 3 locations:
+- **`sync-amazon-fbm-orders`** — query `shopify_tokens` for first active row, no domain filter
+- **`shopify-auth`** — remove fallback default
+- **`FulfillmentBridge.tsx`** — read shop domain from `shopify_tokens` instead of hardcoding
 
-Before clicking Sync, show: **"This will push 75 new accounts to Xero in batches of 2 (≈ 38 API calls)"** so the user knows what to expect.
+### 4. Cancellation Detection (lightweight)
+**`sync-amazon-fbm-orders`:** When re-checking existing `synced`/`created` orders during a poll, detect Amazon `Canceled` status. Update row to `cancelled`, cancel the Shopify draft order via REST API, log a `system_event`, and send an alert email.
 
-### Files changed
+No reverse flow (Shopify → Amazon cancel) in this phase.
 
-- `src/components/settings/XeroCoaSyncModal.tsx` — all three changes above
+### 5. Circuit Breaker (Amazon approval requirement)
+Add a simple counter in memory within `sync-amazon-fbm-orders`: after 5 consecutive API failures (429s or 5xx), stop polling for that cycle and log `fbm_circuit_open` to `system_events` with an alert email. Resets on next successful call or next poll cycle.
+
+---
+
+## Files changed
+
+| File | What |
+|------|------|
+| Database migration | `retry_count`, `last_retry_at`, `shipping_service_level` on `amazon_fbm_orders` |
+| `supabase/functions/sync-amazon-fbm-orders/index.ts` | Retry loop, shipping extraction, dynamic store, cancellation detection, circuit breaker, alert emails |
+| `supabase/functions/shopify-fbm-fulfillment-webhook/index.ts` | Use stored shipping level, dynamic store resolution |
+| `supabase/functions/shopify-auth/index.ts` | Remove hardcoded store fallback |
+| `src/components/admin/FulfillmentBridge.tsx` | "Retry All Failed" button, dynamic store, shipping level display |
+
+## What is explicitly NOT built
+Returns/refunds, inventory sync, multi-store UI, bulk CSV import, dashboard metrics, multi-currency — all parked unless needed for your store or Amazon approval.
 
