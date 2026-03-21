@@ -170,6 +170,7 @@ export default function MarketplaceSwitcher({
   const [addingCode, setAddingCode] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [registryEntries, setRegistryEntries] = useState<MarketplaceDefinition[]>([]);
+  const [togglingPause, setTogglingPause] = useState<string | null>(null);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingCode, setDeletingCode] = useState<string | null>(null);
