@@ -982,6 +982,7 @@ export default function AccountMapperCard() {
       const overrideCode = editableMapping[key] || '';
       const aiSuggestion = mapping[key]; // AI-suggested per-rail mapping
       const coaSuggestion = coaSuggestions.get(key); // COA-scanned suggestion
+      const isGapFill = coaSuggestion?.isGapFill === true;
       const suggestion = aiSuggestion || (coaSuggestion ? { code: coaSuggestion.code, name: coaSuggestion.name } : null);
       return (
         <tr key={key} className="border-b last:border-b-0 bg-muted/20">
@@ -993,6 +994,11 @@ export default function AccountMapperCard() {
               <span className="text-xs">
                 <span className="font-mono">{suggestion.code}</span>
                 <span className="text-muted-foreground ml-1">— {suggestion.name}</span>
+                {isGapFill && (
+                  <Badge variant="outline" className="ml-1.5 text-[9px] border-amber-300 text-amber-700">
+                    Needs account
+                  </Badge>
+                )}
               </span>
             ) : (
               <span className="text-xs text-muted-foreground">
