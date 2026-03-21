@@ -226,6 +226,7 @@ export async function batchCreateXeroAccounts(
           success: false,
           created: totalCreated,
           updated: totalUpdated,
+          skipped: totalSkipped,
           errors: allErrors,
           error: `Rate limited on batch ${i + 1} after ${MAX_RETRIES_PER_BATCH} retries`,
         };
