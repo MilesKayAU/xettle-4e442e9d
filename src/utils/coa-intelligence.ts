@@ -262,7 +262,7 @@ export function analyseCoA(
         if (matchedCategory) break;
       }
 
-      if (matchedCategory) {
+      if (matchedCategory && isTypeCompatible(matchedCategory, account.account_type)) {
         // Avoid duplicate suggestions for same marketplace+category
         const exists = mapping_suggestions.some(
           ms => ms.marketplace_code === detected.marketplace_code
