@@ -997,7 +997,6 @@ export default function AccountMapperCard() {
       }
       const overrideCode = editableMapping[key] || coaSuggestion?.code || '';
       const aiSuggestion = mapping[key]; // AI-suggested per-rail mapping
-      const coaSuggestion = coaSuggestions.get(key); // COA-scanned suggestion
       const isGapFill = coaSuggestion?.isGapFill === true;
       const suggestion = aiSuggestion || (coaSuggestion ? { code: coaSuggestion.code, name: coaSuggestion.name } : null);
       return (
