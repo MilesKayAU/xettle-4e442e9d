@@ -68,6 +68,7 @@ const NAV_GROUPS = [
       { id: 'marketplaces', label: 'Marketplace Config', icon: Store },
       { id: 'fulfillment', label: 'Fulfillment Bridge', icon: Package },
       { id: 'shipping', label: 'Shipping Estimates', icon: Truck },
+      { id: 'amazon-compliance', label: 'Amazon API', icon: Shield },
     ],
   },
   {
