@@ -38,7 +38,7 @@ import CloneCoaDialog from './CloneCoaDialog';
 import CoaAuditPanel from './CoaAuditPanel';
 import XeroCoaSyncModal, { type SyncPreviewRow } from './XeroCoaSyncModal';
 
-type CoaValidation = 'valid' | 'missing' | 'inactive' | 'wrong_type';
+type CoaValidation = 'valid' | 'missing' | 'inactive' | 'wrong_type' | 'reuse_existing';
 
 interface MappingEntry {
   code: string;
@@ -153,7 +153,7 @@ export default function AccountMapperCard() {
   // Confirmed (saved) codes for comparison
   const [confirmedCodes, setConfirmedCodes] = useState<Record<string, string>>({});
 
-  // Build CoA lookup map
+  // Build CoA lookup maps
   const coaMap = useMemo(() => {
     const map = new Map<string, { name: string; type: string; active: boolean }>();
     for (const acc of coaAccounts) {
@@ -163,6 +163,16 @@ export default function AccountMapperCard() {
           type: (acc.account_type || '').toUpperCase(),
           active: acc.is_active !== false,
         });
+      }
+    }
+    return map;
+  }, [coaAccounts]);
+
+  const coaNameToCodeMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const acc of coaAccounts) {
+      if (acc.account_code && acc.account_name) {
+        map.set(acc.account_name.toLowerCase().trim(), acc.account_code);
       }
     }
     return map;
@@ -1131,10 +1141,16 @@ export default function AccountMapperCard() {
     return <Badge variant="outline" className="text-red-700 border-red-300 bg-red-50">❌ Low</Badge>;
   };
 
-  const validateCode = (code: string | undefined, category: string): CoaValidation => {
+  const validateCode = (code: string | undefined, category: string, expectedName?: string): CoaValidation => {
     if (!code || coaMap.size === 0) return 'valid';
     const entry = coaMap.get(code);
-    if (!entry) return 'missing';
+    if (!entry) {
+      if (expectedName) {
+        const existingCode = coaNameToCodeMap.get(expectedName.toLowerCase().trim());
+        if (existingCode && existingCode !== code) return 'reuse_existing';
+      }
+      return 'missing';
+    }
     if (!entry.active) return 'inactive';
     const isRevenue = REVENUE_CATEGORIES_SET.has(category);
     const validTypes = isRevenue ? REVENUE_ACCOUNT_TYPES : EXPENSE_ACCOUNT_TYPES;
@@ -1142,10 +1158,15 @@ export default function AccountMapperCard() {
     return 'valid';
   };
 
-  const renderValidationBadge = (code: string | undefined, category: string) => {
+  const renderValidationBadge = (code: string | undefined, category: string, expectedName?: string) => {
     if (!code || coaMap.size === 0) return null;
-    const status = validateCode(code, category);
+    const status = validateCode(code, category, expectedName);
     if (status === 'valid') return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />;
+    if (status === 'reuse_existing') return (
+      <span className="flex items-center gap-1 text-[10px] text-amber-600">
+        <Info className="h-3.5 w-3.5 shrink-0" /> Use existing
+      </span>
+    );
     if (status === 'missing') return (
       <span className="flex items-center gap-1 text-[10px] text-destructive">
         <XCircle className="h-3.5 w-3.5 shrink-0" /> Not in Xero
@@ -1163,10 +1184,11 @@ export default function AccountMapperCard() {
     );
   };
 
-  const renderStatusBadge = (code: string | undefined, category: string) => {
+  const renderStatusBadge = (code: string | undefined, category: string, expectedName?: string) => {
     if (!code) return <Badge variant="outline" className="text-destructive border-destructive/30 text-[10px]">Unmapped</Badge>;
-    const status = validateCode(code, category);
+    const status = validateCode(code, category, expectedName);
     if (status === 'valid') return <Badge variant="outline" className="text-emerald-700 border-emerald-300 text-[10px]">Mapped</Badge>;
+    if (status === 'reuse_existing') return <Badge variant="outline" className="text-amber-700 border-amber-300 text-[10px]">Use existing</Badge>;
     if (status === 'missing') return <Badge variant="outline" className="text-destructive border-destructive/30 text-[10px]">Not in Xero</Badge>;
     if (status === 'inactive') return <Badge variant="outline" className="text-destructive border-destructive/30 text-[10px]">Inactive</Badge>;
     return <Badge variant="outline" className="text-amber-700 border-amber-300 text-[10px]">Wrong type</Badge>;
@@ -1329,7 +1351,7 @@ export default function AccountMapperCard() {
                 <span className="text-muted-foreground ml-1">— {suggestion.name}</span>
                 {isGapFill && (
                   <Badge variant="outline" className="ml-1.5 text-[9px] border-amber-300 text-amber-700">
-                    Needs account
+                    Create if missing
                   </Badge>
                 )}
               </span>
@@ -1340,7 +1362,7 @@ export default function AccountMapperCard() {
             )}
           </td>
           <td className="p-2">
-            {renderStatusBadge(overrideCode || baseCode, baseCat)}
+            {renderStatusBadge(overrideCode || baseCode, baseCat, suggestion?.name)}
           </td>
           <td className="p-2">
             {renderAccountSelector(key, baseCat, baseCode)}
@@ -1353,12 +1375,17 @@ export default function AccountMapperCard() {
   // Count missing mappings
   const missingCount = CATEGORIES.filter(cat => {
     const code = editableMapping[cat] || mapping[cat]?.code;
-    return !code || validateCode(code, cat) !== 'valid';
+    const expectedName = mapping[cat]?.name;
+    return !code || !['valid', 'reuse_existing'].includes(validateCode(code, cat, expectedName));
   }).length;
 
-  // Count codes that exist in editableMapping but are not found in Xero COA
+  // Count codes that truly need creation in Xero (exclude name-clash rows that should reuse an existing code)
   const notInXeroCount = coaMap.size > 0
-    ? Object.values(editableMapping).filter(code => code && !coaMap.has(code)).length
+    ? Object.entries(editableMapping).filter(([key, code]) => {
+        if (!code || coaMap.has(code)) return false;
+        const expectedName = mapping[key]?.name || coaSuggestions.get(key)?.name;
+        return validateCode(code, key.split(':')[0], expectedName) === 'missing';
+      }).length
     : 0;
 
   const renderPinDialog = () => (
@@ -1795,7 +1822,7 @@ export default function AccountMapperCard() {
                                 )}
                               </td>
                               <td className="p-2 text-center">
-                                {renderStatusBadge(currentCode, cat)}
+                                {renderStatusBadge(currentCode, cat, entry?.name)}
                               </td>
                               <td className="p-2">
                                 {renderAccountSelector(cat, cat)}
@@ -1840,7 +1867,7 @@ export default function AccountMapperCard() {
             <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20 px-3 py-2.5">
               <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
               <span className="text-xs text-amber-800 dark:text-amber-200 flex-1">
-                {notInXeroCount} account code{notInXeroCount > 1 ? 's' : ''} not yet in Xero — create them before confirming.
+                {notInXeroCount} account code{notInXeroCount > 1 ? 's are' : ' is'} genuinely missing in Xero and can be created automatically. Name clashes or wrong-type accounts need you to pick the existing account instead.
               </span>
               <Button
                 variant="outline"
@@ -1920,7 +1947,7 @@ export default function AccountMapperCard() {
                 <span className="flex items-center gap-1.5">
                   <span className="font-mono">{code || '—'}</span>
                   {coaEntry && <span className="text-muted-foreground truncate max-w-[100px]">{coaEntry.name}</span>}
-                  {renderValidationBadge(code, cat)}
+                  {renderValidationBadge(code, cat, entry?.name)}
                 </span>
               </div>
             );
@@ -1939,7 +1966,7 @@ export default function AccountMapperCard() {
                     <span className="text-muted-foreground">{mp} {cat}</span>
                     <span className="flex items-center gap-1.5">
                       <span className="font-mono">{code || '—'}</span>
-                      {renderValidationBadge(code, cat || 'Sales')}
+                      {renderValidationBadge(code, cat || 'Sales', mapping[key]?.name)}
                     </span>
                   </div>
                 );
