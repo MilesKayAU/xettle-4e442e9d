@@ -2053,6 +2053,7 @@ export default function AccountMapperCard() {
         ]);
         setCoaAccounts(accounts);
         setCoaLastSynced(lastSynced);
+        queryClient.invalidateQueries({ queryKey: ['dashboard-task-counts'] });
       }}
     />
     </>
