@@ -31,13 +31,29 @@ Deno.serve(async (req) => {
   const headers = { ...corsHeaders, 'Content-Type': 'application/json' }
 
   try {
+    // Verify Shopify HMAC signature
+    const hmacHeader = req.headers.get('x-shopify-hmac-sha256') || ''
+    const rawBody = await req.text()
+    const shopifySecret = Deno.env.get('SHOPIFY_CLIENT_SECRET') || ''
+
+    if (shopifySecret && hmacHeader) {
+      const isValid = await verifyShopifyHmac(rawBody, hmacHeader, shopifySecret)
+      if (!isValid) {
+        logger.warn('fbm_webhook_hmac_invalid', { hmac: hmacHeader.substring(0, 8) })
+        return new Response(JSON.stringify({ error: 'Invalid HMAC signature' }), { status: 401, headers })
+      }
+    } else if (!hmacHeader) {
+      logger.warn('fbm_webhook_no_hmac', { reason: 'Missing x-shopify-hmac-sha256 header' })
+      // Allow through for now but log — Shopify always sends HMAC on real webhooks
+    }
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
     // Parse webhook payload
-    const payload = await req.json()
+    const payload = JSON.parse(rawBody)
     const shopifyOrderId = payload?.id || payload?.order_id
     
     if (!shopifyOrderId) {
