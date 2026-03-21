@@ -98,6 +98,7 @@ export default function CloneCoaDialog({
       coaAccounts,
       existingCodes: allCodes,
       matchPattern,
+      allCoveredMarketplaces: coveredMarketplaces,
     });
 
     setCloneRows(rows);
