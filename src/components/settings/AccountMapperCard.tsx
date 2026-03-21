@@ -1648,6 +1648,40 @@ export default function AccountMapperCard() {
                     </div>
                   </div>
 
+                  {/* Ignored marketplaces (site-wide) */}
+                  {ignoredMarketplaces.size > 0 && (
+                    <div className="space-y-1.5 border-t pt-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-medium flex items-center gap-1.5">
+                          <XCircle className="h-3 w-3" />
+                          Ignored marketplaces (hidden site-wide)
+                        </Label>
+                        <button
+                          onClick={() => {
+                            setIgnoredMarketplaces(new Set());
+                            saveExclusions(excludedMappings, excludedMarketplaces, excludedCategories, new Set());
+                          }}
+                          className="text-[10px] text-primary hover:underline"
+                        >
+                          Restore all
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[...ignoredMarketplaces].map(mp => (
+                          <button
+                            key={mp}
+                            onClick={() => toggleIgnoreMarketplace(mp)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] border bg-muted/50 border-border text-muted-foreground hover:bg-accent transition-colors"
+                          >
+                            <XCircle className="h-2.5 w-2.5" />
+                            {mp}
+                            <span className="text-primary ml-0.5">restore</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {(excludedMarketplaces.size > 0 || excludedCategories.size > 0) && (
                     <p className="text-[10px] text-muted-foreground">
                       {excludedMarketplaces.size > 0 && `${excludedMarketplaces.size} marketplace${excludedMarketplaces.size > 1 ? 's' : ''} excluded`}
