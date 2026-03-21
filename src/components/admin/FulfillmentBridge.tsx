@@ -1034,15 +1034,11 @@ function OrderMonitorTab() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead></TableHead>
-                  <TableHead>Amazon Order ID</TableHead>
-                  <TableHead>Product</TableHead>
-                  <TableHead>Shopify Order ID</TableHead>
+                  <TableHead className="w-8"></TableHead>
+                  <TableHead>Order</TableHead>
                   <TableHead>Customer</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Shipping</TableHead>
                   <TableHead>Created</TableHead>
-                  <TableHead>Error</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1051,88 +1047,87 @@ function OrderMonitorTab() {
                   <Collapsible key={order.id} asChild open={expandedId === order.id} onOpenChange={open => setExpandedId(open ? order.id : null)}>
                     <>
                       <TableRow className="cursor-pointer">
-                        <TableCell>
+                        <TableCell className="w-8 p-1">
                           <CollapsibleTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-6 w-6">
                               <ChevronDown className={`h-4 w-4 transition-transform ${expandedId === order.id ? 'rotate-180' : ''}`} />
                             </Button>
                           </CollapsibleTrigger>
                         </TableCell>
-                        <TableCell className="font-mono text-sm">
-                          {editingUrlOrderId === order.id ? (
-                            <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                              <Input
-                                value={editUrlValue}
-                                onChange={e => setEditUrlValue(e.target.value)}
-                                placeholder="Paste Seller Central URL"
-                                className="h-7 text-xs w-[260px]"
-                                autoFocus
-                                onKeyDown={e => {
-                                  if (e.key === 'Enter') handleUrlEditSubmit(order.amazon_order_id);
-                                  if (e.key === 'Escape') setEditingUrlOrderId(null);
-                                }}
-                              />
-                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleUrlEditSubmit(order.amazon_order_id)}>
-                                <Check className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingUrlOrderId(null)}>
-                                <X className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-1.5">
-                              <span>{order.amazon_order_id}</span>
-                              <a
-                                href={buildSellerCentralUrl(order.amazon_order_id)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={e => e.stopPropagation()}
-                                title="Open in Seller Central"
-                                className="text-primary hover:text-primary/80"
-                              >
-                                <ExternalLink className="h-3.5 w-3.5" />
-                              </a>
-                              <button
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  setEditUrlValue(buildSellerCentralUrl(order.amazon_order_id));
-                                  setEditingUrlOrderId(order.id);
-                                }}
-                                title="Edit URL"
-                                className="text-muted-foreground hover:text-foreground"
-                              >
-                                <Pencil className="h-3 w-3" />
-                              </button>
-                            </div>
-                          )}
+                        <TableCell>
+                          <div className="space-y-1">
+                            {editingUrlOrderId === order.id ? (
+                              <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                <Input
+                                  value={editUrlValue}
+                                  onChange={e => setEditUrlValue(e.target.value)}
+                                  placeholder="Paste Seller Central URL"
+                                  className="h-7 text-xs w-[220px]"
+                                  autoFocus
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') handleUrlEditSubmit(order.amazon_order_id);
+                                    if (e.key === 'Escape') setEditingUrlOrderId(null);
+                                  }}
+                                />
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleUrlEditSubmit(order.amazon_order_id)}>
+                                  <Check className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingUrlOrderId(null)}>
+                                  <X className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono text-sm">{order.amazon_order_id}</span>
+                                <a
+                                  href={buildSellerCentralUrl(order.amazon_order_id)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={e => e.stopPropagation()}
+                                  title="Open in Seller Central"
+                                  className="text-primary hover:text-primary/80"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </a>
+                                <button
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    setEditUrlValue(buildSellerCentralUrl(order.amazon_order_id));
+                                    setEditingUrlOrderId(order.id);
+                                  }}
+                                  title="Edit URL"
+                                  className="text-muted-foreground hover:text-foreground"
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                              </div>
+                            )}
+                            {/* Product info inline */}
+                            {(() => {
+                              const ap = order.raw_amazon_payload;
+                              const items = ap?.orderItems || ap?.OrderItems || [];
+                              const matched = ap?.matched_skus;
+                              if (items.length > 0) {
+                                const first = items[0];
+                                const sku = first.SellerSKU || first.seller_sku;
+                                return (
+                                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    {sku && <span className="font-mono">{sku}</span>}
+                                    {items.length > 1 && <Badge variant="outline" className="text-[10px] py-0">+{items.length - 1}</Badge>}
+                                  </div>
+                                );
+                              }
+                              if (matched && Object.keys(matched).length > 0) {
+                                return <span className="font-mono text-xs text-muted-foreground">{Object.keys(matched)[0]}</span>;
+                              }
+                              return null;
+                            })()}
+                            {/* Shopify ID inline */}
+                            {order.shopify_order_id && (
+                              <span className="text-xs text-muted-foreground">Shopify #{order.shopify_order_id}</span>
+                            )}
+                          </div>
                         </TableCell>
-                        <TableCell className="text-sm max-w-[180px]">
-                          {(() => {
-                            const ap = order.raw_amazon_payload;
-                            const items = ap?.orderItems || ap?.OrderItems || [];
-                            const matched = ap?.matched_skus;
-                            if (items.length > 0) {
-                              const first = items[0];
-                              const title = first.Title || first.title || first.SellerSKU || first.seller_sku || '—';
-                              const sku = first.SellerSKU || first.seller_sku;
-                              return (
-                                <div className="space-y-0.5">
-                                  <span className="block truncate font-medium" title={title}>{title}</span>
-                                  {sku && <span className="block text-xs text-muted-foreground font-mono">{sku}</span>}
-                                  {items.length > 1 && (
-                                    <Badge variant="outline" className="text-xs">+ {items.length - 1} more</Badge>
-                                  )}
-                                </div>
-                              );
-                            }
-                            if (matched && Object.keys(matched).length > 0) {
-                              const firstSku = Object.keys(matched)[0];
-                              return <span className="font-mono text-xs">{firstSku}</span>;
-                            }
-                            return <span className="text-muted-foreground">—</span>;
-                          })()}
-                        </TableCell>
-                        <TableCell className="font-mono text-sm">{order.shopify_order_id ? `#${order.shopify_order_id}` : '—'}</TableCell>
                         <TableCell className="text-sm">
                           {(() => {
                             const sp = order.raw_shopify_payload;
@@ -1143,10 +1138,10 @@ function OrderMonitorTab() {
                               if (isPlaceholder) {
                                 return (
                                   <div className="flex items-center gap-1.5">
-                                    <span className="text-muted-foreground italic">Placeholder</span>
-                                    <Badge variant="outline" className="text-xs border-amber-300 text-amber-700 bg-amber-50">
+                                    <span className="text-muted-foreground italic text-xs">Placeholder</span>
+                                    <Badge variant="outline" className="text-[10px] py-0 border-amber-300 text-amber-700 bg-amber-50">
                                       <Camera className="h-2.5 w-2.5 mr-0.5" />
-                                      Screenshot needed
+                                      Screenshot
                                     </Badge>
                                   </div>
                                 );
@@ -1160,46 +1155,53 @@ function OrderMonitorTab() {
                           })()}
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className={STATUS_COLORS[order.status] || ''}>
-                            {order.status}
-                          </Badge>
-                          {order.retry_count > 0 && order.status !== 'tracking_sent' && (
-                            <span className="text-xs text-muted-foreground ml-1">({order.retry_count}/{3})</span>
-                          )}
+                          <div className="space-y-1">
+                            <Badge variant="outline" className={`text-xs ${STATUS_COLORS[order.status] || ''}`}>
+                              {order.status}
+                            </Badge>
+                            {order.retry_count > 0 && order.status !== 'tracking_sent' && (
+                              <span className="text-[10px] text-muted-foreground block">retry {order.retry_count}/3</span>
+                            )}
+                            {order.shipping_service_level && (
+                              <span className="text-[10px] text-muted-foreground block">{order.shipping_service_level}</span>
+                            )}
+                            {order.error_detail && (
+                              <span className="text-[10px] text-destructive block truncate max-w-[120px]" title={order.error_detail}>
+                                {order.error_detail}
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {order.shipping_service_level || '—'}
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                          {new Date(order.created_at).toLocaleDateString()}<br />
+                          {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {new Date(order.created_at).toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
-                          {order.error_detail || '—'}
-                        </TableCell>
-                        <TableCell className="text-right space-x-1">
+                        <TableCell className="text-right">
                           {order.shopify_order_id && order.status !== 'tracking_sent' && (
-                            <>
+                            <div className="flex flex-col gap-1 items-end">
                               <Button
                                 variant="outline"
                                 size="sm"
+                                className="text-xs h-7"
                                 onClick={(e) => { e.stopPropagation(); setScreenshotOrder(order); }}
                                 title="Extract customer from screenshot"
                               >
-                                <Camera className="h-3.5 w-3.5 mr-1" />
+                                <Camera className="h-3 w-3 mr-1" />
                                 Customer
                               </Button>
                               <Button
                                 variant="outline"
                                 size="sm"
+                                className="text-xs h-7"
                                 onClick={(e) => { e.stopPropagation(); retryTracking(order); }}
                                 disabled={retryingId === order.id}
                               >
                                 {retryingId === order.id
-                                  ? <RefreshCw className="h-3.5 w-3.5 mr-1 animate-spin" />
-                                  : <RotateCcw className="h-3.5 w-3.5 mr-1" />}
-                                Resend Tracking
+                                  ? <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                                  : <RotateCcw className="h-3 w-3 mr-1" />}
+                                Tracking
                               </Button>
-                            </>
+                            </div>
                           )}
                         </TableCell>
                       </TableRow>
