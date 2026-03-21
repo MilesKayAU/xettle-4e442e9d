@@ -946,10 +946,10 @@ export default function AccountMapperCard() {
     setExcludedMappings(prev => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
-      saveExclusions(next, excludedMarketplaces);
+      saveExclusions(next, excludedMarketplaces, excludedCategories);
       return next;
     });
-  }, [excludedMarketplaces, saveExclusions]);
+  }, [excludedMarketplaces, excludedCategories, saveExclusions]);
 
   const toggleExcludeMarketplace = useCallback((mp: string) => {
     setExcludedMarketplaces(prev => {
