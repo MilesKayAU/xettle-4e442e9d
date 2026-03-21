@@ -189,13 +189,16 @@ Deno.serve(async (req) => {
     const baseUrl = getEndpointForRegion(region)
     const confirmUrl = `${baseUrl}/orders/${API_VERSIONS.orders.current}/orders/${fbmOrder.amazon_order_id}/shipment/confirm`
 
+    // Use stored shipping service level instead of hardcoded 'Standard'
+    const shippingMethod = fbmOrder.shipping_service_level || 'Standard'
+
     const confirmPayload = {
       marketplaceId: tokenRow.marketplace_id,
       packageDetail: {
         trackingNumber: trackingNumber,
         carrierCode: carrierCode,
         carrierName: trackingCompany,
-        shippingMethod: 'Standard',
+        shippingMethod,
       },
     }
 
