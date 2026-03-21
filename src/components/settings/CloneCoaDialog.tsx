@@ -388,9 +388,51 @@ export default function CloneCoaDialog({
                 Replicate decimal conventions (e.g. 200 → 200.1) from the template
               </p>
             </div>
-            <Switch checked={matchPattern} onCheckedChange={setMatchPattern} />
+             <Switch checked={matchPattern} onCheckedChange={setMatchPattern} />
           </div>
 
+          {/* Category checklist — ask which optional account types to create */}
+          {templateMarketplace && templateEligibility.eligible && (
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium">Which account categories does {targetMarketplace} need?</Label>
+                <button
+                  onClick={() => setShowChecklist(!showChecklist)}
+                  className="text-[10px] text-primary hover:underline"
+                >
+                  {showChecklist ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              {showChecklist && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] text-muted-foreground">
+                    Core categories (Sales, Shipping, Refunds, Seller Fees, Other Fees) are always included. Toggle optional categories below:
+                  </p>
+                  {OPTIONAL_CATEGORIES.map(cat => {
+                    const isChecked = categorySelections[cat.key] !== false;
+                    return (
+                      <label
+                        key={cat.key}
+                        className="flex items-start gap-2 rounded-md border bg-background px-3 py-2 cursor-pointer hover:bg-accent/50 transition-colors"
+                      >
+                        <Checkbox
+                          checked={isChecked}
+                          onCheckedChange={(checked) => {
+                            setCategorySelections(prev => ({ ...prev, [cat.key]: !!checked }));
+                          }}
+                          className="mt-0.5"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs font-medium">{cat.label}</span>
+                          <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{cat.description}</p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {templateMarketplace && !templateEligibility.eligible && (
             <Alert className="border-destructive/50 bg-destructive/5">
