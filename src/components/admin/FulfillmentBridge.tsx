@@ -504,6 +504,29 @@ function OrderMonitorTab() {
         <Button variant="ghost" size="sm" onClick={loadOrders}>
           <RefreshCw className="h-4 w-4" />
         </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            try {
+              const { data, error } = await supabase.functions.invoke('shopify-auth', {
+                body: { action: 'register_webhooks' },
+              });
+              if (error) throw error;
+              toast({
+                title: data?.created ? 'Webhook registered' : 'Webhook already active',
+                description: data?.created
+                  ? 'Shopify will now notify us when you fulfill an order.'
+                  : 'The fulfillment webhook is already registered.',
+              });
+            } catch (err: any) {
+              toast({ title: 'Webhook registration failed', description: err.message, variant: 'destructive' });
+            }
+          }}
+        >
+          <Webhook className="h-4 w-4 mr-1" />
+          Register Webhook
+        </Button>
       </div>
 
       {syncing && (
