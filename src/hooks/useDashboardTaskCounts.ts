@@ -142,26 +142,28 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
     : {};
 
   if (hasXeroTokens && connections.length > 0) {
-    let anyMissing = false;
+    const missingDetails: string[] = [];
     for (const conn of connections) {
       const code = conn.marketplace_code;
+      const missingCats: string[] = [];
       for (const cat of REQUIRED_CATEGORIES) {
         const mpKey = `${cat}:${code}`;
         const mapped = parsedMappings[mpKey] || parsedMappings[cat] || DEFAULT_FALLBACK;
         if (mapped === DEFAULT_FALLBACK || !mapped) {
-          anyMissing = true;
-          break;
+          missingCats.push(cat);
         }
       }
-      if (anyMissing) break;
+      if (missingCats.length > 0) {
+        missingDetails.push(`${conn.marketplace_name || code}: ${missingCats.join(', ')}`);
+      }
     }
 
-    if (anyMissing) {
+    if (missingDetails.length > 0) {
       setupWarnings.push({
         key: 'coa_mapping_incomplete',
         label: 'Account mapping incomplete',
         severity: 'blocking',
-        message: 'Some marketplaces are missing required Xero account mappings.',
+        message: `Missing mappings — ${missingDetails.join('; ')}.`,
         actionLabel: 'Open mapper',
         actionTarget: 'settings:account-mapper',
       });
