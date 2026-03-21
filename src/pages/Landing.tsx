@@ -363,8 +363,229 @@ export default function Landing() {
       </section>
 
       {/* ════════════════════════════════════════════════════════════════════
-          INVOICES, NOT JOURNALS
+          XERO — THE FASTEST WAY TO SET UP XERO FOR MARKETPLACE SELLERS
           ════════════════════════════════════════════════════════════════════ */}
+      <section className="py-20 px-4 bg-card border-y border-border" id="xero-section">
+        <div className="container-custom max-w-5xl mx-auto">
+          <div className="text-center mb-14">
+            <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-1.5 rounded-full text-xs font-bold mb-4 tracking-wide">
+              <Settings2 className="h-3.5 w-3.5" />
+              XERO INTEGRATION
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+              The fastest way to get Xero right<br />for marketplace selling.
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
+              Whether you're brand new to Xero or already using it — Xettle eliminates the hardest part:
+              setting up and maintaining a correct chart of accounts for every marketplace you sell on.
+            </p>
+          </div>
+
+          <Tabs defaultValue="new-to-xero" className="w-full">
+            <TabsList className="grid w-full max-w-lg mx-auto grid-cols-2 mb-10">
+              <TabsTrigger value="new-to-xero" className="text-sm">New to Xero</TabsTrigger>
+              <TabsTrigger value="already-on-xero" className="text-sm">Already on Xero</TabsTrigger>
+            </TabsList>
+
+            {/* ─── NEW TO XERO ─────────────────────────────────────────── */}
+            <TabsContent value="new-to-xero" className="space-y-10">
+              <div className="grid lg:grid-cols-2 gap-12 items-start">
+                <div className="space-y-6">
+                  <h3 className="text-2xl font-bold text-foreground">
+                    Skip the blank spreadsheet.<br />
+                    <span className="text-primary">Xettle builds your Xero for you.</span>
+                  </h3>
+                  <p className="text-muted-foreground">
+                    New Xero users face hours of setup: creating accounts for sales, fees, refunds, and GST —
+                    for every marketplace, in the right account type, with the right codes. Most get it wrong.
+                    Their bookkeeper fixes it later. Or worse, they don't.
+                  </p>
+                  <p className="text-muted-foreground">
+                    Xettle detects which marketplaces you sell on and generates a properly structured
+                    Chart of Accounts — Amazon, Shopify, Bunnings, Kogan, BigW, eBay — all set up correctly.
+                    What takes an accountant an hour takes Xettle seconds.
+                  </p>
+                  <div className="bg-primary/5 border border-primary/20 rounded-xl p-5">
+                    <p className="text-sm font-semibold text-foreground mb-3">What Xettle creates for you:</p>
+                    <ul className="space-y-2">
+                      {[
+                        'Revenue accounts for each marketplace (Amazon Sales, Shopify Sales, etc.)',
+                        'Expense accounts for commission, FBA, storage, and advertising fees',
+                        'Refund and reimbursement accounts separated by channel',
+                        'Correct account types (Revenue vs Direct Costs) — no misclassification',
+                        'Numbered codes following Xero best-practice ranges (200s for revenue, 400s for expenses)',
+                      ].map(item => (
+                        <li key={item} className="flex items-start gap-2 text-sm">
+                          <CheckCircle className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                          <span className="text-foreground">{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Without Xettle */}
+                  <div className="p-5 rounded-2xl border border-border bg-background">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="h-8 w-8 rounded-lg bg-destructive/10 flex items-center justify-center">
+                        <Clock className="h-4 w-4 text-destructive" />
+                      </div>
+                      <h4 className="text-sm font-semibold text-foreground">Without Xettle</h4>
+                    </div>
+                    <ol className="space-y-2.5 text-sm text-muted-foreground">
+                      {[
+                        'Sign up to Xero',
+                        'Stare at a blank Chart of Accounts',
+                        'Google "how to set up Xero for Amazon sellers"',
+                        'Spend hours creating accounts for each marketplace',
+                        'Get the account types wrong',
+                        'Your bookkeeper fixes it at month-end',
+                      ].map((step, i) => (
+                        <li key={i} className="flex items-start gap-2.5">
+                          <span className="h-5 w-5 rounded-full bg-destructive/10 text-destructive text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                          <span>{step}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+
+                  {/* With Xettle */}
+                  <div className="p-5 rounded-2xl border-2 border-primary/30 bg-primary/5">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Zap className="h-4 w-4 text-primary" />
+                      </div>
+                      <h4 className="text-sm font-semibold text-foreground">With Xettle</h4>
+                    </div>
+                    <ol className="space-y-2.5 text-sm">
+                      {[
+                        'Sign up to Xero',
+                        'Connect your marketplaces to Xettle',
+                        'Xettle detects Amazon, Shopify, Kogan, etc.',
+                        'One click → your Chart of Accounts is built',
+                      ].map((step, i) => (
+                        <li key={i} className="flex items-start gap-2.5">
+                          <span className="h-5 w-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                          <span className="text-foreground">{step}</span>
+                        </li>
+                      ))}
+                    </ol>
+                    <p className="text-xs text-primary font-semibold mt-3 flex items-center gap-1.5">
+                      <Zap className="h-3 w-3" />
+                      What takes an accountant an hour takes Xettle seconds.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-center pt-4">
+                <Button size="lg" className="text-lg px-8 py-6" asChild>
+                  <Link to="/auth?tab=signup">
+                    Set up your Xero the smart way <ArrowRight className="ml-2 h-5 w-5" />
+                  </Link>
+                </Button>
+                <p className="text-xs text-muted-foreground mt-3">No Xero account yet? That's fine — connect after setup.</p>
+              </div>
+            </TabsContent>
+
+            {/* ─── ALREADY ON XERO ────────────────────────────────────── */}
+            <TabsContent value="already-on-xero" className="space-y-10">
+              <div className="grid lg:grid-cols-2 gap-12 items-start">
+                <div className="space-y-6">
+                  <h3 className="text-2xl font-bold text-foreground">
+                    Already on Xero?<br />
+                    <span className="text-primary">Xettle makes it work harder.</span>
+                  </h3>
+                  <p className="text-muted-foreground">
+                    You've got Xero set up. Maybe you're doing marketplace accounting manually — downloading CSVs,
+                    creating invoices, matching bank deposits. Maybe you've tried other tools and they've created
+                    duplicate invoices or journal entries your accountant had to clean up.
+                  </p>
+                  <p className="text-muted-foreground">
+                    Xettle plugs directly into your existing Xero. It reads your current Chart of Accounts,
+                    detects which marketplace accounts you already have, and fills the gaps. No starting over.
+                    No duplicate accounts. Just a clean upgrade.
+                  </p>
+
+                  <div className="space-y-3">
+                    <p className="text-sm font-semibold text-foreground">What Xettle does with your existing Xero:</p>
+                    {[
+                      { icon: Search, title: 'Scans your existing COA', desc: 'Detects marketplace accounts you already have — Amazon Sales, Shopify Fees, etc.' },
+                      { icon: Sparkles, title: 'Fills the gaps intelligently', desc: 'New marketplace? Xettle suggests accounts that match your existing numbering pattern.' },
+                      { icon: ShieldCheck, title: 'Preview before creating', desc: 'See exactly what will be added to Xero — new accounts, changed accounts, unchanged — before anything happens.' },
+                      { icon: Lock, title: 'Never deletes or overwrites by default', desc: 'Create-only mode is the default. Overwrite requires explicit confirmation + PIN.' },
+                    ].map(({ icon: Icon, title, desc }) => (
+                      <div key={title} className="flex items-start gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
+                        <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                          <Icon className="h-4 w-4 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{title}</p>
+                          <p className="text-xs text-muted-foreground">{desc}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  {/* Problems Xettle solves for existing Xero users */}
+                  <div className="p-5 rounded-2xl border border-border bg-background">
+                    <h4 className="text-sm font-semibold text-foreground mb-4">Common problems Xettle eliminates:</h4>
+                    <div className="space-y-4">
+                      {[
+                        { problem: 'Downloading CSVs every payout cycle', solution: 'API connections for Amazon & Shopify. Upload once for others — Xettle remembers the format.' },
+                        { problem: 'Manually creating Xero invoices', solution: 'Every verified settlement becomes a DRAFT invoice with correct line items and GST.' },
+                        { problem: 'Bank deposits that don\'t match', solution: 'Tolerance-based deposit verification against transactions already in Xero.' },
+                        { problem: 'Duplicate invoices from re-uploads', solution: 'Fingerprint-based deduplication — the same settlement can\'t post twice.' },
+                        { problem: 'Accountant spending hours on marketplace accounting', solution: 'Clean DRAFT invoices with audit CSVs attached. Review and authorise, not recreate.' },
+                      ].map(({ problem, solution }) => (
+                        <div key={problem}>
+                          <p className="text-sm font-medium text-destructive mb-0.5 flex items-start gap-1.5">
+                            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                            {problem}
+                          </p>
+                          <p className="text-sm text-muted-foreground pl-5">→ {solution}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="p-5 rounded-2xl border-2 border-primary/30 bg-primary/5">
+                    <p className="text-sm font-semibold text-foreground mb-3">The Xettle advantage over LMB / A2X:</p>
+                    <ul className="space-y-2.5">
+                      {[
+                        'Settlement-based invoices, not journals — simpler to review and reconcile',
+                        'Handles 9+ Australian marketplaces including Bunnings, Kogan, and BigW',
+                        'COA auto-setup — no manual account creation needed',
+                        'Shopify sub-channel separation for Kogan, Catch, MyDeal orders',
+                        'Fee observation engine detects commission rate changes across periods',
+                        'Built for Australian GST and ATO reporting from day one',
+                      ].map(item => (
+                        <li key={item} className="flex items-start gap-2 text-sm">
+                          <CheckCircle className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                          <span className="text-foreground">{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-center pt-4">
+                <Button size="lg" className="text-lg px-8 py-6" asChild>
+                  <Link to="/auth?tab=signup">
+                    Connect your Xero <ArrowRight className="ml-2 h-5 w-5" />
+                  </Link>
+                </Button>
+                <p className="text-xs text-muted-foreground mt-3">Free trial — your Xero data is never modified without your explicit approval.</p>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </div>
+      </section>
+
       <section className="py-20 px-4 bg-card border-y border-border">
         <div className="container-custom max-w-5xl mx-auto">
           <div className="text-center mb-14">
