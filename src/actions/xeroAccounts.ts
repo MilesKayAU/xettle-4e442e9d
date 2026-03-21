@@ -150,6 +150,122 @@ export async function createXeroAccounts(accounts: CreateXeroAccountInput[]): Pr
   };
 }
 
+// ─── Batch Create / Update Accounts in Xero ─────────────────────────────────
+
+export interface BatchCreateProgress {
+  batchIndex: number;
+  totalBatches: number;
+  createdSoFar: number;
+  updatedSoFar: number;
+  errorsSoFar: number;
+}
+
+export interface BatchCreateResult {
+  success: boolean;
+  created: number;
+  updated: number;
+  errors: { code: string; error: string }[];
+  error?: string;
+}
+
+/**
+ * Send accounts to Xero in sequential batches of 2.
+ * Handles 429 rate-limit responses by pausing and retrying.
+ */
+export async function batchCreateXeroAccounts(
+  accounts: CreateXeroAccountInput[],
+  opts: {
+    mode: 'create_only' | 'create_and_update';
+    onProgress?: (progress: BatchCreateProgress) => void;
+  },
+): Promise<BatchCreateResult> {
+  const BATCH_SIZE = 2;
+  const batches: CreateXeroAccountInput[][] = [];
+  for (let i = 0; i < accounts.length; i += BATCH_SIZE) {
+    batches.push(accounts.slice(i, i + BATCH_SIZE));
+  }
+
+  let totalCreated = 0;
+  let totalUpdated = 0;
+  const allErrors: { code: string; error: string }[] = [];
+
+  for (let i = 0; i < batches.length; i++) {
+    opts.onProgress?.({
+      batchIndex: i,
+      totalBatches: batches.length,
+      createdSoFar: totalCreated,
+      updatedSoFar: totalUpdated,
+      errorsSoFar: allErrors.length,
+    });
+
+    const { data, error } = await supabase.functions.invoke('create-xero-accounts', {
+      body: { accounts: batches[i], mode: opts.mode },
+    });
+
+    if (error) {
+      // Network or invocation error — abort
+      return {
+        success: false,
+        created: totalCreated,
+        updated: totalUpdated,
+        errors: allErrors,
+        error: error.message,
+      };
+    }
+
+    // Handle 429 rate limiting — pause and retry this batch
+    if (data?.error === 'rate_limited' && data?.retry_after) {
+      const waitSec = Math.min(data.retry_after, 120);
+      opts.onProgress?.({
+        batchIndex: i,
+        totalBatches: batches.length,
+        createdSoFar: totalCreated,
+        updatedSoFar: totalUpdated,
+        errorsSoFar: allErrors.length,
+      });
+      await new Promise(resolve => setTimeout(resolve, waitSec * 1000));
+      // Retry this batch
+      i--;
+      continue;
+    }
+
+    if (!data?.success) {
+      return {
+        success: false,
+        created: totalCreated,
+        updated: totalUpdated,
+        errors: allErrors,
+        error: data?.error || 'Batch failed',
+      };
+    }
+
+    // Tally results
+    const batchCreated = (data.created || []) as { action?: string }[];
+    totalCreated += batchCreated.filter(c => c.action !== 'updated').length;
+    totalUpdated += batchCreated.filter(c => c.action === 'updated').length;
+
+    if (data.errors) {
+      allErrors.push(...data.errors);
+    }
+  }
+
+  // Final progress
+  opts.onProgress?.({
+    batchIndex: batches.length,
+    totalBatches: batches.length,
+    createdSoFar: totalCreated,
+    updatedSoFar: totalUpdated,
+    errorsSoFar: allErrors.length,
+  });
+
+  return {
+    success: true,
+    created: totalCreated,
+    updated: totalUpdated,
+    errors: allErrors,
+  };
+}
+
 /**
  * Get the last sync timestamp for the COA cache.
  */

@@ -36,6 +36,7 @@ import { normalizeKeyLabel } from '@/utils/marketplace-codes';
 import { Save, Upload, Copy } from 'lucide-react';
 import CloneCoaDialog from './CloneCoaDialog';
 import CoaAuditPanel from './CoaAuditPanel';
+import XeroCoaSyncModal, { type SyncPreviewRow } from './XeroCoaSyncModal';
 
 type CoaValidation = 'valid' | 'missing' | 'inactive' | 'wrong_type';
 
@@ -136,6 +137,9 @@ export default function AccountMapperCard() {
   const [overwriteConfirmOpen, setOverwriteConfirmOpen] = useState(false);
   const [overwriteChanges, setOverwriteChanges] = useState<Array<{ category: string; oldCode: string; newCode: string }>>([]);
   const [pendingConfirmAction, setPendingConfirmAction] = useState<(() => Promise<void>) | null>(null);
+
+  // Sync modal state
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
 
   // Confirmed (saved) codes for comparison
   const [confirmedCodes, setConfirmedCodes] = useState<Record<string, string>>({});
@@ -916,8 +920,67 @@ export default function AccountMapperCard() {
     return KNOWN_MARKETPLACES.slice(0, 3);
   };
 
-  const confidenceBadge = (level: string) => {
-    if (level === 'high') return <Badge variant="outline" className="text-green-700 border-green-300 bg-green-50">✅ High</Badge>;
+  /**
+   * Compute sync preview rows by comparing the current mapping against
+   * the cached Xero COA. Returns rows with new/changed/unchanged status.
+   */
+  const computeSyncPreviewRows = (): SyncPreviewRow[] => {
+    const rows: SyncPreviewRow[] = [];
+    const seen = new Set<string>();
+
+    const addRow = (code: string, name: string, category: string, marketplace?: string) => {
+      if (!code || seen.has(code)) return;
+      seen.add(code);
+
+      const xeroEntry = coaMap.get(code);
+      const accountType = getAccountTypeForCategory(category);
+
+      if (!xeroEntry) {
+        rows.push({ code, name, type: accountType, category, marketplace, status: 'new' });
+      } else if (xeroEntry.name !== name || xeroEntry.type !== accountType) {
+        rows.push({
+          code, name, type: accountType, category, marketplace,
+          status: 'changed',
+          xeroName: xeroEntry.name,
+          xeroType: xeroEntry.type,
+        });
+      } else {
+        rows.push({ code, name, type: accountType, category, marketplace, status: 'unchanged' });
+      }
+    };
+
+    // Base categories
+    for (const cat of CATEGORIES) {
+      const code = editableMapping[cat] || mapping[cat]?.code;
+      if (code) {
+        const coaEntry = coaMap.get(code);
+        addRow(code, coaEntry?.name || mapping[cat]?.name || `${cat} AU`, cat);
+      }
+    }
+
+    // Marketplace overrides
+    if (splitByMarketplace) {
+      for (const mp of getEffectiveMarketplaces()) {
+        for (const cat of SPLITTABLE_CATEGORIES) {
+          const key = `${cat}:${mp}`;
+          const code = editableMapping[key] || mapping[key]?.code;
+          if (code) {
+            const coaEntry = coaMap.get(code);
+            const suggestion = coaSuggestions.get(key);
+            addRow(code, coaEntry?.name || suggestion?.name || `${mp} ${cat}`, cat, mp);
+          }
+        }
+      }
+    }
+
+    // Sort: new first, then changed, then unchanged
+    const order: Record<string, number> = { new: 0, changed: 1, unchanged: 2 };
+    rows.sort((a, b) => (order[a.status] ?? 2) - (order[b.status] ?? 2));
+    return rows;
+  };
+
+
+    const confidenceBadge = (level: string) => {
     if (level === 'medium') return <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">⚠️ Medium</Badge>;
     return <Badge variant="outline" className="text-red-700 border-red-300 bg-red-50">❌ Low</Badge>;
   };
@@ -1502,7 +1565,7 @@ export default function AccountMapperCard() {
         )}
 
         <TrackingCategoryPrompt />
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={() => setState('review')} className="gap-2">
             <Search className="h-3 w-3" />
             Edit mappings
@@ -1511,11 +1574,53 @@ export default function AccountMapperCard() {
             <RefreshCw className="h-3 w-3" />
             Re-run AI mapper
           </Button>
+          {isAdmin && coaAccounts.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={async () => {
+                // Refresh COA before computing diff
+                toast.info('Refreshing COA from Xero…');
+                const result = await refreshXeroCOA();
+                if (!result.success) {
+                  toast.error(`COA refresh failed: ${result.error}`);
+                  return;
+                }
+                const [freshAccounts, freshSynced] = await Promise.all([
+                  getCachedXeroAccounts(),
+                  getCoaLastSyncedAt(),
+                ]);
+                setCoaAccounts(freshAccounts);
+                setCoaLastSynced(freshSynced);
+                setSyncModalOpen(true);
+              }}
+            >
+              <Upload className="h-3 w-3" />
+              Sync to Xero
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
     {renderCloneDialog()}
     {renderOverwriteConfirmDialog()}
+    {isAdmin && (
+      <XeroCoaSyncModal
+        open={syncModalOpen}
+        onOpenChange={setSyncModalOpen}
+        previewRows={computeSyncPreviewRows()}
+        coaAccounts={coaAccounts}
+        onSyncComplete={async () => {
+          const [accounts, lastSynced] = await Promise.all([
+            getCachedXeroAccounts(),
+            getCoaLastSyncedAt(),
+          ]);
+          setCoaAccounts(accounts);
+          setCoaLastSynced(lastSynced);
+        }}
+      />
+    )}
     </>
   );
 }

@@ -1,8 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4'
 import { getCorsHeaders } from '../_shared/cors.ts'
-import { XERO_TOKEN_URL, buildXeroUrl, getXeroHeaders } from '../_shared/xero-api-policy.ts'
+import { XERO_TOKEN_URL } from '../_shared/xero-api-policy.ts'
 const ALLOWED_TYPES = new Set(['REVENUE', 'EXPENSE', 'DIRECTCOSTS', 'OTHERINCOME', 'OVERHEADS'])
-const MAX_BATCH = 10
+const MAX_BATCH = 2
 
 interface AccountRequest {
   code: string
@@ -60,6 +60,13 @@ Deno.serve(async (req) => {
     // ─── Parse & validate request ────────────────────────────────────
     const body = await req.json()
     const accounts: AccountRequest[] = body.accounts || []
+    const mode: string = body.mode || 'create_only'
+
+    if (!['create_only', 'create_and_update'].includes(mode)) {
+      return new Response(JSON.stringify({ error: 'Invalid mode. Must be create_only or create_and_update' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
 
     if (!accounts.length) {
       return new Response(JSON.stringify({ error: 'No accounts provided' }), {
@@ -90,18 +97,25 @@ Deno.serve(async (req) => {
     // Check for duplicate codes against cached COA
     const { data: existingAccounts } = await supabase
       .from('xero_chart_of_accounts')
-      .select('account_code')
+      .select('account_code, account_name, account_type')
       .eq('user_id', userId)
       .eq('is_active', true)
 
-    const existingCodes = new Set((existingAccounts || []).map((a: any) => a.account_code))
-    const duplicates = accounts.filter(a => existingCodes.has(a.code))
-    if (duplicates.length > 0) {
-      return new Response(JSON.stringify({ 
-        error: `Account code(s) already exist in Xero: ${duplicates.map(d => d.code).join(', ')}` 
-      }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+    const existingMap = new Map<string, { name: string; type: string }>()
+    for (const a of (existingAccounts || [])) {
+      if (a.account_code) existingMap.set(a.account_code, { name: a.account_name, type: a.account_type || '' })
+    }
+
+    // In create_only mode, reject duplicates
+    if (mode === 'create_only') {
+      const duplicates = accounts.filter(a => existingMap.has(a.code))
+      if (duplicates.length > 0) {
+        return new Response(JSON.stringify({ 
+          error: `Account code(s) already exist in Xero: ${duplicates.map(d => d.code).join(', ')}` 
+        }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
     }
 
     // ─── Xero token ──────────────────────────────────────────────────
@@ -156,11 +170,14 @@ Deno.serve(async (req) => {
       'Xero-tenant-id': xeroToken.tenant_id,
     }
 
-    // ─── Create accounts in Xero ─────────────────────────────────────
-    const created: { code: string; name: string; xero_account_id: string }[] = []
+    // ─── Create/update accounts in Xero ──────────────────────────────
+    const created: { code: string; name: string; xero_account_id: string; action: string }[] = []
     const errors: { code: string; error: string }[] = []
 
     for (const acc of accounts) {
+      const existing = existingMap.get(acc.code)
+      const isUpdate = !!existing && mode === 'create_and_update'
+
       const xeroPayload: any = {
         Code: acc.code,
         Name: acc.name,
@@ -177,9 +194,25 @@ Deno.serve(async (req) => {
         body: JSON.stringify(xeroPayload),
       })
 
+      // Handle 429 rate limiting
+      if (resp.status === 429) {
+        const retryAfter = parseInt(resp.headers.get('Retry-After') || '60', 10)
+        console.warn(`Xero 429 rate limited. Retry-After: ${retryAfter}s`)
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'rate_limited',
+          retry_after: retryAfter,
+          created,
+          errors,
+        }), {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
       if (!resp.ok) {
         const errBody = await resp.text()
-        console.error(`Xero account creation failed for ${acc.code}:`, resp.status, errBody)
+        console.error(`Xero account ${isUpdate ? 'update' : 'creation'} failed for ${acc.code}:`, resp.status, errBody)
         errors.push({ code: acc.code, error: `Xero API ${resp.status}: ${errBody.substring(0, 200)}` })
         continue
       }
@@ -191,12 +224,12 @@ Deno.serve(async (req) => {
           code: acc.code,
           name: acc.name,
           xero_account_id: createdAccount.AccountID,
+          action: isUpdate ? 'updated' : 'created',
         })
       }
     }
 
     // ─── Refresh COA cache ───────────────────────────────────────────
-    // Inline COA refresh: fetch all accounts from Xero and upsert
     const refreshResp = await fetch('https://api.xero.com/api.xro/2.0/Accounts?where=Status%3D%3D%22ACTIVE%22', {
       headers: {
         'Authorization': `Bearer ${xeroToken.access_token}`,
@@ -243,10 +276,12 @@ Deno.serve(async (req) => {
     if (created.length > 0) {
       await supabase.from('system_events').insert({
         user_id: userId,
-        event_type: 'xero_account_created',
+        event_type: mode === 'create_and_update' ? 'coa_sync' : 'xero_account_created',
         severity: 'info',
         details: {
-          created_count: created.length,
+          mode,
+          created_count: created.filter(c => c.action === 'created').length,
+          updated_count: created.filter(c => c.action === 'updated').length,
           accounts: created,
           errors: errors.length > 0 ? errors : undefined,
         },
