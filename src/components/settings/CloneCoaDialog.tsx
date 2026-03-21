@@ -121,10 +121,16 @@ export default function CloneCoaDialog({
     })();
   }, [templateMarketplace, open, coaAccounts, allCodes, targetMarketplace, templateEligibility.eligible, matchPattern]);
 
-  // Reset on open
+  // Reset on open — prefer simpler marketplace templates (non-Amazon) as defaults
+  // since most marketplaces share the same basic categories without FBA/Storage
   useEffect(() => {
     if (open) {
-      setTemplateMarketplace(coveredMarketplaces[0] || '');
+      const preferredOrder = ['ebay_au', 'shopify', 'catch_au', 'kogan_au', 'mydeal_au'];
+      const bestDefault = preferredOrder.find(p => coveredMarketplaces.includes(p))
+        || coveredMarketplaces.find(c => !c.startsWith('amazon'))
+        || coveredMarketplaces[0]
+        || '';
+      setTemplateMarketplace(bestDefault);
       setAiReview(null);
     }
   }, [open, coveredMarketplaces]);
