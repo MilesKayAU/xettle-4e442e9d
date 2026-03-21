@@ -34,6 +34,7 @@ import {
 import { generateNextCode, getAccountTypeForCategory, getRangeForType, detectCodePattern, generateCodeFromPattern, type PatternAccount } from '@/policy/accountCodePolicy';
 import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
 import { normalizeKeyLabel } from '@/utils/marketplace-codes';
+import { cn } from '@/lib/utils';
 import { Save, Upload, Copy } from 'lucide-react';
 import CloneCoaDialog from './CloneCoaDialog';
 import CoaAuditPanel from './CoaAuditPanel';
