@@ -1449,6 +1449,15 @@ export default function AccountMapperCard() {
           {renderCoaRefreshStrip()}
           {isAdmin && coaAccounts.length > 0 && <CoaAuditPanel />}
           {renderCloneBanner()}
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search by keyword (e.g. Catch, FBA, Advertising, 321…)"
+              value={searchKeyword}
+              onChange={e => setSearchKeyword(e.target.value)}
+              className="pl-8 h-8 text-xs"
+            />
+          </div>
           <div className="flex items-center gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={handleApplySuggestionsToMissing} className="h-7 text-xs gap-1">
               <CheckCircle2 className="h-3 w-3" />
