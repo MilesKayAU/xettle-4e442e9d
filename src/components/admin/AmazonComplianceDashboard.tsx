@@ -130,6 +130,7 @@ function ComplianceChecklist() {
   const [addOpen, setAddOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [newCategory, setNewCategory] = useState('custom');
 
   const load = useCallback(async () => {
     setLoading(true);
