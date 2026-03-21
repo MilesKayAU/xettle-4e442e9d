@@ -1418,7 +1418,7 @@ export default function AccountMapperCard() {
             <Search className="h-3 w-3" />
             Edit mappings
           </Button>
-          <Button variant="outline" size="sm" onClick={runMapper} className="gap-2">
+          <Button variant="outline" size="sm" onClick={() => { const scrollY = window.scrollY; runMapper().then(() => window.scrollTo(0, scrollY)); }} className="gap-2">
             <RefreshCw className="h-3 w-3" />
             Re-run AI mapper
           </Button>
