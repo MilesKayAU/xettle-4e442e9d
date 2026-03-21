@@ -393,25 +393,25 @@ export default function XeroCoaSyncModal({ open, onOpenChange, previewRows, coaA
             </Alert>
           )}
 
-          {/* Name conflict warning */}
+          {/* Name conflict warning — compact, collapsible */}
           {nameConflictMap.size > 0 && (
-            <Alert className="border-amber-300 bg-amber-50">
-              <AlertTriangle className="h-4 w-4 text-amber-600" />
-              <AlertDescription className="text-xs text-amber-900 space-y-1">
-                <div><strong>{nameConflictMap.size} account{nameConflictMap.size !== 1 ? 's' : ''} skipped</strong> — names already exist in Xero under different codes:</div>
-                <div className="space-y-0.5">
-                  {[...nameConflictMap.entries()].map(([code, existingCode]) => {
-                    const row = previewRows.find(r => r.code === code);
-                    return (
-                      <div key={code} className="text-[10px]">
-                        <span className="font-mono">{code}</span> "{row?.name}" → already exists as code <span className="font-mono font-medium">{existingCode}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="text-[10px] text-amber-700 mt-1">Rename the account in your mapping or use the existing code instead.</div>
-              </AlertDescription>
-            </Alert>
+            <details className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2">
+              <summary className="flex items-center gap-2 cursor-pointer text-xs text-amber-900 font-medium">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                {nameConflictMap.size} account{nameConflictMap.size !== 1 ? 's' : ''} skipped — names already exist under different codes
+              </summary>
+              <div className="mt-1.5 space-y-0.5 pl-5">
+                {[...nameConflictMap.entries()].map(([code, existingCode]) => {
+                  const row = previewRows.find(r => r.code === code);
+                  return (
+                    <div key={code} className="text-[10px] text-amber-800">
+                      <span className="font-mono">{code}</span> "{row?.name}" → already code <span className="font-mono font-medium">{existingCode}</span>
+                    </div>
+                  );
+                })}
+                <div className="text-[10px] text-amber-700 mt-1">Rename in your mapping or use the existing code.</div>
+              </div>
+            </details>
           )}
 
           {/* All done banner */}
