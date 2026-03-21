@@ -971,7 +971,7 @@ function OrderMonitorTab() {
                       </TableRow>
                       <CollapsibleContent asChild>
                         <TableRow>
-                          <TableCell colSpan={9} className="bg-muted/50 p-4">
+                          <TableCell colSpan={10} className="bg-muted/50 p-4">
                             <div className="space-y-3">
                               {/* Duplicate Detection Info */}
                               {order.status === 'pending_payment' && (
