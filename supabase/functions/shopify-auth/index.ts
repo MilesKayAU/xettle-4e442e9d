@@ -702,3 +702,52 @@ Deno.serve(async (req) => {
     )
   }
 })
+
+// ═══════════════════════════════════════════════════════════════
+// Helper: Register fulfillment webhook with Shopify
+// ═══════════════════════════════════════════════════════════════
+async function registerFulfillmentWebhook(
+  shop: string,
+  accessToken: string,
+): Promise<{ created: boolean; existing: boolean; webhook_id?: string }> {
+  const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
+  const webhookAddress = `${SUPABASE_URL}/functions/v1/shopify-fbm-fulfillment-webhook`
+  const topic = 'fulfillments/create'
+
+  // Check if webhook already exists
+  const listRes = await fetch(
+    `https://${shop}/admin/api/2024-01/webhooks.json?topic=${topic}`,
+    { headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' } }
+  )
+
+  if (listRes.ok) {
+    const { webhooks } = await listRes.json()
+    const existing = (webhooks || []).find((w: any) => w.address === webhookAddress)
+    if (existing) {
+      logger.info('Fulfillment webhook already registered', { id: existing.id, shop })
+      return { created: false, existing: true, webhook_id: String(existing.id) }
+    }
+  }
+
+  // Create the webhook
+  const createRes = await fetch(`https://${shop}/admin/api/2024-01/webhooks.json`, {
+    method: 'POST',
+    headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      webhook: {
+        topic,
+        address: webhookAddress,
+        format: 'json',
+      },
+    }),
+  })
+
+  if (!createRes.ok) {
+    const errText = await createRes.text()
+    throw new Error(`Shopify webhook creation failed (${createRes.status}): ${errText}`)
+  }
+
+  const { webhook } = await createRes.json()
+  logger.info('Fulfillment webhook created', { id: webhook?.id, shop })
+  return { created: true, existing: false, webhook_id: String(webhook?.id) }
+}
