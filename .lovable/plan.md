@@ -1,54 +1,66 @@
-## ✅ Completed: Account Mapper Suggestion Accuracy
 
-Pattern-aware, revenue/expense-partitioned gap-fill is now live. Uses `detectCodePattern()` and `generateCodeFromPattern()` to extend category neighbourhoods.
 
----
+## Xero COA Batch Sync Modal — Batch of 2 (Test Mode)
 
-## Next: Xero COA Sync UX — "Create New vs Overwrite" Flow
+### Overview
+Build a modal that lets you preview all new/changed COA accounts and push them to Xero in batches of **2 at a time**. This conservative batch size lets us verify everything works before scaling up later.
 
-### Design Decisions (User-Confirmed)
-- **Sync modes**: Toggle between "Create New Only" (safe default) and "Overwrite Existing" (opt-in)
-- **Risk consent**: PIN + checkbox acknowledgment for overwrite mode
-- **Preview**: Full line-by-line table showing each account with status badge (New / Changed / Unchanged)
+### What gets built
 
-### UX Flow
+**1. New component: `src/components/settings/XeroCoaSyncModal.tsx`**
+- Opens from a "Sync to Xero" button on the Account Mapper
+- On open: triggers a real-time COA refresh, then computes a diff:
+  - **New** (green badge) — code not in Xero
+  - **Changed** (amber badge) — code exists but name/type differs
+  - **Unchanged** (grey, collapsed) — already matches
+- Summary strip: "3 new · 1 changed · 14 unchanged"
+- Mode toggle: "Create New Only" (default) vs "Overwrite Existing"
+- Overwrite requires PIN confirmation + risk checkbox
+- Progress section:
+  - "Sending batch 1 of 3 (accounts 1–2)..." with progress bar
+  - Auto-continues to next batch after each succeeds
+  - If Xero returns 429: pauses, shows "Rate limited — retrying in Xs"
+  - Final toast: "4 created, 0 errors"
+- COA cache auto-refreshes after all batches complete
 
-1. **User clicks "Sync to Xero"** from the Account Mapper
-2. **Preview modal opens** with a full line-by-line table:
-   - Each row: Account Code | Account Name | Category | Marketplace | Status Badge
-   - Status badges: 🟢 **New** (will be created) | 🟠 **Changed** (code or name differs from Xero) | ⚪ **Unchanged** (already exists, identical)
-   - Summary strip at top: "5 new · 2 changed · 18 unchanged"
-3. **Mode toggle** (default: "Create New Only"):
-   - **Create New Only**: Only 🟢 New rows are actionable. 🟠 Changed rows shown as "Skipped — toggle Overwrite to update"
-   - **Overwrite Existing**: 🟠 Changed rows become actionable. Shows amber warning banner: "⚠️ Overwriting will modify existing Xero accounts. This cannot be undone."
-4. **Confirmation gate** (when Overwrite enabled):
-   - Checkbox: "I understand this will modify existing accounts in my Xero Chart of Accounts"
-   - PIN entry (existing `useSettingsPin` hook)
-   - Both must be satisfied before "Confirm & Sync" enables
-5. **Confirm & Sync** calls `create-xero-accounts` edge function with a `mode` param (`create_only` | `create_and_update`)
-6. **Post-sync**: Toast with result summary, auto-refresh COA cache
+**2. New helper in `src/actions/xeroAccounts.ts`**
+- `batchCreateXeroAccounts(accounts, { mode, onProgress })` — chunks into groups of 2, calls edge function sequentially, aggregates results
 
-### Technical Implementation
+**3. Edge function update: `supabase/functions/create-xero-accounts/index.ts`**
+- Change `MAX_BATCH` from 10 → 2
+- Add `mode` field: `create_only` (default) | `create_and_update`
+- When `mode === 'create_and_update'`: skip duplicate-code rejection, use POST to update existing
+- Return `retry_after` if Xero sends 429
 
-**Frontend** (new component):
-- `src/components/settings/XeroCoaSyncModal.tsx` — the preview + toggle + consent modal
-- Uses existing `createXeroAccounts` action, extended with `mode` and `updates` payload
-- Compares local `coaSuggestions` against `cachedXeroAccounts` to compute New/Changed/Unchanged
+**4. Wire into `AccountMapperCard.tsx`**
+- Add "Sync to Xero" button (visible when confirmed mapping has New or Changed accounts)
+- Opens the modal with the computed diff data
 
-**Backend** (`supabase/functions/create-xero-accounts/index.ts`):
-- Add `mode` field to request body: `'create_only'` (default) | `'create_and_update'`
-- For `create_and_update`: use Xero Accounts API PUT to update existing accounts
-- Log all changes to `system_events` with `event_type: 'coa_sync'` for audit trail
-- Never delete accounts — only create or update
+### Batch flow (visual)
 
-**Existing hooks/actions to leverage**:
-- `useSettingsPin` for PIN gate
-- `createXeroAccounts` action (extend, don't replace)
-- `getCachedXeroAccounts` for diff comparison
-- `refreshXeroCOA` for post-sync cache refresh
+```text
+[Sync to Xero] clicked
+  → Live COA refresh (already built)
+  → Modal opens with preview table
+  → User confirms (PIN if overwrite)
+  → Batch 1: accounts 1-2 → ✓
+  → Batch 2: accounts 3-4 → ✓
+  → Batch 3: account 5    → ✓
+  → "5 created, 0 errors" toast
+  → COA cache refreshed
+```
 
-### Safety Invariants
-- Default mode is ALWAYS "Create New Only" — overwrite requires explicit opt-in per session
-- PIN + checkbox required for every overwrite sync (no "remember" option)
-- All overwrite operations logged to `system_events` with before/after values
-- Edge function validates `mode` server-side — rejects `create_and_update` without proper auth
+### Files changed
+
+| File | Action |
+|------|--------|
+| `src/components/settings/XeroCoaSyncModal.tsx` | Create |
+| `src/actions/xeroAccounts.ts` | Add `batchCreateXeroAccounts` |
+| `supabase/functions/create-xero-accounts/index.ts` | MAX_BATCH=2, mode param, 429 handling |
+| `src/components/settings/AccountMapperCard.tsx` | Add Sync button + modal |
+
+### Why batch of 2
+- Minimal server load per call (2 creates + 1 COA refresh = 3 Xero API calls)
+- Easy to verify each pair succeeds before moving on
+- Can bump to 5 later once we're confident
+
