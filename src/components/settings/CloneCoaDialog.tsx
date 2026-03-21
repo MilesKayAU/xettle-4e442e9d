@@ -123,7 +123,16 @@ export default function CloneCoaDialog({
       allCoveredMarketplaces: coveredMarketplaces,
     });
 
-    setCloneRows(rows);
+    // Apply category checklist selections to optional categories
+    const adjustedRows = rows.map(row => {
+      const optCat = OPTIONAL_CATEGORIES.find(c => c.key === row.category);
+      if (optCat && categorySelections[row.category] === false) {
+        return { ...row, enabled: false };
+      }
+      return row;
+    });
+
+    setCloneRows(adjustedRows);
     setAiReview(null); // Reset AI review when rows change
 
     // Log preview generation event (telemetry)
@@ -136,13 +145,13 @@ export default function CloneCoaDialog({
             eventType: 'coa_clone_previewed',
             templateMarketplace,
             targetMarketplace,
-            accountsCreated: rows.filter(r => r.enabled).length,
+            accountsCreated: adjustedRows.filter(r => r.enabled).length,
             taxProfile: undefined,
           });
         }
       } catch { /* non-critical */ }
     })();
-  }, [templateMarketplace, open, coaAccounts, allCodes, targetMarketplace, templateEligibility.eligible, matchPattern]);
+  }, [templateMarketplace, open, coaAccounts, allCodes, targetMarketplace, templateEligibility.eligible, matchPattern, categorySelections]);
 
   // Reset on open — prefer simpler marketplace templates (non-Amazon) as defaults
   useEffect(() => {
