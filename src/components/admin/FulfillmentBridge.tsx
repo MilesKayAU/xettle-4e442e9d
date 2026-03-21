@@ -570,14 +570,20 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSel
 
           {/* Upload area */}
           {!imagePreview ? (
-            <label className="flex flex-col items-center justify-center gap-3 p-8 rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 cursor-pointer transition-colors">
-              <Upload className="h-10 w-10 text-muted-foreground" />
+            <div
+              tabIndex={0}
+              onPaste={handlePaste}
+              className="flex flex-col items-center justify-center gap-3 p-8 rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 focus:border-primary focus:ring-2 focus:ring-ring cursor-pointer transition-colors outline-none"
+              onClick={() => (document.getElementById('screenshot-file-input') as HTMLInputElement)?.click()}
+              onKeyDown={(e) => { if (e.key === 'Enter') (document.getElementById('screenshot-file-input') as HTMLInputElement)?.click(); }}
+            >
+              <ClipboardPaste className="h-10 w-10 text-muted-foreground" />
               <div className="text-center">
-                <p className="font-medium">Drop screenshot here or click to upload</p>
+                <p className="font-medium">Paste screenshot (Ctrl+V) or click to upload</p>
                 <p className="text-sm text-muted-foreground mt-1">PNG, JPG — Amazon order detail page</p>
               </div>
-              <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-            </label>
+              <input id="screenshot-file-input" type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+            </div>
           ) : (
             <div className="space-y-3">
               <div className="relative">
