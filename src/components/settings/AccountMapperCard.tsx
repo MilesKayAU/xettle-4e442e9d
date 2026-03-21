@@ -1404,12 +1404,31 @@ export default function AccountMapperCard() {
 
   // ─── REVIEW STATE ────────────────────────────────────────────────
   if (state === 'review') {
-    const categoriesToShow = showOnlyMissing
-      ? CATEGORIES.filter(cat => {
-          const code = editableMapping[cat] || mapping[cat]?.code;
-          return !code || validateCode(code, cat) !== 'valid';
-        })
-      : [...CATEGORIES];
+    const lowerSearch = searchKeyword.toLowerCase().trim();
+    const categoriesToShow = CATEGORIES.filter(cat => {
+      if (showOnlyMissing) {
+        const code = editableMapping[cat] || mapping[cat]?.code;
+        if (code && validateCode(code, cat) === 'valid') return false;
+      }
+      if (lowerSearch) {
+        // Match on category name, description, or any marketplace sub-row label/code/name
+        const catMatch = cat.toLowerCase().includes(lowerSearch) ||
+          (CATEGORY_DESCRIPTIONS[cat] || '').toLowerCase().includes(lowerSearch);
+        if (catMatch) return true;
+        // Check marketplace overrides
+        if (splitByMarketplace) {
+          for (const mp of getEffectiveMarketplaces()) {
+            const key = `${cat}:${mp}`;
+            const rowLabel = `${mp} ${cat}`.toLowerCase();
+            const code = editableMapping[key] || mapping[key]?.code || coaSuggestions.get(key)?.code || '';
+            const name = mapping[key]?.name || coaSuggestions.get(key)?.name || '';
+            if (rowLabel.includes(lowerSearch) || code.toLowerCase().includes(lowerSearch) || name.toLowerCase().includes(lowerSearch)) return true;
+          }
+        }
+        return false;
+      }
+      return true;
+    });
 
     return (
       <>
