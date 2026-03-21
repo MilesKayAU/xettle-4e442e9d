@@ -120,6 +120,7 @@ export default function AccountMapperCard() {
   const [coaLastSynced, setCoaLastSynced] = useState<string | null>(null);
   const [refreshingCoa, setRefreshingCoa] = useState(false);
   const [showOnlyMissing, setShowOnlyMissing] = useState(false);
+  const [searchKeyword, setSearchKeyword] = useState('');
 
   // Marketplace split state
   const [splitByMarketplace, setSplitByMarketplace] = useState(false);
