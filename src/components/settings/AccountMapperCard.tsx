@@ -138,6 +138,10 @@ export default function AccountMapperCard() {
   const [overwriteChanges, setOverwriteChanges] = useState<Array<{ category: string; oldCode: string; newCode: string }>>([]);
   const [pendingConfirmAction, setPendingConfirmAction] = useState<(() => Promise<void>) | null>(null);
 
+  // Sync modal state
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const [pendingConfirmAction, setPendingConfirmAction] = useState<(() => Promise<void>) | null>(null);
+
   // Confirmed (saved) codes for comparison
   const [confirmedCodes, setConfirmedCodes] = useState<Record<string, string>>({});
 
