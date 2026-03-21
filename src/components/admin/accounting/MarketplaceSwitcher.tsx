@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { CheckCircle2, Plus, Loader2, X, Zap } from 'lucide-react';
+import { CheckCircle2, Plus, Loader2, X, Zap, PauseCircle, PlayCircle } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -170,6 +170,7 @@ export default function MarketplaceSwitcher({
   const [addingCode, setAddingCode] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [registryEntries, setRegistryEntries] = useState<MarketplaceDefinition[]>([]);
+  const [togglingPause, setTogglingPause] = useState<string | null>(null);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingCode, setDeletingCode] = useState<string | null>(null);
@@ -296,6 +297,27 @@ export default function MarketplaceSwitcher({
     }
   };
 
+  const handleTogglePause = async (um: UserMarketplace) => {
+    setTogglingPause(um.marketplace_code);
+    try {
+      const newStatus = um.connection_status === 'paused' ? 'active' : 'paused';
+      const { error } = await supabase
+        .from('marketplace_connections')
+        .update({ connection_status: newStatus })
+        .eq('id', um.id);
+
+      if (error) throw error;
+
+      const label = newStatus === 'paused' ? 'paused — excluded from COA & sync' : 'reactivated';
+      toast.success(`${um.marketplace_name} ${label}`);
+      onMarketplacesChanged();
+    } catch (err: any) {
+      toast.error(`Failed: ${err.message}`);
+    } finally {
+      setTogglingPause(null);
+    }
+  };
+
   // Merge static catalog with registry entries for the full available list
   const fullCatalog = [...MARKETPLACE_CATALOG, ...registryEntries];
   const availableToAdd = fullCatalog.filter(
@@ -309,29 +331,55 @@ export default function MarketplaceSwitcher({
         {userMarketplaces.map((um) => {
           const def = fullCatalog.find(m => m.code === um.marketplace_code);
           const isActive = um.marketplace_code === selectedMarketplace;
+          const isPaused = um.connection_status === 'paused';
           return (
             <div key={um.id} className="group relative flex items-center">
               <button
                 onClick={() => onMarketplaceChange(um.marketplace_code)}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-sm
-                  ${isActive
-                    ? 'border-primary bg-primary/10 text-foreground font-medium shadow-sm'
-                    : 'border-border bg-background text-muted-foreground hover:bg-muted hover:border-muted-foreground/30 cursor-pointer'
+                  ${isPaused
+                    ? 'border-muted bg-muted/50 text-muted-foreground opacity-60'
+                    : isActive
+                      ? 'border-primary bg-primary/10 text-foreground font-medium shadow-sm'
+                      : 'border-border bg-background text-muted-foreground hover:bg-muted hover:border-muted-foreground/30 cursor-pointer'
                   }`}
               >
                 <span className="text-base">{def?.icon || '📋'}</span>
-                <span>{def?.name || um.marketplace_name}</span>
-                {settlementCounts[um.marketplace_code] != null && (
+                <span className={isPaused ? 'line-through' : ''}>{def?.name || um.marketplace_name}</span>
+                {isPaused && (
+                  <Badge variant="outline" className="text-[9px] px-1 py-0 border-muted-foreground/30">
+                    Paused
+                  </Badge>
+                )}
+                {!isPaused && settlementCounts[um.marketplace_code] != null && (
                   <Badge variant="secondary" className="text-[10px] px-1.5 py-0 min-w-[20px] text-center">
                     {settlementCounts[um.marketplace_code]}
                   </Badge>
                 )}
-                {apiConnectedCodes.has(um.marketplace_code) ? (
+                {!isPaused && apiConnectedCodes.has(um.marketplace_code) ? (
                   <Badge variant="secondary" className="text-[9px] px-1 py-0 gap-0.5 bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
                     <Zap className="h-2.5 w-2.5" /> Auto
                   </Badge>
+                ) : !isPaused ? (
+                  <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                ) : null}
+              </button>
+              {/* Pause/Unpause button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleTogglePause(um);
+                }}
+                disabled={togglingPause === um.marketplace_code}
+                className="absolute -top-1.5 -right-7 h-5 w-5 rounded-full bg-muted border border-border text-muted-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-accent"
+                title={isPaused ? `Reactivate ${def?.name || um.marketplace_name}` : `Pause ${def?.name || um.marketplace_name} — exclude from COA`}
+              >
+                {togglingPause === um.marketplace_code ? (
+                  <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                ) : isPaused ? (
+                  <PlayCircle className="h-3 w-3" />
                 ) : (
-                  <CheckCircle2 className="h-3 w-3 text-green-600" />
+                  <PauseCircle className="h-3 w-3" />
                 )}
               </button>
               {/* Delete X button - visible on hover */}

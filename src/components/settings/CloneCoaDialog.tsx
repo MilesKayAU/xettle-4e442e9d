@@ -27,6 +27,15 @@ import { supabase } from '@/integrations/supabase/client';
 /** Categories that are typically Amazon-specific */
 const AMAZON_SPECIFIC = new Set(['FBA Fees', 'Storage Fees']);
 
+/** Optional categories that users should choose before cloning */
+const OPTIONAL_CATEGORIES: { key: string; label: string; description: string; defaultFor: string[] }[] = [
+  { key: 'FBA Fees', label: 'Fulfilment (FBA) Fees', description: 'Third-party warehouse fulfilment fees. Common for Amazon FBA, some marketplaces offer similar services.', defaultFor: ['amazon'] },
+  { key: 'Storage Fees', label: 'Storage Fees', description: 'Warehouse storage charges. Usually only Amazon FBA, but some 3PL marketplaces charge these too.', defaultFor: ['amazon'] },
+  { key: 'Advertising Costs', label: 'Advertising Costs', description: 'Sponsored ads / promoted listings on this marketplace.', defaultFor: [] },
+  { key: 'Reimbursements', label: 'Reimbursements', description: 'Lost/damaged inventory reimbursements from the marketplace.', defaultFor: ['amazon'] },
+  { key: 'Promotional Discounts', label: 'Promotional Discounts', description: 'Marketplace-funded or seller-funded promotional discounts.', defaultFor: [] },
+];
+
 interface AiVerdict {
   category: string;
   verdict: 'pass' | 'warn' | 'fail';
@@ -65,6 +74,8 @@ export default function CloneCoaDialog({
   const [cloneRows, setCloneRows] = useState<CloneAccountRow[]>([]);
   const [creating, setCreating] = useState(false);
   const [matchPattern, setMatchPattern] = useState(true);
+  const [showChecklist, setShowChecklist] = useState(true);
+  const [categorySelections, setCategorySelections] = useState<Record<string, boolean>>({});
 
   // AI Review state
   const [aiReview, setAiReview] = useState<AiReviewResult | null>(null);
@@ -112,7 +123,16 @@ export default function CloneCoaDialog({
       allCoveredMarketplaces: coveredMarketplaces,
     });
 
-    setCloneRows(rows);
+    // Apply category checklist selections to optional categories
+    const adjustedRows = rows.map(row => {
+      const optCat = OPTIONAL_CATEGORIES.find(c => c.key === row.category);
+      if (optCat && categorySelections[row.category] === false) {
+        return { ...row, enabled: false };
+      }
+      return row;
+    });
+
+    setCloneRows(adjustedRows);
     setAiReview(null); // Reset AI review when rows change
 
     // Log preview generation event (telemetry)
@@ -125,16 +145,15 @@ export default function CloneCoaDialog({
             eventType: 'coa_clone_previewed',
             templateMarketplace,
             targetMarketplace,
-            accountsCreated: rows.filter(r => r.enabled).length,
+            accountsCreated: adjustedRows.filter(r => r.enabled).length,
             taxProfile: undefined,
           });
         }
       } catch { /* non-critical */ }
     })();
-  }, [templateMarketplace, open, coaAccounts, allCodes, targetMarketplace, templateEligibility.eligible, matchPattern]);
+  }, [templateMarketplace, open, coaAccounts, allCodes, targetMarketplace, templateEligibility.eligible, matchPattern, categorySelections]);
 
   // Reset on open — prefer simpler marketplace templates (non-Amazon) as defaults
-  // since most marketplaces share the same basic categories without FBA/Storage
   useEffect(() => {
     if (open) {
       const preferredOrder = ['ebay_au', 'shopify', 'catch_au', 'kogan_au', 'mydeal_au'];
@@ -144,8 +163,19 @@ export default function CloneCoaDialog({
         || '';
       setTemplateMarketplace(bestDefault);
       setAiReview(null);
+      setShowChecklist(true);
+
+      // Initialize category selections based on target marketplace
+      const isAmazonTarget = targetMarketplace.toLowerCase().includes('amazon');
+      const defaults: Record<string, boolean> = {};
+      for (const cat of OPTIONAL_CATEGORIES) {
+        defaults[cat.key] = cat.defaultFor.length === 0 
+          ? true  // Always-on categories like Advertising
+          : cat.defaultFor.some(d => isAmazonTarget || targetMarketplace.toLowerCase().includes(d));
+      }
+      setCategorySelections(defaults);
     }
-  }, [open, coveredMarketplaces]);
+  }, [open, coveredMarketplaces, targetMarketplace]);
 
   const enabledRows = cloneRows.filter(r => r.enabled);
 
@@ -358,9 +388,51 @@ export default function CloneCoaDialog({
                 Replicate decimal conventions (e.g. 200 → 200.1) from the template
               </p>
             </div>
-            <Switch checked={matchPattern} onCheckedChange={setMatchPattern} />
+             <Switch checked={matchPattern} onCheckedChange={setMatchPattern} />
           </div>
 
+          {/* Category checklist — ask which optional account types to create */}
+          {templateMarketplace && templateEligibility.eligible && (
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium">Which account categories does {targetMarketplace} need?</Label>
+                <button
+                  onClick={() => setShowChecklist(!showChecklist)}
+                  className="text-[10px] text-primary hover:underline"
+                >
+                  {showChecklist ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              {showChecklist && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] text-muted-foreground">
+                    Core categories (Sales, Shipping, Refunds, Seller Fees, Other Fees) are always included. Toggle optional categories below:
+                  </p>
+                  {OPTIONAL_CATEGORIES.map(cat => {
+                    const isChecked = categorySelections[cat.key] !== false;
+                    return (
+                      <label
+                        key={cat.key}
+                        className="flex items-start gap-2 rounded-md border bg-background px-3 py-2 cursor-pointer hover:bg-accent/50 transition-colors"
+                      >
+                        <Checkbox
+                          checked={isChecked}
+                          onCheckedChange={(checked) => {
+                            setCategorySelections(prev => ({ ...prev, [cat.key]: !!checked }));
+                          }}
+                          className="mt-0.5"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs font-medium">{cat.label}</span>
+                          <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{cat.description}</p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {templateMarketplace && !templateEligibility.eligible && (
             <Alert className="border-destructive/50 bg-destructive/5">

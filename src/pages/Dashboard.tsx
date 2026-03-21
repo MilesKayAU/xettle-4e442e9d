@@ -607,19 +607,20 @@ export default function Dashboard() {
       if (error) throw error;
 
       if (data && data.length > 0) {
-        // Separate active channels from suggested and paused (CoA-detected / user-hidden)
-        const activeConnections = data.filter((m: any) => m.connection_status !== 'suggested' && m.connection_status !== 'paused');
+        // Separate suggested connections; show active + paused in the switcher
+        const visibleConnections = data.filter((m: any) => m.connection_status !== 'suggested');
         const suggested = data.filter((m: any) => m.connection_status === 'suggested');
 
-        setUserMarketplaces(activeConnections as UserMarketplace[]);
+        setUserMarketplaces(visibleConnections as UserMarketplace[]);
         setSuggestedConnections(suggested);
         setSelectedMarketplace(prev => {
-          if (activeConnections.find((m: any) => m.marketplace_code === prev)) return prev;
-          return activeConnections.length > 0 ? activeConnections[0].marketplace_code : '';
+          const activeCodes = visibleConnections.filter((m: any) => m.connection_status !== 'paused');
+          if (activeCodes.find((m: any) => m.marketplace_code === prev)) return prev;
+          return activeCodes.length > 0 ? activeCodes[0].marketplace_code : visibleConnections[0]?.marketplace_code || '';
         });
 
         // Fetch settlement counts per marketplace (using count queries, not downloading all rows)
-        const codes = activeConnections.map((m: any) => m.marketplace_code);
+        const codes = visibleConnections.map((m: any) => m.marketplace_code);
         const counts: Record<string, number> = {};
         const countPromises = codes.map(async (code: string) => {
           const { count } = await supabase
