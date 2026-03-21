@@ -1880,6 +1880,7 @@ export default function AccountMapperCard() {
             const [accounts, lastSynced] = await Promise.all([getCachedXeroAccounts(), getCoaLastSyncedAt()]);
             setCoaAccounts(accounts);
             setCoaLastSynced(lastSynced);
+            queryClient.invalidateQueries({ queryKey: ['dashboard-task-counts'] });
           }}
         />
       )}
@@ -2052,6 +2053,7 @@ export default function AccountMapperCard() {
         ]);
         setCoaAccounts(accounts);
         setCoaLastSynced(lastSynced);
+        queryClient.invalidateQueries({ queryKey: ['dashboard-task-counts'] });
       }}
     />
     </>
