@@ -156,8 +156,9 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
     return byStatus !== 0 ? byStatus : sectionOrder.indexOf(a) - sectionOrder.indexOf(b);
   });
 
-  const incompleteCount = sectionOrder
-    .filter(k => getStatus(k) === 'incomplete' || getStatus(k) === 'warning').length;
+  const blockingCount = sectionOrder.filter(k => getStatus(k) === 'incomplete').length;
+  const warningOnlyCount = sectionOrder.filter(k => getStatus(k) === 'warning').length;
+  const incompleteCount = blockingCount + warningOnlyCount;
 
   const sectionContent: Record<typeof sectionOrder[number], React.ReactNode> = {
     api_connections: (
