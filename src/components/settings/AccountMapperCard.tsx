@@ -788,6 +788,42 @@ export default function AccountMapperCard() {
 
   const executeConfirm = async (finalCodes: Record<string, string>) => {
     try {
+      // ─── Real-time COA freshness gate ────────────────────────────────
+      // Force-refresh the Xero COA cache before confirming to ensure all
+      // codes are validated against the live Xero Chart of Accounts.
+      toast.info('Verifying accounts against live Xero data…');
+      const refreshResult = await refreshXeroCOA();
+      if (!refreshResult.success) {
+        toast.error(`Cannot verify with Xero: ${refreshResult.error}. Please try again.`);
+        return;
+      }
+
+      // Reload fresh COA into local state
+      const [freshAccounts, freshSyncedAt] = await Promise.all([
+        getCachedXeroAccounts(),
+        getCoaLastSyncedAt(),
+      ]);
+      setCoaAccounts(freshAccounts);
+      setCoaLastSynced(freshSyncedAt);
+
+      // Build fresh lookup and validate every code
+      const freshCoaSet = new Set(freshAccounts.map(a => a.account_code).filter(Boolean));
+      const invalidCodes: string[] = [];
+      for (const [key, code] of Object.entries(finalCodes)) {
+        if (code && !freshCoaSet.has(code)) {
+          invalidCodes.push(`${key} → ${code}`);
+        }
+      }
+
+      if (invalidCodes.length > 0) {
+        toast.error(
+          `${invalidCodes.length} code${invalidCodes.length > 1 ? 's' : ''} not found in Xero. ` +
+          `Create them first or choose existing accounts.`,
+          { duration: 6000 }
+        );
+        return;
+      }
+
       const { confirmMappings } = await import('@/actions/accountMappings');
       const result = await confirmMappings(finalCodes);
       if (!result.success) throw new Error(result.error);
@@ -795,7 +831,7 @@ export default function AccountMapperCard() {
       const updatedMapping: Record<string, MappingEntry> = {};
       for (const cat of CATEGORIES) {
         const code = finalCodes[cat];
-        const coaEntry = coaAccounts.find(a => a.account_code === code);
+        const coaEntry = freshAccounts.find(a => a.account_code === code);
         updatedMapping[cat] = {
           code,
           name: coaEntry?.account_name || mapping[cat]?.name || `Account ${code}`,
@@ -803,14 +839,14 @@ export default function AccountMapperCard() {
       }
       for (const key of Object.keys(finalCodes)) {
         if (key.includes(':')) {
-          const coaEntry = coaAccounts.find(a => a.account_code === finalCodes[key]);
+          const coaEntry = freshAccounts.find(a => a.account_code === finalCodes[key]);
           updatedMapping[key] = { code: finalCodes[key], name: coaEntry?.account_name || `Account ${finalCodes[key]}` };
         }
       }
       setMapping(updatedMapping);
       setConfirmedCodes(finalCodes);
       setState('confirmed');
-      toast.success('Account mapping confirmed — all Xero pushes will use these codes');
+      toast.success('Account mapping confirmed — all codes verified against live Xero COA');
       queryClient.invalidateQueries({ queryKey: ['dashboard-task-counts'] });
     } catch (err: any) {
       toast.error(`Failed to save mapping: ${err.message}`);
