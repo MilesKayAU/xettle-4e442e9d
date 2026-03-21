@@ -1,46 +1,52 @@
 
 
-# Amazon API Compliance Dashboard
+# Add New Amazon Compliance Items from Screenshots
 
-## What Gets Built
+## What exists now
+7 items across 3 categories: code_architecture (3), data_protection (2), operational (2).
 
-### 1. New Admin Page: `AmazonComplianceDashboard`
-A dedicated admin component added as a new nav item under "Operations" (alongside Fulfillment Bridge). Contains three sections:
+## New items to add (from screenshots)
 
-**Compliance Checklist** — Persistent, database-backed checklist of SP-API approval requirements. Pre-seeded with the critical items from your screenshot (OAuth/LwA flow, RDT for PII, exponential backoff, idempotency, PII purge, account lockout, API key rotation). Each item has:
-- Title + description
-- Status toggle (compliant / not yet)
-- Notes field for evidence links or implementation details
-- "Add Custom Item" button for new requirements as they emerge
+### Category: `security_controls` (new — "Code & architecture — security controls")
+1. **Network firewall + access control lists deny unauthorised IPs** — "Supabase has this via its own network layer — document it explicitly" → pre-mark compliant (Supabase handles this)
+2. **Encryption in transit (TLS) and at rest for all data stores** — "Supabase handles this — confirm and document the config" → pre-mark compliant
+3. **Access limited to approved internal users only (role-based)** — "No shared credentials; each person has an individual account with appropriate role" → pre-mark compliant (user_roles system exists)
+4. **Audit log records every API call and every PII access event** — "Amazon may request these logs during a security assessment" → pre-mark compliant (api_call_log + auditedFetch)
+5. **Circuit breaker: pause polling after N consecutive API failures** — "Prevents hammering a degraded API; required for DPP network protection" → pre-mark compliant (api_safe_mode exists)
+6. **Anti-virus/malware on all end-user devices that access the system** — "A process/policy requirement — Amazon checks this in audits" → not compliant (process item, needs documenting)
 
-**API Audit Console** — Embedded view of the existing `api_call_log` data (currently in the Fulfillment Bridge "API Audit" tab), but surfaced here as the primary audit tool with additional filters (date range, endpoint, error-only view) and CSV export for Amazon's review team.
+### Category: `documentation` (new — "Documentation — what Amazon reviews")
+7. **Data Protection Plan (DPP) document — custom to your stack** — "Specific to Supabase/Vercel/your infra. Vague answers get rejected" → not compliant
+8. **Incident response plan (approved by senior manager, reviewed every 6 months)** — "Must include: incident types, response procedures, escalation path, notify Amazon within 24hrs" → not compliant
+9. **Risk assessment reviewed annually by senior management** — "Must include threat/vulnerability assessment with likelihood and impact" → not compliant
+10. **Vulnerability scan every 180 days; pen test every 365 days** — "Must scan code before each release too — document your process even if lightweight" → not compliant
+11. **Use case description: specific, not generic (under 500 words)** — draft text provided → not compliant
+12. **Website meets Amazon's public developer guidelines** — "xettle.app must have a product page describing the FBM bridge, privacy policy, and terms of service" → partially (privacy/terms exist, needs FBM product page)
+13. **$1,400 USD annual SP-API subscription fee budgeted (from Jan 2026)** — "New fee for all third-party developers — confirm this is accounted for" → not compliant
 
-**Amazon Email Analyzer (AI)** — A text area where you paste an email from Amazon's developer support. Sends it to an edge function that uses Gemini Flash to:
-1. Extract the specific requirements/questions Amazon is asking about
-2. Search the codebase knowledge (using a pre-built context of your FBM architecture, audit log, circuit breaker, retry logic, PII policy, etc.) to determine which features already satisfy each requirement
-3. Return a structured response: for each requirement, whether it's already implemented (with evidence/file references) or needs to be built, plus a draft reply you could send back to Amazon
+### Category: `scope_decision` (new — "Private vs public app — your decision point")
+14. **Decided: private app (your store only) vs public app (Appstore listing)** — "Private = no Appstore listing required, less scrutiny..." → not compliant
+15. **Roles selected: which SP-API roles you're requesting** — "Only request what you actually use — unnecessary roles delay approval" → not compliant
 
-### 2. Database
-New `amazon_compliance_items` table:
-- `id`, `user_id`, `title`, `description`, `category` (text — 'code_architecture', 'data_protection', 'operational', 'custom')
-- `is_compliant` (boolean, default false)
-- `evidence_notes` (text, nullable)
-- `created_at`, `updated_at`
+## Changes
 
-Pre-seeded via migration with the 7 critical items from your screenshot. RLS: admin-only access.
+### 1. Database migration
+Insert the 15 new items into `amazon_compliance_items` with appropriate categories and pre-set `is_compliant` for items we know are covered (items 1-5 above). Uses a subquery to get the admin user_id from `user_roles`.
 
-### 3. Edge Function: `ai-amazon-compliance`
-Accepts pasted email text, sends to Gemini Flash with a system prompt containing a structured summary of all FBM Bridge capabilities (circuit breaker, retry queue, audit log, OAuth flow, PII handling, idempotency checks). Returns:
-- Extracted requirements from the email
-- Per-requirement compliance status with file/feature references
-- Draft reply text
+### 2. UI update (`AmazonComplianceDashboard.tsx`)
+- Add new category labels: `security_controls` → "Security Controls", `documentation` → "Documentation", `scope_decision` → "Scope Decision"
+- Add category priority badges: "High priority", "Docs required", "Scope question" (matching the screenshot styling)
+- Add a category selector dropdown when adding custom items (currently hardcoded to 'custom')
+- Pre-populate the use case description draft text in the evidence_notes for item 11
 
-## Files Changed
+### 3. Use case description draft
+Store this in evidence_notes for the "Use case description" item:
+> "Xettle automates Fulfilled-by-Merchant (FBM) order fulfilment by syncing Amazon orders to Shopify. When an Amazon order is placed, Xettle creates a corresponding draft order in Shopify with the order details. The merchant fulfils the order through their standard Shopify workflow, and Xettle automatically feeds the tracking number and carrier back to Amazon via the SP-API confirmShipment endpoint. This eliminates manual dual-platform management for merchants who use Shopify as their primary fulfilment hub but also sell on Amazon. The application requires the Orders role (to poll for new FBM orders), the Shipping role (to confirm shipment with tracking), and optionally Restricted Data access for buyer shipping addresses when the merchant needs to pre-populate customer details. Xettle is a private application used exclusively by a single Australian merchant."
+
+## Files changed
 
 | File | What |
 |------|------|
-| Database migration | `amazon_compliance_items` table + seed data |
-| `src/components/admin/AmazonComplianceDashboard.tsx` | New component: checklist + audit console + email analyzer |
-| `supabase/functions/ai-amazon-compliance/index.ts` | New edge function for email analysis |
-| `src/pages/Admin.tsx` | Add nav item + import |
+| Database migration | Insert 15 new compliance items with categories and pre-set compliance status |
+| `src/components/admin/AmazonComplianceDashboard.tsx` | Add 3 new category labels, priority badges per category, category selector in add form |
 
