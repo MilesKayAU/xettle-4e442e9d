@@ -308,11 +308,29 @@ export default function AccountMapperCard() {
   const renderCloneBanner = () => {
     if (!splitByMarketplace || !isAdmin || activeMarketplaces.length === 0 || coaAccounts.length === 0) return null;
 
-    // Only show clone options for truly uncovered marketplaces
-    const uncoveredDetails = coverageDetails.filter(d => d.status === 'uncovered');
+    // Only show clone options for truly uncovered marketplaces, excluding ignored ones
+    const uncoveredDetails = coverageDetails.filter(d => d.status === 'uncovered' && !ignoredMarketplaces.has(d.marketplace));
 
-    // If everything has at least some accounts, don't show the clone banner
-    if (uncoveredDetails.length === 0) return null;
+    // If everything has at least some accounts (or is ignored), don't show the clone banner
+    if (uncoveredDetails.length === 0 && ignoredMarketplaces.size === 0) return null;
+    if (uncoveredDetails.length === 0) {
+      // Show a small restore link if there are ignored marketplaces
+      return (
+        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+          <Info className="h-3 w-3 shrink-0" />
+          <span>{ignoredMarketplaces.size} marketplace{ignoredMarketplaces.size !== 1 ? 's' : ''} ignored.</span>
+          <button
+            onClick={() => {
+              setIgnoredMarketplaces(new Set());
+              saveExclusions(excludedMappings, excludedMarketplaces, excludedCategories, new Set());
+            }}
+            className="text-primary hover:underline"
+          >
+            Restore all
+          </button>
+        </div>
+      );
+    }
 
     // No-template-available: nothing covered at all (can't clone from anything)
     if (coveredMarketplaces.length === 0) {
@@ -335,6 +353,21 @@ export default function AccountMapperCard() {
             {uncoveredDetails.length} marketplace{uncoveredDetails.length !== 1 ? 's have' : ' has'} no
             Xero accounts yet. Select to clone from an existing template.
           </span>
+          {ignoredMarketplaces.size > 0 && (
+            <span className="text-[10px]">
+              ({ignoredMarketplaces.size} ignored —{' '}
+              <button
+                onClick={() => {
+                  setIgnoredMarketplaces(new Set());
+                  saveExclusions(excludedMappings, excludedMarketplaces, excludedCategories, new Set());
+                }}
+                className="text-primary hover:underline"
+              >
+                restore
+              </button>
+              )
+            </span>
+          )}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
           {uncoveredDetails.map(detail => {
@@ -361,7 +394,19 @@ export default function AccountMapperCard() {
                   className="rounded border-muted-foreground/30 h-3.5 w-3.5"
                 />
                 <span className="font-medium truncate">{detail.marketplace}</span>
-                <XCircle className="h-3 w-3 text-amber-500 ml-auto shrink-0" />
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleIgnoreMarketplace(detail.marketplace);
+                    toast.success(`${detail.marketplace} ignored — won't appear here again`);
+                  }}
+                  className="ml-auto shrink-0 text-muted-foreground hover:text-destructive transition-colors"
+                  title={`Ignore ${detail.marketplace} — hide from this list`}
+                >
+                  <XCircle className="h-3.5 w-3.5" />
+                </button>
               </label>
             );
           })}
