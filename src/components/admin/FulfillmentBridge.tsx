@@ -670,6 +670,18 @@ function OrderMonitorTab() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [screenshotOrder, setScreenshotOrder] = useState<any | null>(null);
+  const [sellerCentralDomain, setSellerCentralDomain] = useState(DEFAULT_AMAZON_REGION.sellerCentralDomain);
+
+  // Resolve Seller Central domain from user's amazon_tokens
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('amazon_tokens').select('marketplace_id').limit(1).maybeSingle();
+      if (data?.marketplace_id) {
+        const region = AMAZON_REGIONS.find(r => r.marketplaceId === data.marketplace_id);
+        if (region) setSellerCentralDomain(region.sellerCentralDomain);
+      }
+    })();
+  }, []);
 
   const retryTracking = async (order: any) => {
     setRetryingId(order.id);
