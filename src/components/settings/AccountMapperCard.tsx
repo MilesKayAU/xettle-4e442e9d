@@ -1156,6 +1156,11 @@ export default function AccountMapperCard() {
     return !code || validateCode(code, cat) !== 'valid';
   }).length;
 
+  // Count codes that exist in editableMapping but are not found in Xero COA
+  const notInXeroCount = coaMap.size > 0
+    ? Object.values(editableMapping).filter(code => code && !coaMap.has(code)).length
+    : 0;
+
   const renderPinDialog = () => (
     <SettingsPinDialog
       open={settingsPin.showDialog}
