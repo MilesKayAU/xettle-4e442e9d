@@ -416,11 +416,11 @@ async function handleManualRetry(
     carrier: carrierCode,
   })
 
-  const confirmResponse = await fetch(confirmUrl, {
+  const confirmResponse = await auditedFetch(confirmUrl, {
     method: 'POST',
     headers: { ...getSpApiHeaders(accessToken), 'Content-Type': 'application/json' },
     body: JSON.stringify(confirmPayload),
-  })
+  }, { user_id: fbmOrder.user_id, integration: 'amazon_sp_api', context: { action: 'confirm_shipment_manual_retry', order_id: fbmOrder.amazon_order_id, tracking_number: trackingNumber } })
 
   if (confirmResponse.ok || confirmResponse.status === 204) {
     await supabase.from('amazon_fbm_orders').update({
