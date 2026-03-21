@@ -15,6 +15,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
 import { REQUIRED_CATEGORIES } from '@/actions/xeroReadiness';
+import { normalizeKeyLabel } from '@/utils/marketplace-codes';
 import { SCOPE_VERSION } from '@/policy/supportPolicy';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -154,11 +155,14 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
     const missingDetails: string[] = [];
     for (const conn of connections) {
       const code = conn.marketplace_code;
+      const keyLabel = normalizeKeyLabel(code);
       const missingCats: string[] = [];
       for (const cat of REQUIRED_CATEGORIES) {
         totalRequired++;
-        const mpKey = `${cat}:${code}`;
-        const mapped = parsedMappings[mpKey] || parsedMappings[cat] || DEFAULT_FALLBACK;
+        // Check per-marketplace override using the same key format as AccountMapperCard
+        const mpKeyByLabel = `${cat}:${keyLabel}`;
+        const mpKeyByCode = `${cat}:${code}`;
+        const mapped = parsedMappings[mpKeyByLabel] || parsedMappings[mpKeyByCode] || parsedMappings[cat] || DEFAULT_FALLBACK;
         if (mapped === DEFAULT_FALLBACK || !mapped) {
           missingCats.push(cat);
           totalMissing++;
