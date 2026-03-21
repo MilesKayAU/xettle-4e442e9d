@@ -1543,68 +1543,7 @@ export default function AccountMapperCard() {
             </table>
           </div>
 
-          {/* Split by marketplace toggle */}
-          {getEffectiveMarketplaces().length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-3 rounded-lg border border-border/50 px-3 py-2">
-                <Switch
-                  id="split-marketplace"
-                  checked={splitByMarketplace}
-                  onCheckedChange={handleSplitToggle}
-                />
-                <Label htmlFor="split-marketplace" className="text-xs text-muted-foreground cursor-pointer">
-                  Split by marketplace — map each category per channel (Sales, Fees, Refunds, etc.)
-                </Label>
-              </div>
-
-              {/* Marketplace exclusion filter */}
-              {splitByMarketplace && getEffectiveMarketplaces().length > 1 && (
-                <div className="rounded-lg border border-border/50 px-3 py-2.5 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-medium flex items-center gap-1.5">
-                      <Filter className="h-3 w-3" />
-                      Exclude marketplaces from COA mapping
-                    </Label>
-                    {excludedMarketplaces.size > 0 && (
-                      <button
-                        onClick={() => {
-                          setExcludedMarketplaces(new Set());
-                          saveExclusions(excludedMappings, new Set(), excludedCategories);
-                        }}
-                        className="text-[10px] text-primary hover:underline"
-                      >
-                        Clear all
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {getEffectiveMarketplaces().map(mp => {
-                      const isExcluded = excludedMarketplaces.has(mp);
-                      return (
-                        <button
-                          key={mp}
-                          onClick={() => toggleExcludeMarketplace(mp)}
-                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] border transition-colors ${
-                            isExcluded
-                              ? 'bg-destructive/10 border-destructive/30 text-destructive line-through'
-                              : 'bg-background border-border text-foreground hover:bg-accent'
-                          }`}
-                        >
-                          {isExcluded ? <XCircle className="h-2.5 w-2.5" /> : <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" />}
-                          {mp}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {excludedMarketplaces.size > 0 && (
-                    <p className="text-[10px] text-muted-foreground">
-                      {excludedMarketplaces.size} marketplace{excludedMarketplaces.size > 1 ? 's' : ''} excluded — their rows won't be included in Xero sync or mapping confirmation.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+          {/* Filter panel moved above table */}
 
           {notes && (
             <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground flex gap-2">
