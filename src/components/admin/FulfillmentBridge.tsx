@@ -635,11 +635,21 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSel
                 </div>
 
                 {extractedData.amazon_order_id && extractedData.amazon_order_id !== order.amazon_order_id && (
+                  <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-sm">
+                    <ShieldAlert className="h-4 w-4 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="font-semibold">Wrong screenshot — order ID mismatch</p>
+                      <p className="text-xs mt-1">
+                        Screenshot shows <strong className="font-mono">{extractedData.amazon_order_id}</strong> but this row is <strong className="font-mono">{order.amazon_order_id}</strong>.
+                        Please upload the correct order screenshot.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {!extractedData.amazon_order_id && (
                   <div className="flex items-start gap-2 p-2 rounded bg-amber-50 border border-amber-200 text-amber-800 text-xs">
                     <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                    <span>
-                      Extracted order ID (<strong>{extractedData.amazon_order_id}</strong>) doesn't match selected order (<strong>{order.amazon_order_id}</strong>). Double-check the screenshot.
-                    </span>
+                    <span>Could not detect an Amazon Order ID in the screenshot. Verify this is the correct order before patching.</span>
                   </div>
                 )}
               </CardContent>
