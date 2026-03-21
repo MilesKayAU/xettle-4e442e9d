@@ -136,7 +136,7 @@ export async function createXeroAccounts(accounts: CreateXeroAccountInput[]): Pr
   if (accounts.length > MAX_XERO_ACCOUNTS_PER_RUN) {
     return {
       success: false,
-      error: `Hard limit: only ${MAX_XERO_ACCOUNTS_PER_RUN} account${MAX_XERO_ACCOUNTS_PER_RUN !== 1 ? 's' : ''} can be created in Xero per run.`,
+      error: `Hard limit: only ${MAX_XERO_ACCOUNTS_PER_RUN} accounts can be created in Xero per run.`,
     };
   }
 
@@ -200,7 +200,7 @@ export async function batchCreateXeroAccounts(
       updated: 0,
       skipped: 0,
       errors: [],
-      error: `Hard limit: only ${MAX_XERO_ACCOUNTS_PER_RUN} account${MAX_XERO_ACCOUNTS_PER_RUN !== 1 ? 's' : ''} can be pushed to Xero per run. You tried ${accounts.length}.`,
+      error: `Hard limit: only ${MAX_XERO_ACCOUNTS_PER_RUN} accounts can be pushed to Xero per run. You tried ${accounts.length}.`,
     };
   }
 
