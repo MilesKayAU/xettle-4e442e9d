@@ -155,7 +155,15 @@ export default function AccountMapperCard() {
   // Confirmed (saved) codes for comparison
   const [confirmedCodes, setConfirmedCodes] = useState<Record<string, string>>({});
 
-  // Build CoA lookup maps
+  // Detect if editable mapping has changes not yet in confirmed codes
+  const hasDraftChanges = useMemo(() => {
+    if (state !== 'review') return false;
+    for (const [key, val] of Object.entries(editableMapping)) {
+      if (val && val !== confirmedCodes[key]) return true;
+    }
+    return false;
+  }, [editableMapping, confirmedCodes, state]);
+
   const coaMap = useMemo(() => {
     const map = new Map<string, { name: string; type: string; active: boolean }>();
     for (const acc of coaAccounts) {
