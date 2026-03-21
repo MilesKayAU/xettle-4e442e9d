@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
@@ -12,7 +13,7 @@ import { toast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import {
   CheckCircle, XCircle, RefreshCw, Plus, Download, Search, Send, Shield,
-  FileText, Bot, AlertTriangle, Clock, Copy,
+  FileText, Bot, AlertTriangle, Clock, Copy, Lock, FileCheck, GitBranch,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
