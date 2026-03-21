@@ -920,7 +920,66 @@ export default function AccountMapperCard() {
     return KNOWN_MARKETPLACES.slice(0, 3);
   };
 
-  const confidenceBadge = (level: string) => {
+  /**
+   * Compute sync preview rows by comparing the current mapping against
+   * the cached Xero COA. Returns rows with new/changed/unchanged status.
+   */
+  const computeSyncPreviewRows = (): SyncPreviewRow[] => {
+    const rows: SyncPreviewRow[] = [];
+    const seen = new Set<string>();
+
+    const addRow = (code: string, name: string, category: string, marketplace?: string) => {
+      if (!code || seen.has(code)) return;
+      seen.add(code);
+
+      const xeroEntry = coaMap.get(code);
+      const accountType = getAccountTypeForCategory(category);
+
+      if (!xeroEntry) {
+        rows.push({ code, name, type: accountType, category, marketplace, status: 'new' });
+      } else if (xeroEntry.name !== name || xeroEntry.type !== accountType) {
+        rows.push({
+          code, name, type: accountType, category, marketplace,
+          status: 'changed',
+          xeroName: xeroEntry.name,
+          xeroType: xeroEntry.type,
+        });
+      } else {
+        rows.push({ code, name, type: accountType, category, marketplace, status: 'unchanged' });
+      }
+    };
+
+    // Base categories
+    for (const cat of CATEGORIES) {
+      const code = editableMapping[cat] || mapping[cat]?.code;
+      if (code) {
+        const coaEntry = coaMap.get(code);
+        addRow(code, coaEntry?.name || mapping[cat]?.name || `${cat} AU`, cat);
+      }
+    }
+
+    // Marketplace overrides
+    if (splitByMarketplace) {
+      for (const mp of getEffectiveMarketplaces()) {
+        for (const cat of SPLITTABLE_CATEGORIES) {
+          const key = `${cat}:${mp}`;
+          const code = editableMapping[key] || mapping[key]?.code;
+          if (code) {
+            const coaEntry = coaMap.get(code);
+            const suggestion = coaSuggestions.get(key);
+            addRow(code, coaEntry?.name || suggestion?.name || `${mp} ${cat}`, cat, mp);
+          }
+        }
+      }
+    }
+
+    // Sort: new first, then changed, then unchanged
+    const order: Record<string, number> = { new: 0, changed: 1, unchanged: 2 };
+    rows.sort((a, b) => (order[a.status] ?? 2) - (order[b.status] ?? 2));
+    return rows;
+  };
+
+
     if (level === 'high') return <Badge variant="outline" className="text-green-700 border-green-300 bg-green-50">✅ High</Badge>;
     if (level === 'medium') return <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50">⚠️ Medium</Badge>;
     return <Badge variant="outline" className="text-red-700 border-red-300 bg-red-50">❌ Low</Badge>;
