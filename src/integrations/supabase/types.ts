@@ -47,9 +47,12 @@ export type Database = {
           created_at: string
           error_detail: string | null
           id: string
+          last_retry_at: string | null
           processed_at: string | null
           raw_amazon_payload: Json | null
           raw_shopify_payload: Json | null
+          retry_count: number
+          shipping_service_level: string | null
           shopify_order_id: number | null
           status: string
           updated_at: string
@@ -60,9 +63,12 @@ export type Database = {
           created_at?: string
           error_detail?: string | null
           id?: string
+          last_retry_at?: string | null
           processed_at?: string | null
           raw_amazon_payload?: Json | null
           raw_shopify_payload?: Json | null
+          retry_count?: number
+          shipping_service_level?: string | null
           shopify_order_id?: number | null
           status?: string
           updated_at?: string
@@ -73,9 +79,12 @@ export type Database = {
           created_at?: string
           error_detail?: string | null
           id?: string
+          last_retry_at?: string | null
           processed_at?: string | null
           raw_amazon_payload?: Json | null
           raw_shopify_payload?: Json | null
+          retry_count?: number
+          shipping_service_level?: string | null
           shopify_order_id?: number | null
           status?: string
           updated_at?: string
