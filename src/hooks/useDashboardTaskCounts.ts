@@ -135,22 +135,26 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
     });
   }
 
-  // 4. COA mapping coverage — check per active marketplace
+   // 4. COA mapping coverage — check per active marketplace
   const accountCodes = settingsMap.get('accounting_xero_account_codes');
   const parsedMappings: Record<string, string> = accountCodes
     ? (() => { try { return JSON.parse(accountCodes); } catch { return {}; } })()
     : {};
 
   if (hasXeroTokens && connections.length > 0) {
+    let totalMissing = 0;
+    let totalRequired = 0;
     const missingDetails: string[] = [];
     for (const conn of connections) {
       const code = conn.marketplace_code;
       const missingCats: string[] = [];
       for (const cat of REQUIRED_CATEGORIES) {
+        totalRequired++;
         const mpKey = `${cat}:${code}`;
         const mapped = parsedMappings[mpKey] || parsedMappings[cat] || DEFAULT_FALLBACK;
         if (mapped === DEFAULT_FALLBACK || !mapped) {
           missingCats.push(cat);
+          totalMissing++;
         }
       }
       if (missingCats.length > 0) {
@@ -159,11 +163,16 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
     }
 
     if (missingDetails.length > 0) {
+      // If most mappings are done (>75% covered), downgrade to warning
+      const coveragePct = totalRequired > 0 ? ((totalRequired - totalMissing) / totalRequired) * 100 : 0;
+      const severity: 'blocking' | 'warning' = coveragePct >= 75 ? 'warning' : 'blocking';
       setupWarnings.push({
         key: 'coa_mapping_incomplete',
-        label: 'Account mapping incomplete',
-        severity: 'blocking',
-        message: `Missing mappings — ${missingDetails.join('; ')}.`,
+        label: severity === 'blocking' ? 'Account mapping incomplete' : 'Account mapping almost done',
+        severity,
+        message: severity === 'blocking'
+          ? `Missing mappings — ${missingDetails.join('; ')}.`
+          : `Nearly there! ${totalMissing} mapping${totalMissing !== 1 ? 's' : ''} remaining — ${missingDetails.join('; ')}.`,
         actionLabel: 'Open mapper',
         actionTarget: 'settings:account-mapper',
       });
@@ -202,7 +211,7 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
         key: 'postage_cost_missing',
         label: 'Postage cost not set',
         severity: 'warning',
-        message: `Set your average postage cost for: ${missingPostageCost.join(', ')} in Settings → Fulfilment Methods.`,
+        message: `For more accurate profit, set your average postage cost for: ${missingPostageCost.join(', ')}.`,
         actionLabel: 'Set costs',
         actionTarget: 'settings:fulfilment',
       });
