@@ -126,11 +126,20 @@ export interface CreateXeroAccountsResult {
   error?: string;
 }
 
+const MAX_XERO_ACCOUNTS_PER_RUN = 2;
+
 /**
  * Create new accounts in Xero Chart of Accounts (admin-only).
  * Automatically refreshes the COA cache after creation.
  */
 export async function createXeroAccounts(accounts: CreateXeroAccountInput[]): Promise<CreateXeroAccountsResult> {
+  if (accounts.length > MAX_XERO_ACCOUNTS_PER_RUN) {
+    return {
+      success: false,
+      error: `Hard limit: only ${MAX_XERO_ACCOUNTS_PER_RUN} account${MAX_XERO_ACCOUNTS_PER_RUN !== 1 ? 's' : ''} can be created in Xero per run.`,
+    };
+  }
+
   const { data, error } = await supabase.functions.invoke('create-xero-accounts', {
     body: { accounts },
   });
@@ -171,8 +180,8 @@ export interface BatchCreateResult {
 }
 
 /**
- * Send accounts to Xero in sequential batches of 2.
- * Handles 429 rate-limit responses by pausing and retrying.
+ * Hard-stop COA mutations at 2 total accounts per user action.
+ * Within that run, sends requests in batches of 2 and handles 429 retry-after.
  */
 export async function batchCreateXeroAccounts(
   accounts: CreateXeroAccountInput[],
@@ -183,6 +192,18 @@ export async function batchCreateXeroAccounts(
 ): Promise<BatchCreateResult> {
   const BATCH_SIZE = 2;
   const MAX_RETRIES_PER_BATCH = 3;
+
+  if (accounts.length > MAX_XERO_ACCOUNTS_PER_RUN) {
+    return {
+      success: false,
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      errors: [],
+      error: `Hard limit: only ${MAX_XERO_ACCOUNTS_PER_RUN} account${MAX_XERO_ACCOUNTS_PER_RUN !== 1 ? 's' : ''} can be pushed to Xero per run. You tried ${accounts.length}.`,
+    };
+  }
+
   const batches: CreateXeroAccountInput[][] = [];
   for (let i = 0; i < accounts.length; i += BATCH_SIZE) {
     batches.push(accounts.slice(i, i + BATCH_SIZE));
@@ -218,7 +239,6 @@ export async function batchCreateXeroAccounts(
       };
     }
 
-    // Handle 429 rate limiting — pause and retry this batch (max 3 retries)
     if (data?.error === 'rate_limited' && data?.retry_after) {
       const attempts = (retryCount.get(i) || 0) + 1;
       if (attempts > MAX_RETRIES_PER_BATCH) {
@@ -242,7 +262,6 @@ export async function batchCreateXeroAccounts(
         rateLimitWait: waitSec,
       });
       await new Promise(resolve => setTimeout(resolve, waitSec * 1000));
-      // Retry this batch
       i--;
       continue;
     }
@@ -258,7 +277,6 @@ export async function batchCreateXeroAccounts(
       };
     }
 
-    // Tally results
     const batchCreated = (data.created || []) as { action?: string }[];
     totalCreated += batchCreated.filter(c => c.action !== 'updated').length;
     totalUpdated += batchCreated.filter(c => c.action === 'updated').length;
@@ -269,7 +287,6 @@ export async function batchCreateXeroAccounts(
     }
   }
 
-  // Final progress
   opts.onProgress?.({
     batchIndex: batches.length,
     totalBatches: batches.length,
