@@ -562,6 +562,7 @@ export default function AccountMapperCard() {
           if (parsed.keys) setExcludedMappings(new Set(parsed.keys));
           if (parsed.marketplaces) setExcludedMarketplaces(new Set(parsed.marketplaces));
           if (parsed.categories) setExcludedCategories(new Set(parsed.categories));
+          if (parsed.ignoredMarketplaces) setIgnoredMarketplaces(new Set(parsed.ignoredMarketplaces));
         } catch { /* ignore */ }
       }
 
