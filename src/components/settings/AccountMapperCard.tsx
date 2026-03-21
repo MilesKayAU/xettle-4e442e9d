@@ -1900,12 +1900,21 @@ export default function AccountMapperCard() {
             </div>
           )}
 
+          {hasDraftChanges && (
+            <Alert className="border-primary/30 bg-primary/5">
+              <AlertTriangle className="h-4 w-4 text-primary" />
+              <AlertDescription className="text-xs font-medium">
+                You have unconfirmed draft mappings. Press <strong>"Confirm Mapping"</strong> below to lock them in and clear this section.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="flex gap-2 flex-wrap items-center">
             <Button variant="outline" onClick={handleSaveDraft} className="gap-2">
               <Save className="h-4 w-4" />
               Save Draft
             </Button>
-            <Button onClick={handleConfirm} className="gap-2">
+            <Button onClick={handleConfirm} className={cn("gap-2", hasDraftChanges && "animate-pulse ring-2 ring-primary ring-offset-2")}>
               <CheckCircle2 className="h-4 w-4" />
               Confirm Mapping
             </Button>
