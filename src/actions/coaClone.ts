@@ -135,73 +135,150 @@ export async function logCloneEvent(event: CloneSystemEvent): Promise<void> {
 
 // ─── Preview (Pure Logic) ───────────────────────────────────────────────────
 
+/** Standard categories every marketplace should have */
+const STANDARD_CATEGORIES = new Set([
+  'Sales', 'Shipping', 'Refunds', 'Seller Fees', 'Other Fees', 'Advertising Costs',
+]);
+
+/** Default account types and code ranges for fallback generation */
+const CATEGORY_DEFAULTS: Record<string, { type: string; seedRange: [number, number] }> = {
+  'Sales':               { type: 'REVENUE',  seedRange: [200, 299] },
+  'Shipping':            { type: 'REVENUE',  seedRange: [200, 299] },
+  'Refunds':             { type: 'REVENUE',  seedRange: [200, 299] },
+  'Promotional Discounts': { type: 'REVENUE', seedRange: [200, 299] },
+  'Reimbursements':      { type: 'REVENUE',  seedRange: [200, 299] },
+  'Seller Fees':         { type: 'EXPENSE',  seedRange: [400, 499] },
+  'FBA Fees':            { type: 'EXPENSE',  seedRange: [400, 499] },
+  'Storage Fees':        { type: 'EXPENSE',  seedRange: [400, 499] },
+  'Advertising Costs':   { type: 'EXPENSE',  seedRange: [400, 499] },
+  'Other Fees':          { type: 'EXPENSE',  seedRange: [400, 499] },
+};
+
 /**
  * Build preview rows for a COA clone operation.
- * Pure function — no side effects, no API calls.
+ * 
+ * Strategy: "Best-practice + defaults"
+ * 1. Scan ALL covered marketplaces to find the best template account per category
+ * 2. For categories not found in any marketplace, generate sensible defaults
+ * 3. This ensures every clone gets the full standard set regardless of template completeness
  */
-export function buildClonePreview(input: ClonePreviewInput & { matchPattern?: boolean }): CloneAccountRow[] {
-  const templateAccounts = findTemplateAccounts(
+export function buildClonePreview(input: ClonePreviewInput & { matchPattern?: boolean; allCoveredMarketplaces?: string[] }): CloneAccountRow[] {
+  // Primary: accounts from the selected template
+  const primaryTemplates = findTemplateAccounts(
     input.templateMarketplace,
     input.coaAccounts as any,
   );
 
-  const usePattern = input.matchPattern !== false; // default ON
+  // Build a category→TemplateAccount map, starting with the selected template
+  const bestTemplate = new Map<string, TemplateAccount>();
+  for (const ta of primaryTemplates) {
+    bestTemplate.set(ta.category, ta);
+  }
 
-  // Try pattern detection when enabled
-  const patternAccounts: PatternAccount[] = templateAccounts.map(ta => ({
+  // Scan all other covered marketplaces to fill gaps
+  const allMps = input.allCoveredMarketplaces || [];
+  for (const mp of allMps) {
+    if (mp === input.templateMarketplace) continue;
+    const accounts = findTemplateAccounts(mp, input.coaAccounts as any);
+    for (const ta of accounts) {
+      if (!bestTemplate.has(ta.category)) {
+        bestTemplate.set(ta.category, ta);
+      }
+    }
+  }
+
+  const usePattern = input.matchPattern !== false;
+
+  // Pattern detection from the primary template (for numbering style)
+  const patternAccounts: PatternAccount[] = primaryTemplates.map(ta => ({
     code: ta.code,
     category: ta.category,
     type: ta.type,
   }));
-
   const pattern = usePattern ? detectCodePattern(patternAccounts) : null;
 
-  // Always use pattern-aware batch generation when pattern detected
-  // This ensures new codes stay in the same numeric range as templates
   let codeMap: Map<string, string> | null = null;
   if (pattern) {
-    codeMap = generatePatternBatchCodes(patternAccounts, input.existingCodes, pattern);
+    // Include all best-template accounts for pattern generation
+    const allPatternAccs: PatternAccount[] = [...bestTemplate.values()].map(ta => ({
+      code: ta.code, category: ta.category, type: ta.type,
+    }));
+    codeMap = generatePatternBatchCodes(allPatternAccs, input.existingCodes, pattern);
   }
 
   const claimed = new Set<string>();
   const rows: CloneAccountRow[] = [];
 
   for (const cat of CLONE_CATEGORIES) {
-    const templateAcc = templateAccounts.find(ta => ta.category === cat);
-    if (!templateAcc) continue;
+    const templateAcc = bestTemplate.get(cat);
+    const defaults = CATEGORY_DEFAULTS[cat];
 
-    // Use pattern-mapped code if available, otherwise sequential
-    let newCode: string;
-    if (codeMap && codeMap.has(templateAcc.code)) {
-      newCode = codeMap.get(templateAcc.code)!;
-    } else {
-      newCode = generateNextCode({
-        existingCodes: input.existingCodes,
-        accountType: templateAcc.type,
-        batchClaimed: claimed,
-      });
-    }
-    claimed.add(newCode);
-
-    const newName = generateNewAccountName(
-      templateAcc.name,
-      input.templateMarketplace,
-      input.targetMarketplace,
-      cat,
-    );
-
+    // Determine if this category should appear
     const isAmazonSpecific = AMAZON_SPECIFIC_CATEGORIES.has(cat);
     const targetIsAmazon = input.targetMarketplace.toLowerCase().includes('amazon');
+    const isStandard = STANDARD_CATEGORIES.has(cat);
+
+    // Skip Amazon-specific categories for non-Amazon targets if no template exists
+    if (isAmazonSpecific && !targetIsAmazon && !templateAcc) continue;
+
+    // For non-standard, non-Amazon categories, only show if a template exists
+    if (!isStandard && !isAmazonSpecific && !templateAcc) continue;
+
+    let newCode: string;
+    let templateCode: string;
+    let templateName: string;
+    let type: string;
+    let taxType: string | null;
+
+    if (templateAcc) {
+      templateCode = templateAcc.code;
+      templateName = templateAcc.name;
+      type = templateAcc.type;
+      taxType = templateAcc.taxType;
+
+      if (codeMap && codeMap.has(templateAcc.code)) {
+        newCode = codeMap.get(templateAcc.code)!;
+      } else {
+        newCode = generateNextCode({
+          existingCodes: input.existingCodes,
+          accountType: type,
+          batchClaimed: claimed,
+        });
+      }
+    } else {
+      // No template found anywhere — generate from defaults
+      templateCode = '—';
+      templateName = `(best practice default)`;
+      type = defaults?.type || 'REVENUE';
+      taxType = null; // Will inherit from org's default tax profile
+
+      // Find next available code in the appropriate range
+      const [rangeStart, rangeEnd] = defaults?.seedRange || [200, 499];
+      let code = rangeStart;
+      const allClaimed = new Set([...input.existingCodes, ...claimed]);
+      while (allClaimed.has(String(code)) && code <= rangeEnd) code++;
+      newCode = String(code <= rangeEnd ? code : generateNextCode({
+        existingCodes: input.existingCodes,
+        accountType: type,
+        batchClaimed: claimed,
+      }));
+    }
+
+    claimed.add(newCode);
+
+    const newName = templateAcc
+      ? generateNewAccountName(templateAcc.name, input.templateMarketplace, input.targetMarketplace, cat)
+      : `${input.targetMarketplace} ${cat}`;
 
     rows.push({
       category: cat,
       enabled: isAmazonSpecific ? targetIsAmazon : true,
-      templateCode: templateAcc.code,
-      templateName: templateAcc.name,
+      templateCode,
+      templateName,
       newCode,
       newName,
-      type: templateAcc.type,
-      taxType: templateAcc.taxType,
+      type,
+      taxType,
     });
   }
 
