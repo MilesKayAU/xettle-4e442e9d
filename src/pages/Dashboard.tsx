@@ -113,30 +113,27 @@ const SETTINGS_HELP: Record<string, string> = {
 function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConnected: boolean; onConnectXero: () => void; onGoToUpload: () => void }) {
   const { setupWarnings } = useDashboardTaskCounts();
 
-  // Derive per-section status from warnings
-  const warningKeys = new Set(setupWarnings.map(w => w.key));
+  const matchesWarningPattern = (patterns: string[], warnKey: string) =>
+    patterns.some((pattern) => pattern.endsWith(':') ? warnKey.startsWith(pattern) : warnKey === pattern);
 
-  // Maps each section to the warning keys it owns (exact match or prefix match with ':')
-  const sectionWarningMap: Record<string, string[]> = {
-    api_connections: ['xero_not_connected'],
-    destination_accounts: [],
-    account_mapper: ['coa_mapping_incomplete', 'tax_profile_missing'],
-    posting_mode: ['scope_not_acknowledged'],
-    accounting_boundary: [], // Boundary auto-sets on first upload — no longer a blocker
-    payment_verification: [],
-    fulfilment_methods: ['fulfilment_methods_incomplete', 'postage_cost_missing', 'fbm_mismatch_detected:'],
-    data_quality: [],
+  // Section badges should only reflect section-completion requirements.
+  // Advisory nudges still appear in the setup panel, but should not keep a completed section in "Review".
+  const sectionStatusRules: Record<string, { completionWarnings: string[] }> = {
+    api_connections: { completionWarnings: ['xero_not_connected'] },
+    destination_accounts: { completionWarnings: [] },
+    account_mapper: { completionWarnings: ['coa_mapping_incomplete'] },
+    posting_mode: { completionWarnings: ['scope_not_acknowledged'] },
+    accounting_boundary: { completionWarnings: [] }, // Boundary auto-sets on first upload — no longer a blocker
+    payment_verification: { completionWarnings: [] },
+    fulfilment_methods: { completionWarnings: ['fulfilment_methods_incomplete'] },
+    data_quality: { completionWarnings: [] },
   };
 
   const getStatus = (sectionKey: string): 'complete' | 'incomplete' | 'warning' | 'none' => {
-    const relevantPatterns = sectionWarningMap[sectionKey] || [];
+    const relevantPatterns = sectionStatusRules[sectionKey]?.completionWarnings || [];
     if (relevantPatterns.length === 0) return 'none';
 
-    // Match exact keys or prefix patterns (ending with ':')
-    const matchesPattern = (warnKey: string) =>
-      relevantPatterns.some(p => p.endsWith(':') ? warnKey.startsWith(p) : warnKey === p);
-
-    const activeWarnings = setupWarnings.filter(w => matchesPattern(w.key));
+    const activeWarnings = setupWarnings.filter((warning) => matchesWarningPattern(relevantPatterns, warning.key));
     if (activeWarnings.length === 0) return 'complete'; // all resolved → green
 
     const hasBlocking = activeWarnings.some(w => w.severity === 'blocking');
