@@ -190,6 +190,7 @@ export async function batchCreateXeroAccounts(
 
   let totalCreated = 0;
   let totalUpdated = 0;
+  let totalSkipped = 0;
   const allErrors: { code: string; error: string }[] = [];
   const retryCount = new Map<number, number>();
 
