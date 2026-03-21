@@ -90,7 +90,7 @@ export default function Amazon() {
           <div className="grid md:grid-cols-3 gap-8">
             {[
               { icon: Layers, title: 'FBA and FBM lumped together', desc: 'Other tools combine all fulfilment types into a single journal entry. You can\'t see whether FBA fees are eating your margin or if FBM postage costs are actually lower.' },
-              { icon: DollarSign, title: 'Hidden fees buried in totals', desc: 'Storage fees, long-term storage, removal orders, advertising costs, subscription fees — Amazon charges for everything. Most tools don\'t separate them.' },
+              { icon: DollarSign, title: 'Hidden fees buried in totals', desc: 'Storage fees, long-term storage, removal orders, advertising costs, subscription fees — marketplace fees add up. Most tools don\'t separate them.' },
               { icon: Receipt, title: 'Journals instead of invoices', desc: 'Many tools post complex journal entries with debits and credits across multiple accounts. Hard to audit, hard to match against bank deposits, hard for your accountant to review.' },
             ].map(({ icon: Icon, title, desc }) => (
               <div key={title} className="p-6 rounded-2xl border border-border bg-background">
