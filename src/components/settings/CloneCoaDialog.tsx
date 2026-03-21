@@ -27,6 +27,15 @@ import { supabase } from '@/integrations/supabase/client';
 /** Categories that are typically Amazon-specific */
 const AMAZON_SPECIFIC = new Set(['FBA Fees', 'Storage Fees']);
 
+/** Optional categories that users should choose before cloning */
+const OPTIONAL_CATEGORIES: { key: string; label: string; description: string; defaultFor: string[] }[] = [
+  { key: 'FBA Fees', label: 'Fulfilment (FBA) Fees', description: 'Third-party warehouse fulfilment fees. Common for Amazon FBA, some marketplaces offer similar services.', defaultFor: ['amazon'] },
+  { key: 'Storage Fees', label: 'Storage Fees', description: 'Warehouse storage charges. Usually only Amazon FBA, but some 3PL marketplaces charge these too.', defaultFor: ['amazon'] },
+  { key: 'Advertising Costs', label: 'Advertising Costs', description: 'Sponsored ads / promoted listings on this marketplace.', defaultFor: [] },
+  { key: 'Reimbursements', label: 'Reimbursements', description: 'Lost/damaged inventory reimbursements from the marketplace.', defaultFor: ['amazon'] },
+  { key: 'Promotional Discounts', label: 'Promotional Discounts', description: 'Marketplace-funded or seller-funded promotional discounts.', defaultFor: [] },
+];
+
 interface AiVerdict {
   category: string;
   verdict: 'pass' | 'warn' | 'fail';
