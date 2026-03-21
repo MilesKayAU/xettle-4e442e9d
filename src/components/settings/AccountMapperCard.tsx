@@ -1233,12 +1233,12 @@ export default function AccountMapperCard() {
     const expected = isRev ? 'Revenue/Sales' : 'Expense/Direct Costs';
     const actual = coaMap.get(code!)?.type || '?';
     return (
-      <TooltipProvider>
+      <TooltipProvider delayDuration={100}>
         <Tooltip>
-          <TooltipTrigger asChild>
+          <TooltipTrigger>
             <Badge variant="outline" className="text-amber-700 border-amber-300 text-[10px] cursor-help">Wrong type</Badge>
           </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-[260px] text-xs">
+          <TooltipContent side="top" className="max-w-[260px] text-xs z-[9999]">
             Expects <strong>{expected}</strong> but account is <strong>{actual}</strong> in Xero. Pick a different account or fix the type in Xero.
           </TooltipContent>
         </Tooltip>
