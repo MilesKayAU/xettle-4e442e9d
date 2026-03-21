@@ -53,3 +53,5 @@ project_id = "cegwclxbqvitkqxikpss"
     verify_jwt = false
   [functions.shopify-fbm-fulfillment-webhook]
     verify_jwt = false
+  [functions.extract-order-customer]
+    verify_jwt = false
