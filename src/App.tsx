@@ -28,6 +28,7 @@ const Marketplaces = lazyWithRetry(() => import("@/pages/Marketplaces"));
 const Insights = lazyWithRetry(() => import("@/pages/Insights"));
 const Setup = lazyWithRetry(() => import("@/pages/Setup"));
 const XeroPostingAudit = lazyWithRetry(() => import("@/pages/XeroPostingAudit"));
+const FulfillmentBridge = lazyWithRetry(() => import("@/pages/FulfillmentBridge"));
 const NotFound = lazyWithRetry(() => import("@/pages/NotFound"));
 
 const queryClient = new QueryClient({
