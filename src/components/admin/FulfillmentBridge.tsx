@@ -1791,6 +1791,10 @@ export default function FulfillmentBridge() {
         <TabsList>
           <TabsTrigger value="links">Product Links</TabsTrigger>
           <TabsTrigger value="orders">Order Monitor</TabsTrigger>
+          <TabsTrigger value="mcf">
+            <Package className="h-3.5 w-3.5 mr-1" />
+            MCF Orders
+          </TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
           <TabsTrigger value="events">Event Log</TabsTrigger>
           <TabsTrigger value="audit">
@@ -1804,6 +1808,9 @@ export default function FulfillmentBridge() {
         </TabsContent>
         <TabsContent value="orders">
           <OrderMonitorTab />
+        </TabsContent>
+        <TabsContent value="mcf">
+          <McfOrdersTab />
         </TabsContent>
         <TabsContent value="settings">
           <SettingsTab />
