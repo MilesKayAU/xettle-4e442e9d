@@ -136,7 +136,7 @@ export const API_VERSIONS = {
     current: '2020-07-01',
     latest: '2020-07-01',
     deprecated: false,
-    migrationNote: 'Fulfillment Outbound API for Multi-Channel Fulfillment (MCF). See: https://developer-docs.amazon.com/sp-api/docs/fulfillment-outbound-api-v2020-07-01-reference',
+    migrationNote: 'Fulfillment Outbound API for Multi-Channel Fulfillment (MCF). Requires "Amazon Fulfillment" role (non-restricted). See: https://developer-docs.amazon.com/sp-api/docs/fulfillment-outbound-api-v2020-07-01-reference',
   },
 } as const;
 
