@@ -161,6 +161,7 @@ function ProductLinksTab({ defaultMode = 'fbm' }: { defaultMode?: string }) {
       amazon_asin: amazonAsin.trim() || null,
       shopify_variant_id: parseInt(shopifyVariantId.trim()),
       shopify_sku: shopifySku.trim() || null,
+      fulfilment_mode: fulfilmentMode,
     } as any);
 
     if (error) {
