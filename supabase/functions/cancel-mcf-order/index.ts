@@ -4,9 +4,10 @@ import { getEndpointForRegion, getSpApiHeaders, LWA, isTokenExpired } from '../_
 import { auditedFetch } from '../_shared/api-audit.ts';
 import { SHOPIFY_API_VERSION, getShopifyHeaders } from '../_shared/shopify-api-policy.ts';
 
-const corsHeaders = getCorsHeaders();
-
 Deno.serve(async (req) => {
+  const origin = req.headers.get('origin') || '';
+  const corsHeaders = getCorsHeaders(origin);
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
