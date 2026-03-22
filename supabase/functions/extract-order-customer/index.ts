@@ -55,7 +55,9 @@ serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    const { image_base64, fbm_order_id, action } = await req.json()
+    const body = await req.json()
+    const { image_base64, fbm_order_id, action } = body
+    console.log('[extract-order-customer] POST received', { action: action ?? 'patch', hasImage: !!image_base64, imageLen: image_base64?.length ?? 0, fbm_order_id: fbm_order_id ?? null })
 
     // Action: extract only (no Shopify patch)
     if (action === 'extract') {
