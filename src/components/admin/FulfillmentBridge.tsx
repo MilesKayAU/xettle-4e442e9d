@@ -2132,7 +2132,7 @@ function McfOrdersTab() {
   );
 }
 
-
+export default function FulfillmentBridge() {
   const [connectingInternal, setConnectingInternal] = useState(false);
 
   const handleConnectInternal = async () => {
