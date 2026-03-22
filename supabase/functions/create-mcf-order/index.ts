@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getCorsHeaders } from '../_shared/cors.ts';
 import { getEndpointForRegion, getSpApiHeaders, LWA, isTokenExpired } from '../_shared/amazon-sp-api-policy.ts';
 import { auditedFetch } from '../_shared/api-audit.ts';
+import { SHOPIFY_API_VERSION, getShopifyHeaders } from '../_shared/shopify-api-policy.ts';
 
 const corsHeaders = getCorsHeaders();
 
@@ -193,12 +194,21 @@ Deno.serve(async (req) => {
       updated_at: new Date().toISOString(),
     }).eq('id', mcfRecord.id);
 
+    // Tag Shopify order with amazon-mcf-pending + add note
+    let shopifyTagged = false;
+    try {
+      shopifyTagged = await tagShopifyOrder(supabase, user.id, shopify_order_id, sellerFulfillmentOrderId);
+    } catch (tagErr: any) {
+      console.error('[create-mcf-order] Shopify tagging failed (non-blocking):', tagErr.message);
+    }
+
     return new Response(JSON.stringify({
       success: true,
       mcf_order_id: mcfRecord.id,
       amazon_fulfillment_order_id: amazonData?.payload?.fulfillmentOrderId,
       seller_fulfillment_order_id: sellerFulfillmentOrderId,
       status: 'submitted',
+      shopify_tagged: shopifyTagged,
     }), {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -210,3 +220,66 @@ Deno.serve(async (req) => {
     });
   }
 });
+
+/**
+ * Tag a Shopify order with amazon-mcf-pending and add an order note.
+ */
+async function tagShopifyOrder(
+  supabase: any,
+  userId: string,
+  shopifyOrderId: number,
+  sellerFulfillmentOrderId: string,
+): Promise<boolean> {
+  const { data: shopifyTokens } = await supabase
+    .from('shopify_tokens')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .order('token_type', { ascending: true })
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (!shopifyTokens?.length) return false;
+
+  const shopToken = shopifyTokens[0];
+  const shop = shopToken.shop_domain || shopToken.shop;
+
+  // Fetch current tags
+  const orderRes = await fetch(
+    `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/orders/${shopifyOrderId}.json?fields=id,tags,note`,
+    { headers: getShopifyHeaders(shopToken.access_token) }
+  );
+  if (!orderRes.ok) throw new Error(`Shopify GET order failed: ${orderRes.status}`);
+  const orderData = await orderRes.json();
+  const currentTags = (orderData.order?.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean);
+  const currentNote = orderData.order?.note || '';
+
+  // Add tag
+  if (!currentTags.includes('amazon-mcf-pending')) {
+    currentTags.push('amazon-mcf-pending');
+  }
+
+  // Update order with tag + note
+  const noteAppend = `\n[Xettle MCF] Submitted to Amazon FBA for fulfillment (ref: ${sellerFulfillmentOrderId})`;
+  const updateRes = await fetch(
+    `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/orders/${shopifyOrderId}.json`,
+    {
+      method: 'PUT',
+      headers: { ...getShopifyHeaders(shopToken.access_token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        order: {
+          id: shopifyOrderId,
+          tags: currentTags.join(', '),
+          note: currentNote + noteAppend,
+        },
+      }),
+    }
+  );
+
+  if (!updateRes.ok) {
+    const errText = await updateRes.text();
+    throw new Error(`Shopify PUT order failed: ${updateRes.status} — ${errText}`);
+  }
+
+  return true;
+}

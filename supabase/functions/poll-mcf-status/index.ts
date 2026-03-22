@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getCorsHeaders } from '../_shared/cors.ts';
 import { getEndpointForRegion, getSpApiHeaders, LWA, isTokenExpired } from '../_shared/amazon-sp-api-policy.ts';
 import { auditedFetch } from '../_shared/api-audit.ts';
+import { SHOPIFY_API_VERSION, getShopifyHeaders } from '../_shared/shopify-api-policy.ts';
 
 Deno.serve(async (req) => {
   const origin = req.headers.get('origin') || '';
@@ -233,8 +234,27 @@ Deno.serve(async (req) => {
 });
 
 /**
+ * Get the best active Shopify token for a user.
+ */
+async function getShopifyToken(supabase: any, userId: string) {
+  const { data: shopifyTokens } = await supabase
+    .from('shopify_tokens')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .order('token_type', { ascending: true })
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (!shopifyTokens?.length) {
+    throw new Error('No active Shopify token available');
+  }
+  return shopifyTokens[0];
+}
+
+/**
  * Push tracking info to Shopify order via fulfillment API.
- * Reuses deterministic token selection: active, internal, write_orders scope.
+ * Also updates tags: removes amazon-mcf-pending, adds amazon-mcf-fulfilled.
  */
 async function pushTrackingToShopify(
   supabase: any,
@@ -243,32 +263,15 @@ async function pushTrackingToShopify(
   trackingNumber: string,
   carrier: string | null,
 ) {
-  // Get best Shopify token (active, internal preferred)
-  const { data: shopifyTokens } = await supabase
-    .from('shopify_tokens')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('is_active', true)
-    .order('token_type', { ascending: true }) // 'internal' sorts before 'public'
-    .order('created_at', { ascending: false })
-    .limit(1);
-
-  if (!shopifyTokens?.length) {
-    throw new Error('No active Shopify token available');
-  }
-
-  const shopToken = shopifyTokens[0];
+  const shopToken = await getShopifyToken(supabase, userId);
   const shop = shopToken.shop_domain || shopToken.shop;
 
   // Create fulfillment
   const fulfillmentRes = await fetch(
-    `https://${shop}/admin/api/2024-01/orders/${shopifyOrderId}/fulfillments.json`,
+    `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/orders/${shopifyOrderId}/fulfillments.json`,
     {
       method: 'POST',
-      headers: {
-        'X-Shopify-Access-Token': shopToken.access_token,
-        'Content-Type': 'application/json',
-      },
+      headers: { ...getShopifyHeaders(shopToken.access_token), 'Content-Type': 'application/json' },
       body: JSON.stringify({
         fulfillment: {
           tracking_number: trackingNumber,
@@ -283,4 +286,51 @@ async function pushTrackingToShopify(
     const errData = await fulfillmentRes.text();
     throw new Error(`Shopify fulfillment failed: ${fulfillmentRes.status} — ${errData}`);
   }
+
+  // Update tags: remove pending, add fulfilled
+  try {
+    await updateShopifyMcfTags(shop, shopToken.access_token, shopifyOrderId, 'fulfilled');
+  } catch (tagErr: any) {
+    console.error('[poll-mcf-status] Tag update failed (non-blocking):', tagErr.message);
+  }
+}
+
+/**
+ * Update MCF-related tags on a Shopify order.
+ * action: 'fulfilled' → remove pending, add fulfilled
+ * action: 'cancelled' → remove pending, add note
+ */
+async function updateShopifyMcfTags(
+  shop: string,
+  accessToken: string,
+  shopifyOrderId: number,
+  action: 'fulfilled' | 'cancelled',
+) {
+  const orderRes = await fetch(
+    `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/orders/${shopifyOrderId}.json?fields=id,tags,note`,
+    { headers: getShopifyHeaders(accessToken) }
+  );
+  if (!orderRes.ok) return;
+  const orderData = await orderRes.json();
+  let tags = (orderData.order?.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean);
+  let note = orderData.order?.note || '';
+
+  // Remove pending tag
+  tags = tags.filter((t: string) => t !== 'amazon-mcf-pending');
+
+  if (action === 'fulfilled') {
+    if (!tags.includes('amazon-mcf-fulfilled')) tags.push('amazon-mcf-fulfilled');
+    note += '\n[Xettle MCF] Amazon fulfillment complete — tracking pushed to Shopify';
+  } else if (action === 'cancelled') {
+    note += '\n[Xettle MCF] Amazon MCF order cancelled — order returned to unfulfilled';
+  }
+
+  await fetch(
+    `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/orders/${shopifyOrderId}.json`,
+    {
+      method: 'PUT',
+      headers: { ...getShopifyHeaders(accessToken), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order: { id: shopifyOrderId, tags: tags.join(', '), note } }),
+    }
+  );
 }

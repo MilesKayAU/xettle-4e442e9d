@@ -2118,6 +2118,7 @@ function McfOrdersTab() {
                   <TableHead>Shopify Order</TableHead>
                   <TableHead>Amazon Ref</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Shopify</TableHead>
                   <TableHead>Speed</TableHead>
                    <TableHead>Tracking</TableHead>
                     <TableHead>Created</TableHead>
@@ -2146,6 +2147,23 @@ function McfOrdersTab() {
                         <div className="text-xs text-destructive mt-1 max-w-[200px] truncate" title={order.error_detail}>
                           {order.error_detail}
                         </div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {order.status === 'shipped' || order.status === 'delivered' ? (
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">
+                          <CheckCircle2 className="h-3 w-3 mr-1" /> Fulfilled
+                        </Badge>
+                      ) : order.status === 'cancelled' ? (
+                        <Badge variant="outline" className="bg-gray-50 text-gray-500 border-gray-200 text-xs">
+                          Cancelled
+                        </Badge>
+                      ) : order.status === 'submitted' || order.status === 'processing' ? (
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
+                          <Clock className="h-3 w-3 mr-1" /> Pending
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </TableCell>
                     <TableCell className="text-sm">{order.shipping_speed || '—'}</TableCell>
@@ -2184,7 +2202,7 @@ function McfOrdersTab() {
                 ))}
                 {orders.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                       No MCF orders yet — click "New MCF Order" to get started
                     </TableCell>
                   </TableRow>

@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getCorsHeaders } from '../_shared/cors.ts';
 import { getEndpointForRegion, getSpApiHeaders, LWA, isTokenExpired } from '../_shared/amazon-sp-api-policy.ts';
 import { auditedFetch } from '../_shared/api-audit.ts';
+import { SHOPIFY_API_VERSION, getShopifyHeaders } from '../_shared/shopify-api-policy.ts';
 
 const corsHeaders = getCorsHeaders();
 
@@ -74,6 +75,15 @@ Deno.serve(async (req) => {
         status: 'cancelled',
         updated_at: new Date().toISOString(),
       }).eq('id', mcf_order_id);
+
+      // Clean up Shopify tags
+      if (mcfOrder.shopify_order_id) {
+        try {
+          await cleanupShopifyMcfTags(supabase, user.id, mcfOrder.shopify_order_id);
+        } catch (e: any) {
+          console.error('[cancel-mcf-order] Shopify tag cleanup failed:', e.message);
+        }
+      }
 
       return new Response(JSON.stringify({ success: true, status: 'cancelled', note: 'Cancelled locally (never submitted to Amazon)' }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -156,6 +166,15 @@ Deno.serve(async (req) => {
         updated_at: new Date().toISOString(),
       }).eq('id', mcf_order_id);
 
+      // Clean up Shopify tags
+      if (mcfOrder.shopify_order_id) {
+        try {
+          await cleanupShopifyMcfTags(supabase, user.id, mcfOrder.shopify_order_id);
+        } catch (e: any) {
+          console.error('[cancel-mcf-order] Shopify tag cleanup failed:', e.message);
+        }
+      }
+
       return new Response(JSON.stringify({
         success: true,
         status: 'cancelled',
@@ -192,3 +211,42 @@ Deno.serve(async (req) => {
     });
   }
 });
+
+/**
+ * Remove amazon-mcf-pending tag and add cancellation note on Shopify order.
+ */
+async function cleanupShopifyMcfTags(supabase: any, userId: string, shopifyOrderId: number) {
+  const { data: shopifyTokens } = await supabase
+    .from('shopify_tokens')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .order('token_type', { ascending: true })
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (!shopifyTokens?.length) return;
+
+  const shopToken = shopifyTokens[0];
+  const shop = shopToken.shop_domain || shopToken.shop;
+
+  const orderRes = await fetch(
+    `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/orders/${shopifyOrderId}.json?fields=id,tags,note`,
+    { headers: getShopifyHeaders(shopToken.access_token) }
+  );
+  if (!orderRes.ok) return;
+
+  const orderData = await orderRes.json();
+  let tags = (orderData.order?.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean);
+  tags = tags.filter((t: string) => t !== 'amazon-mcf-pending');
+  const note = (orderData.order?.note || '') + '\n[Xettle MCF] Amazon MCF order cancelled — order returned to unfulfilled';
+
+  await fetch(
+    `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/orders/${shopifyOrderId}.json`,
+    {
+      method: 'PUT',
+      headers: { ...getShopifyHeaders(shopToken.access_token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order: { id: shopifyOrderId, tags: tags.join(', '), note } }),
+    }
+  );
+}
