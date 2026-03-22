@@ -1709,6 +1709,7 @@ export type Database = {
           amazon_sku: string
           created_at: string
           enabled: boolean
+          fulfilment_mode: string
           id: string
           shopify_sku: string | null
           shopify_variant_id: number
@@ -1719,6 +1720,7 @@ export type Database = {
           amazon_sku: string
           created_at?: string
           enabled?: boolean
+          fulfilment_mode?: string
           id?: string
           shopify_sku?: string | null
           shopify_variant_id: number
@@ -1729,6 +1731,7 @@ export type Database = {
           amazon_sku?: string
           created_at?: string
           enabled?: boolean
+          fulfilment_mode?: string
           id?: string
           shopify_sku?: string | null
           shopify_variant_id?: number
