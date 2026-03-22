@@ -1,0 +1,1 @@
+ALTER TABLE public.product_links ADD COLUMN IF NOT EXISTS fulfilment_mode text NOT NULL DEFAULT 'fbm';

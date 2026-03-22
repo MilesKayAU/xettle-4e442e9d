@@ -71,7 +71,7 @@ function parseShopifyInput(input: string): ShopifyParsed {
 // ═══════════════════════════════════════════════════════════════
 // Tab 1: Product Links
 // ═══════════════════════════════════════════════════════════════
-function ProductLinksTab() {
+function ProductLinksTab({ defaultMode = 'fbm' }: { defaultMode?: string }) {
   const [links, setLinks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -85,6 +85,7 @@ function ProductLinksTab() {
   const [shopifyVariantId, setShopifyVariantId] = useState('');
   const [shopifySku, setShopifySku] = useState('');
   const [enabled, setEnabled] = useState(true);
+  const [fulfilmentMode, setFulfilmentMode] = useState(defaultMode);
 
   const [adding, setAdding] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -160,6 +161,7 @@ function ProductLinksTab() {
       amazon_asin: amazonAsin.trim() || null,
       shopify_variant_id: parseInt(shopifyVariantId.trim()),
       shopify_sku: shopifySku.trim() || null,
+      fulfilment_mode: fulfilmentMode,
     } as any);
 
     if (error) {
@@ -167,7 +169,7 @@ function ProductLinksTab() {
     } else {
       toast({ title: 'Link added' });
       setAmazonInput(''); setShopifyInput('');
-      setAmazonSku(''); setAmazonAsin(''); setShopifyVariantId(''); setShopifySku('');
+      setAmazonSku(''); setAmazonAsin(''); setShopifyVariantId(''); setShopifySku(''); setFulfilmentMode(defaultMode);
       setEnabled(true);
       loadLinks();
     }
@@ -231,7 +233,7 @@ function ProductLinksTab() {
           </div>
 
           {/* Resolved fields */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 pt-2 border-t">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3 pt-2 border-t">
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Amazon SKU</Label>
               <Input
@@ -268,6 +270,18 @@ function ProductLinksTab() {
                 className="font-mono text-sm"
               />
             </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Mode</Label>
+              <Select value={fulfilmentMode} onValueChange={setFulfilmentMode}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="fbm">FBM</SelectItem>
+                  <SelectItem value="fba">FBA / MCF</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex items-end gap-2">
               <div className="flex items-center gap-1.5 pb-2">
                 <Switch checked={enabled} onCheckedChange={setEnabled} />
@@ -301,6 +315,7 @@ function ProductLinksTab() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Mode</TableHead>
                   <TableHead>Amazon SKU</TableHead>
                   <TableHead>Amazon ASIN</TableHead>
                   <TableHead>Shopify Variant ID</TableHead>
@@ -312,6 +327,18 @@ function ProductLinksTab() {
               <TableBody>
                 {links.map(link => (
                   <TableRow key={link.id}>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={
+                          link.fulfilment_mode === 'fba'
+                            ? 'bg-purple-100 text-purple-800 border-purple-300'
+                            : 'bg-sky-100 text-sky-800 border-sky-300'
+                        }
+                      >
+                        {link.fulfilment_mode === 'fba' ? 'FBA' : 'FBM'}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="font-mono text-sm">{link.amazon_sku}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{link.amazon_asin || '—'}</TableCell>
                     <TableCell className="font-mono text-sm">{link.shopify_variant_id}</TableCell>
@@ -328,7 +355,7 @@ function ProductLinksTab() {
                 ))}
                 {links.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No product links yet</TableCell>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">No product links yet</TableCell>
                   </TableRow>
                 )}
               </TableBody>
@@ -2252,7 +2279,7 @@ export default function FulfillmentBridge() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="links"><ProductLinksTab /></TabsContent>
+          <TabsContent value="links"><ProductLinksTab defaultMode="fbm" /></TabsContent>
           <TabsContent value="orders"><OrderMonitorTab /></TabsContent>
           <TabsContent value="settings"><SettingsTab /></TabsContent>
           <TabsContent value="events"><EventLogTab /></TabsContent>
@@ -2271,7 +2298,7 @@ export default function FulfillmentBridge() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="links"><ProductLinksTab /></TabsContent>
+          <TabsContent value="links"><ProductLinksTab defaultMode="fba" /></TabsContent>
           <TabsContent value="mcf"><McfOrdersTab /></TabsContent>
           <TabsContent value="settings"><SettingsTab /></TabsContent>
           <TabsContent value="events"><EventLogTab /></TabsContent>
