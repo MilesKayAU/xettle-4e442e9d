@@ -1715,21 +1715,61 @@ export default function AccountMapperCard() {
                       <div className="flex flex-wrap gap-1.5">
                         {getEffectiveMarketplaces().map(mp => {
                           const isExcluded = excludedMarketplaces.has(mp);
+                          // Find the original connection code for this normalized label
+                          const findCode = (label: string) => {
+                            const conn = (deactivatedConnections || []).concat(
+                              activeMarketplaces.map(m => ({ marketplace_code: m, marketplace_name: m }))
+                            ).find(c => normalizeKeyLabel(c.marketplace_code) === label || normalizeKeyLabel(c.marketplace_name) === label);
+                            return conn?.marketplace_code || label;
+                          };
                           return (
-                            <button
-                              key={mp}
-                              onClick={() => toggleExcludeMarketplace(mp)}
-                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] border transition-colors ${
-                                isExcluded
-                                  ? 'bg-destructive/10 border-destructive/30 text-destructive line-through'
-                                  : 'bg-background border-border text-foreground hover:bg-accent'
-                              }`}
-                            >
-                              {isExcluded ? <XCircle className="h-2.5 w-2.5" /> : <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" />}
-                              {mp}
-                            </button>
+                            <div key={mp} className="inline-flex items-center gap-0.5">
+                              <button
+                                onClick={() => toggleExcludeMarketplace(mp)}
+                                className={`inline-flex items-center gap-1 px-2 py-1 rounded-l-full text-[10px] border transition-colors ${
+                                  isExcluded
+                                    ? 'bg-destructive/10 border-destructive/30 text-destructive line-through'
+                                    : 'bg-background border-border text-foreground hover:bg-accent'
+                                }`}
+                              >
+                                {isExcluded ? <XCircle className="h-2.5 w-2.5" /> : <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" />}
+                                {mp}
+                              </button>
+                              <button
+                                onClick={() => setDeactivateTarget({ code: findCode(mp), name: mp })}
+                                className="inline-flex items-center px-1.5 py-1 rounded-r-full text-[10px] border border-l-0 border-border text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                                title={`Deactivate ${mp} site-wide`}
+                              >
+                                <PowerOff className="h-2.5 w-2.5" />
+                              </button>
+                            </div>
                           );
                         })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Deactivated marketplaces (site-wide) */}
+                  {deactivatedConnections.length > 0 && (
+                    <div className="space-y-1.5 border-t pt-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-medium flex items-center gap-1.5">
+                          <PowerOff className="h-3 w-3 text-muted-foreground" />
+                          Deactivated (excluded site-wide)
+                        </Label>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {deactivatedConnections.map(dc => (
+                          <button
+                            key={dc.marketplace_code}
+                            onClick={() => setReactivateTarget({ code: dc.marketplace_code, name: dc.marketplace_name || normalizeKeyLabel(dc.marketplace_code) })}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] border bg-muted/50 border-border text-muted-foreground hover:bg-accent transition-colors"
+                          >
+                            <Power className="h-2.5 w-2.5" />
+                            {dc.marketplace_name || normalizeKeyLabel(dc.marketplace_code)}
+                            <span className="text-primary ml-0.5">reactivate</span>
+                          </button>
+                        ))}
                       </div>
                     </div>
                   )}
