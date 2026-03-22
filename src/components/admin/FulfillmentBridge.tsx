@@ -90,6 +90,10 @@ function ProductLinksTab({ defaultMode = 'fbm' }: { defaultMode?: string }) {
   const [adding, setAdding] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
+  useEffect(() => {
+    setFulfilmentMode(defaultMode === 'fba' ? 'fba' : 'fbm');
+  }, [defaultMode]);
+
   const loadLinks = useCallback(async () => {
     setLoading(true);
     const modeFilter = defaultMode === 'fba' ? 'fba' : 'fbm';
