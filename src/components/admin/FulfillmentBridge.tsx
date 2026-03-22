@@ -2003,7 +2003,13 @@ function McfOrdersTab() {
                 const { data, error } = await supabase.functions.invoke('auto-scan-mcf-eligible', {
                   body: { dry_run: true },
                 });
-                if (error) throw new Error(error.message);
+                if (error) throw new Error(error.message || 'Edge Function returned a non-2xx status code');
+                if (data?.message && !data?.eligible?.length) {
+                  toast({ title: 'No eligible orders', description: data.message });
+                  setScanResults(data);
+                  setScanning(false);
+                  return;
+                }
                 setScanResults(data);
                 toast({
                   title: 'Scan complete',
