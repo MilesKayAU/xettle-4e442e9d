@@ -76,6 +76,15 @@ Deno.serve(async (req) => {
         updated_at: new Date().toISOString(),
       }).eq('id', mcf_order_id);
 
+      // Clean up Shopify tags
+      if (mcfOrder.shopify_order_id) {
+        try {
+          await cleanupShopifyMcfTags(supabase, user.id, mcfOrder.shopify_order_id);
+        } catch (e: any) {
+          console.error('[cancel-mcf-order] Shopify tag cleanup failed:', e.message);
+        }
+      }
+
       return new Response(JSON.stringify({ success: true, status: 'cancelled', note: 'Cancelled locally (never submitted to Amazon)' }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
