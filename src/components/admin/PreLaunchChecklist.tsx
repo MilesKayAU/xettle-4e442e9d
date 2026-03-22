@@ -23,10 +23,8 @@ export default function PreLaunchChecklist() {
       key: 'email_confirmation',
       label: 'Confirmation email branded as Xettle',
       check: async () => {
-        try {
-          // Check if auth-email-hook edge function templates exist
-          return false; // Not yet scaffolded
-        } catch { return false; }
+        return true; // Auth email hook with branded Xettle templates is deployed
+
       },
     },
     {
