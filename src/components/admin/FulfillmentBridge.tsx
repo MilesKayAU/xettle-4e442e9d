@@ -2149,6 +2149,23 @@ function McfOrdersTab() {
                         </div>
                       )}
                     </TableCell>
+                    <TableCell>
+                      {order.status === 'shipped' || order.status === 'delivered' ? (
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">
+                          <CheckCircle2 className="h-3 w-3 mr-1" /> Fulfilled
+                        </Badge>
+                      ) : order.status === 'cancelled' ? (
+                        <Badge variant="outline" className="bg-gray-50 text-gray-500 border-gray-200 text-xs">
+                          Cancelled
+                        </Badge>
+                      ) : order.status === 'submitted' || order.status === 'processing' ? (
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
+                          <Clock className="h-3 w-3 mr-1" /> Pending
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-sm">{order.shipping_speed || '—'}</TableCell>
                     <TableCell>
                       {order.tracking_number ? (
