@@ -2259,8 +2259,15 @@ export default function FulfillmentBridge() {
           <TabsContent value="audit"><ApiAuditTab /></TabsContent>
         </Tabs>
       ) : (
-        <McfOrdersTab />
-      
+        <Tabs defaultValue="mcf" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="mcf">MCF Orders</TabsTrigger>
+            <TabsTrigger value="links">Product Links</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="mcf"><McfOrdersTab /></TabsContent>
+          <TabsContent value="links"><ProductLinksTab /></TabsContent>
+        </Tabs>
       )}
     </div>
   );
