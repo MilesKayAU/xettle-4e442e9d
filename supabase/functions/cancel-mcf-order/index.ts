@@ -211,3 +211,42 @@ Deno.serve(async (req) => {
     });
   }
 });
+
+/**
+ * Remove amazon-mcf-pending tag and add cancellation note on Shopify order.
+ */
+async function cleanupShopifyMcfTags(supabase: any, userId: string, shopifyOrderId: number) {
+  const { data: shopifyTokens } = await supabase
+    .from('shopify_tokens')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .order('token_type', { ascending: true })
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (!shopifyTokens?.length) return;
+
+  const shopToken = shopifyTokens[0];
+  const shop = shopToken.shop_domain || shopToken.shop;
+
+  const orderRes = await fetch(
+    `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/orders/${shopifyOrderId}.json?fields=id,tags,note`,
+    { headers: getShopifyHeaders(shopToken.access_token) }
+  );
+  if (!orderRes.ok) return;
+
+  const orderData = await orderRes.json();
+  let tags = (orderData.order?.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean);
+  tags = tags.filter((t: string) => t !== 'amazon-mcf-pending');
+  const note = (orderData.order?.note || '') + '\n[Xettle MCF] Amazon MCF order cancelled — order returned to unfulfilled';
+
+  await fetch(
+    `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/orders/${shopifyOrderId}.json`,
+    {
+      method: 'PUT',
+      headers: { ...getShopifyHeaders(shopToken.access_token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order: { id: shopifyOrderId, tags: tags.join(', '), note } }),
+    }
+  );
+}
