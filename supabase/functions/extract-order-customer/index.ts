@@ -6,8 +6,9 @@ import { getCorsHeaders } from '../_shared/cors.ts'
  * 
  * Accepts a base64-encoded screenshot of an Amazon order detail page,
  * uses vision AI to extract customer name/address/phone/email,
- * then PATCHes the matching Shopify draft order with the real customer data.
+ * then saves the extracted data to our amazon_fbm_orders table.
  * 
+ * The actual Shopify update is handled by sync-amazon-fbm-orders (push_single action).
  * No SP-API PII calls — the screenshot is a manual human action.
  */
 
@@ -57,9 +58,9 @@ serve(async (req: Request) => {
 
     const body = await req.json()
     const { image_base64, fbm_order_id, action } = body
-    console.log('[extract-order-customer] POST received', { action: action ?? 'patch', hasImage: !!image_base64, imageLen: image_base64?.length ?? 0, fbm_order_id: fbm_order_id ?? null })
+    console.log('[extract-order-customer] POST received', { action: action ?? 'save', hasImage: !!image_base64, imageLen: image_base64?.length ?? 0, fbm_order_id: fbm_order_id ?? null })
 
-    // Action: extract only (no Shopify patch)
+    // Action: extract only (no DB save)
     if (action === 'extract') {
       if (!image_base64) {
         return new Response(JSON.stringify({ error: 'image_base64 is required' }), {
@@ -73,7 +74,7 @@ serve(async (req: Request) => {
       })
     }
 
-    // Action: patch — extract + update Shopify draft
+    // Action: save — extract + save PII to amazon_fbm_orders
     if (!image_base64 || !fbm_order_id) {
       return new Response(JSON.stringify({ error: 'image_base64 and fbm_order_id are required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -106,109 +107,52 @@ serve(async (req: Request) => {
       })
     }
 
-    if (!fbmOrder.shopify_order_id) {
-      return new Response(JSON.stringify({ error: 'No Shopify order linked yet' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
-    // 3. Get Shopify token — prefer active internal token for write access
-    const { data: shopifyTokens } = await supabase
-      .from('shopify_tokens')
-      .select('access_token, shop_domain, token_type, is_active, scope')
-      .eq('user_id', fbmOrder.user_id)
-      .order('created_at', { ascending: false })
-
-    // Pick best token: active internal first, then any active
-    const activeInternal = shopifyTokens?.find((t: any) => t.is_active && t.token_type === 'internal')
-    const anyActive = shopifyTokens?.find((t: any) => t.is_active)
-    const shopifyToken = activeInternal || anyActive || null
-
-    if (!shopifyToken?.access_token || !shopifyToken?.shop_domain) {
-      return new Response(JSON.stringify({
-        status: 'reauth_required',
-        reason: 'no_shopify_token',
-        data: customerData,
-        error: 'No active Shopify connection found. Connect XettleInternal first.',
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
-    // Check for write_orders scope before attempting patch
-    const scope = (shopifyToken as any).scope || ''
-    if (scope && !scope.includes('write_orders')) {
-      console.warn('[extract-order-customer] token missing write_orders scope', { scope })
-      return new Response(JSON.stringify({
-        status: 'reauth_required',
-        reason: 'missing_write_scope',
-        data: customerData,
-        error: 'Shopify token does not have write_orders permission. Reconnect XettleInternal with write_orders scope.',
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
-    console.log('[extract-order-customer] using token', { token_type: (shopifyToken as any).token_type, shop: shopifyToken.shop_domain })
-
-    // 4. PATCH the Shopify order with customer data
-    const shopifyUrl = `https://${shopifyToken.shop_domain}/admin/api/2024-01/orders/${fbmOrder.shopify_order_id}.json`
-
-    const shopifyPayload = {
-      order: {
-        id: fbmOrder.shopify_order_id,
-        note: `Amazon Order: ${fbmOrder.amazon_order_id} — Customer data extracted from screenshot`,
-        shipping_address: {
-          first_name: customerData.first_name || customerData.customer_name?.split(' ')[0] || '',
-          last_name: customerData.last_name || customerData.customer_name?.split(' ').slice(1).join(' ') || '',
-          address1: customerData.address1,
-          address2: customerData.address2 || '',
-          city: customerData.city || '',
-          province: customerData.province || '',
-          zip: customerData.zip || '',
-          country_code: customerData.country_code || 'AU',
-          phone: customerData.phone || '',
+    // 3. Merge extracted PII into raw_amazon_payload in the format extractPiiFromOrder() reads
+    const existingPayload = fbmOrder.raw_amazon_payload || {}
+    const enrichedPayload = {
+      ...existingPayload,
+      // Store in v2026-01-01 shape that sync-amazon-fbm-orders extractPiiFromOrder() reads
+      recipient: {
+        ...(existingPayload as any)?.recipient,
+        name: customerData.customer_name,
+        shippingAddress: {
+          name: customerData.customer_name,
+          addressLine1: customerData.address1,
+          addressLine2: customerData.address2 || null,
+          city: customerData.city || null,
+          stateOrRegion: customerData.province || null,
+          postalCode: customerData.zip || null,
+          countryCode: customerData.country_code || 'AU',
+          phone: customerData.phone || null,
         },
-        ...(customerData.email ? {
-          customer: {
-            first_name: customerData.first_name || customerData.customer_name?.split(' ')[0] || '',
-            last_name: customerData.last_name || customerData.customer_name?.split(' ').slice(1).join(' ') || '',
-            email: customerData.email,
-          },
-        } : {}),
+      },
+      buyer: {
+        ...(existingPayload as any)?.buyer,
+        buyerName: customerData.customer_name,
+        ...(customerData.email ? { buyerEmail: customerData.email } : {}),
+      },
+      // Store the raw extraction for audit
+      _screenshot_extraction: {
+        extracted_at: new Date().toISOString(),
+        ...customerData,
       },
     }
 
-    const patchRes = await fetch(shopifyUrl, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Shopify-Access-Token': shopifyToken.access_token,
-      },
-      body: JSON.stringify(shopifyPayload),
-    })
+    // 4. Update the order — save enriched payload and mark as ready for push
+    const { error: updateErr } = await supabase
+      .from('amazon_fbm_orders')
+      .update({
+        raw_amazon_payload: enrichedPayload,
+        error_detail: `Customer data extracted from screenshot: ${customerData.customer_name}`,
+      } as any)
+      .eq('id', fbm_order_id)
 
-    if (!patchRes.ok) {
-      const errText = await patchRes.text()
-      console.error('shopify_patch_failed', patchRes.status, errText)
-
-      // Classify known permission errors
-      const isPermission = patchRes.status === 403 || errText.includes('merchant approval') || errText.includes('write_orders')
-      if (isPermission) {
-        return new Response(JSON.stringify({
-          status: 'reauth_required',
-          reason: 'merchant_approval_required',
-          data: customerData,
-          error: 'Shopify requires merchant approval for write_orders scope. Reconnect XettleInternal and approve write access.',
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
-      }
-
+    if (updateErr) {
+      console.error('[extract-order-customer] DB update failed', updateErr.message)
       return new Response(JSON.stringify({
-        status: 'patch_failed',
+        status: 'save_failed',
         data: customerData,
-        error: `Shopify returned ${patchRes.status}: ${errText.substring(0, 200)}`,
+        error: `Failed to save: ${updateErr.message}`,
       }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
@@ -217,7 +161,7 @@ serve(async (req: Request) => {
     // 5. Log system event
     await supabase.from('system_events').insert({
       user_id: fbmOrder.user_id,
-      event_type: 'fbm_customer_patched',
+      event_type: 'fbm_customer_extracted',
       severity: 'info',
       marketplace_code: 'AMAZON_AU',
       settlement_id: fbmOrder.amazon_order_id,
@@ -230,7 +174,7 @@ serve(async (req: Request) => {
     } as any)
 
     return new Response(JSON.stringify({
-      status: 'patched',
+      status: 'saved',
       data: customerData,
       shopify_order_id: fbmOrder.shopify_order_id,
     }), {

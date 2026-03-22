@@ -534,35 +534,27 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSel
     setExtracting(false);
   };
 
-  const handlePatch = async () => {
+  const handleSave = async () => {
     if (!extractedData) return;
     setPatching(true);
     setError(null);
     try {
       const { data, error: fnErr } = await supabase.functions.invoke('extract-order-customer', {
-        body: { image_base64: imageBase64, fbm_order_id: order.id },
+        body: { image_base64: imageBase64, fbm_order_id: order.id, action: 'save' },
       });
       if (fnErr) {
         const detail = typeof fnErr === 'object' && fnErr.message ? fnErr.message : String(fnErr);
         throw new Error(`Request failed: ${detail}`);
       }
-      if (data?.status === 'patched') {
-        toast({ title: 'Customer details updated!', description: `Shopify order ${data.shopify_order_id} patched with ${extractedData.customer_name}` });
+      if (data?.status === 'saved') {
+        toast({ title: 'Customer data saved!', description: `${extractedData.customer_name} saved to order. Use "Push to Shopify" to update the Shopify order.` });
         onOpenChange(false);
         onPatched();
-      } else if (data?.status === 'reauth_required') {
-        // Preserve extracted data but show specific permission error
-        const reason = data.reason || 'unknown';
-        const friendlyMsg = reason === 'missing_write_scope' || reason === 'merchant_approval_required'
-          ? 'Customer data was extracted, but Shopify write access is missing. Reconnect XettleInternal and approve write_orders scope, then retry.'
-          : reason === 'no_shopify_token'
-            ? 'No active Shopify connection found. Connect XettleInternal first.'
-            : data.error || 'Shopify reauthorisation required.';
-        setError(friendlyMsg);
-        // Keep extractedData visible so the user doesn't lose the scrape result
+      } else if (data?.status === 'extraction_incomplete') {
+        setError(data.error || 'Could not extract enough data from the screenshot.');
         if (data.data) setExtractedData(data.data);
-      } else if (data?.status === 'patch_failed') {
-        setError(data.error || 'Shopify patch failed.');
+      } else if (data?.status === 'save_failed') {
+        setError(data.error || 'Failed to save customer data.');
         if (data.data) setExtractedData(data.data);
       } else if (data?.error) {
         throw new Error(data.error);
@@ -591,7 +583,7 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSel
             Extract Customer from Screenshot
           </DialogTitle>
           <DialogDescription>
-            Upload a screenshot of the Amazon order detail page. AI will extract customer name, address, and contact info, then update the Shopify order.
+            Upload a screenshot of the Amazon order detail page. AI will extract customer name, address, and contact info. Use "Push to Shopify" afterwards to update the order.
           </DialogDescription>
         </DialogHeader>
 
@@ -743,17 +735,16 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSel
         <DialogFooter>
           {extractedData && (
             <Button
-              onClick={handlePatch}
+              onClick={handleSave}
               disabled={
                 patching ||
-                !order.shopify_order_id ||
                 (!!extractedData.amazon_order_id && extractedData.amazon_order_id !== order.amazon_order_id)
               }
             >
               {patching ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Updating Shopify…</>
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving…</>
               ) : (
-                <><MapPin className="h-4 w-4 mr-2" /> Patch Shopify Order</>
+                <><Download className="h-4 w-4 mr-2" /> Save Customer Data</>
               )}
             </Button>
           )}
@@ -772,6 +763,7 @@ function OrderMonitorTab() {
   const [syncing, setSyncing] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [pushingId, setPushingId] = useState<string | null>(null);
   const [screenshotOrder, setScreenshotOrder] = useState<any | null>(null);
   const [sellerCentralDomain, setSellerCentralDomain] = useState(DEFAULT_AMAZON_REGION.sellerCentralDomain);
 
@@ -898,6 +890,28 @@ function OrderMonitorTab() {
       toast({ title: 'Retry failed', description: err.message, variant: 'destructive' });
     }
     setRetryingId(null);
+  };
+
+  const pushToShopify = async (order: any) => {
+    setPushingId(order.id);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data, error } = await supabase.functions.invoke('sync-amazon-fbm-orders', {
+        body: { action: 'push_single', fbm_order_id: order.id, user_id: user!.id, store_key: STORE_KEY },
+      });
+      if (error) throw error;
+      if (data?.error) {
+        toast({ title: 'Push failed', description: data.error, variant: 'destructive' });
+      } else if (data?.status === 'updated') {
+        toast({ title: 'Shopify order updated!', description: `Customer ${data.customer_name} pushed to Shopify #${data.shopify_order_id}` });
+        loadOrders();
+      } else {
+        toast({ title: 'Unexpected response', description: JSON.stringify(data) });
+      }
+    } catch (err: any) {
+      toast({ title: 'Push failed', description: err.message, variant: 'destructive' });
+    }
+    setPushingId(null);
   };
 
   const loadOrders = useCallback(async () => {
@@ -1211,6 +1225,22 @@ function OrderMonitorTab() {
                                 <Camera className="h-3 w-3 mr-1" />
                                 Customer
                               </Button>
+                              {/* Push to Shopify — visible when screenshot PII has been saved */}
+                              {order.raw_amazon_payload?._screenshot_extraction && (
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  className="text-xs h-7"
+                                  onClick={(e) => { e.stopPropagation(); pushToShopify(order); }}
+                                  disabled={pushingId === order.id}
+                                  title="Update Shopify order with saved customer data"
+                                >
+                                  {pushingId === order.id
+                                    ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                    : <Upload className="h-3 w-3 mr-1" />}
+                                  Push to Shopify
+                                </Button>
+                              )}
                               <Button
                                 variant="outline"
                                 size="sm"
