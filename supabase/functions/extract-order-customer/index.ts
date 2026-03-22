@@ -112,21 +112,46 @@ serve(async (req: Request) => {
       })
     }
 
-    // 3. Get Shopify token
-    const { data: shopifyToken } = await supabase
+    // 3. Get Shopify token — prefer active internal token for write access
+    const { data: shopifyTokens } = await supabase
       .from('shopify_tokens')
-      .select('access_token, shop_domain')
+      .select('access_token, shop_domain, token_type, is_active, scope')
       .eq('user_id', fbmOrder.user_id)
-      .limit(1)
-      .single()
+      .order('created_at', { ascending: false })
+
+    // Pick best token: active internal first, then any active
+    const activeInternal = shopifyTokens?.find((t: any) => t.is_active && t.token_type === 'internal')
+    const anyActive = shopifyTokens?.find((t: any) => t.is_active)
+    const shopifyToken = activeInternal || anyActive || null
 
     if (!shopifyToken?.access_token || !shopifyToken?.shop_domain) {
-      return new Response(JSON.stringify({ error: 'Shopify not connected' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      return new Response(JSON.stringify({
+        status: 'reauth_required',
+        reason: 'no_shopify_token',
+        data: customerData,
+        error: 'No active Shopify connection found. Connect XettleInternal first.',
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
-    // 4. PATCH the Shopify draft order with customer data
+    // Check for write_orders scope before attempting patch
+    const scope = (shopifyToken as any).scope || ''
+    if (scope && !scope.includes('write_orders')) {
+      console.warn('[extract-order-customer] token missing write_orders scope', { scope })
+      return new Response(JSON.stringify({
+        status: 'reauth_required',
+        reason: 'missing_write_scope',
+        data: customerData,
+        error: 'Shopify token does not have write_orders permission. Reconnect XettleInternal with write_orders scope.',
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    console.log('[extract-order-customer] using token', { token_type: (shopifyToken as any).token_type, shop: shopifyToken.shop_domain })
+
+    // 4. PATCH the Shopify order with customer data
     const shopifyUrl = `https://${shopifyToken.shop_domain}/admin/api/2024-01/orders/${fbmOrder.shopify_order_id}.json`
 
     const shopifyPayload = {
@@ -166,6 +191,20 @@ serve(async (req: Request) => {
     if (!patchRes.ok) {
       const errText = await patchRes.text()
       console.error('shopify_patch_failed', patchRes.status, errText)
+
+      // Classify known permission errors
+      const isPermission = patchRes.status === 403 || errText.includes('merchant approval') || errText.includes('write_orders')
+      if (isPermission) {
+        return new Response(JSON.stringify({
+          status: 'reauth_required',
+          reason: 'merchant_approval_required',
+          data: customerData,
+          error: 'Shopify requires merchant approval for write_orders scope. Reconnect XettleInternal and approve write access.',
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
       return new Response(JSON.stringify({
         status: 'patch_failed',
         data: customerData,
