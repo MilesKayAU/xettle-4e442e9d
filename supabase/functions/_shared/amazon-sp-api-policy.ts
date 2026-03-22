@@ -132,6 +132,12 @@ export const API_VERSIONS = {
     deprecated: false,
     migrationNote: 'RDTs are no longer required for Orders v2026-01-01. Tokens API still available for other restricted operations.',
   },
+  fulfillmentOutbound: {
+    current: '2020-07-01',
+    latest: '2020-07-01',
+    deprecated: false,
+    migrationNote: 'Fulfillment Outbound API for Multi-Channel Fulfillment (MCF). See: https://developer-docs.amazon.com/sp-api/docs/fulfillment-outbound-api-v2020-07-01-reference',
+  },
 } as const;
 
 // ═══════════════════════════════════════════════════════════════
