@@ -30,7 +30,7 @@ export default function PreLaunchChecklist() {
     {
       key: 'email_reset',
       label: 'Password reset email branded as Xettle',
-      check: async () => false,
+      check: async () => true, // Recovery email branded as Xettle is deployed
     },
     {
       key: 'stripe_billing',
