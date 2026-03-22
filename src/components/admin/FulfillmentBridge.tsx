@@ -480,9 +480,10 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSel
     reader.onload = async (ev) => {
       const dataUrl = ev.target?.result as string;
       const compressed = await compressImage(dataUrl);
-      // Show preview using full data URL, but store raw base64 for sending
       setImagePreview(`data:image/jpeg;base64,${compressed}`);
       setImageBase64(compressed);
+      const sizeKb = Math.round((compressed.length * 3) / 4 / 1024);
+      console.log(`[ScreenshotExtract] compressed size: ${sizeKb} KB`);
     };
     reader.readAsDataURL(file);
   };
@@ -520,11 +521,15 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSel
       const { data, error: fnErr } = await supabase.functions.invoke('extract-order-customer', {
         body: { image_base64: imageBase64, action: 'extract' },
       });
-      if (fnErr) throw fnErr;
+      if (fnErr) {
+        const detail = typeof fnErr === 'object' && fnErr.message ? fnErr.message : String(fnErr);
+        throw new Error(`Request failed: ${detail}. Check that the screenshot is under 1 MB.`);
+      }
       if (data?.error) throw new Error(data.error);
+      if (!data?.data) throw new Error('No extraction data returned — the AI may not have recognised the screenshot.');
       setExtractedData(data.data);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Unknown extraction error');
     }
     setExtracting(false);
   };

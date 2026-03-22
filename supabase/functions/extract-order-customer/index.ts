@@ -40,7 +40,8 @@ Important:
 - Do NOT invent or guess data that isn't visible on the screenshot`
 
 serve(async (req: Request) => {
-  const corsHeaders = getCorsHeaders(req)
+  const origin = req.headers.get('Origin') ?? ''
+  const corsHeaders = getCorsHeaders(origin)
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
@@ -54,7 +55,9 @@ serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    const { image_base64, fbm_order_id, action } = await req.json()
+    const body = await req.json()
+    const { image_base64, fbm_order_id, action } = body
+    console.log('[extract-order-customer] POST received', { action: action ?? 'patch', hasImage: !!image_base64, imageLen: image_base64?.length ?? 0, fbm_order_id: fbm_order_id ?? null })
 
     // Action: extract only (no Shopify patch)
     if (action === 'extract') {
@@ -195,8 +198,9 @@ serve(async (req: Request) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (err) {
-    console.error('extract_order_customer_error', err)
-    return new Response(JSON.stringify({ error: (err as Error).message }), {
+    const msg = (err as Error).message || 'Unknown error'
+    console.error('[extract-order-customer] unhandled', msg)
+    return new Response(JSON.stringify({ error: msg, stage: 'server' }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
