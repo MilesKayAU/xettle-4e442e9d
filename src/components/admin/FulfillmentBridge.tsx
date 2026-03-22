@@ -931,24 +931,29 @@ function OrderMonitorTab() {
 
   const runSync = async (dryRun: boolean, forceRefetch = false) => {
     setSyncing(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    const { data, error } = await supabase.functions.invoke('sync-amazon-fbm-orders', {
-      body: { user_id: user!.id, store_key: STORE_KEY, dry_run: dryRun, force_refetch: forceRefetch },
-    });
-    if (error) {
-      toast({ title: 'Sync failed', description: error.message, variant: 'destructive' });
-    } else if (data?.status === 'skipped') {
-      toast({ title: 'Sync skipped', description: `Reason: ${data.reason ?? 'unknown'}. Check Settings tab.`, variant: 'destructive' });
-    } else {
-      const desc = data?.orders_found != null
-        ? `Orders found: ${data.orders_found}, matched: ${data.matched ?? 0}, unmatched: ${data.unmatched ?? 0}`
-        : data?.orders_found === 0 || data?.status === 'no_orders'
-          ? 'No unshipped FBM orders found in the polling window'
-          : JSON.stringify(data);
-      toast({ title: dryRun ? 'Dry run completed' : 'Live sync completed', description: desc });
-      loadOrders();
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data, error } = await supabase.functions.invoke('sync-amazon-fbm-orders', {
+        body: { user_id: user!.id, store_key: STORE_KEY, dry_run: dryRun, force_refetch: forceRefetch },
+      });
+      if (error) {
+        toast({ title: 'Sync failed', description: error.message, variant: 'destructive' });
+      } else if (data?.status === 'skipped') {
+        toast({ title: 'Sync skipped', description: `Reason: ${data.reason ?? 'unknown'}. Check Settings tab.`, variant: 'destructive' });
+      } else {
+        const desc = data?.orders_found != null
+          ? `Orders found: ${data.orders_found}, matched: ${data.matched ?? 0}, unmatched: ${data.unmatched ?? 0}`
+          : data?.orders_found === 0 || data?.status === 'no_orders'
+            ? 'No unshipped FBM orders found in the polling window'
+            : JSON.stringify(data);
+        toast({ title: dryRun ? 'Dry run completed' : 'Live sync completed', description: desc });
+        loadOrders();
+      }
+    } catch (err: any) {
+      toast({ title: 'Sync failed', description: err?.message || 'Unexpected error', variant: 'destructive' });
+    } finally {
+      setSyncing(false);
     }
-    setSyncing(false);
   };
 
   return (
@@ -978,17 +983,22 @@ function OrderMonitorTab() {
           size="sm"
           onClick={async () => {
             setSyncing(true);
-            const { data: { user } } = await supabase.auth.getUser();
-            const { data, error } = await supabase.functions.invoke('sync-amazon-fbm-orders', {
-              body: { user_id: user!.id, store_key: STORE_KEY, action: 'retry_all_failed' },
-            });
-            if (error) {
-              toast({ title: 'Retry failed', description: error.message, variant: 'destructive' });
-            } else {
-              toast({ title: 'Failed orders reset', description: `${data?.count || 0} order(s) queued for retry` });
-              loadOrders();
+            try {
+              const { data: { user } } = await supabase.auth.getUser();
+              const { data, error } = await supabase.functions.invoke('sync-amazon-fbm-orders', {
+                body: { user_id: user!.id, store_key: STORE_KEY, action: 'retry_all_failed' },
+              });
+              if (error) {
+                toast({ title: 'Retry failed', description: error.message, variant: 'destructive' });
+              } else {
+                toast({ title: 'Failed orders reset', description: `${data?.count || 0} order(s) queued for retry` });
+                loadOrders();
+              }
+            } catch (err: any) {
+              toast({ title: 'Retry failed', description: err?.message || 'Unexpected error', variant: 'destructive' });
+            } finally {
+              setSyncing(false);
             }
-            setSyncing(false);
           }}
           disabled={syncing || orders.filter(o => o.status === 'failed' || o.status === 'manual_review').length === 0}
         >
