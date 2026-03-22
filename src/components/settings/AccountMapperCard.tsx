@@ -153,6 +153,11 @@ export default function AccountMapperCard() {
   // Ignored marketplaces — hidden from clone banner & gap detection site-wide
   const [ignoredMarketplaces, setIgnoredMarketplaces] = useState<Set<string>>(new Set());
 
+  // Deactivated marketplace connections (site-wide — excludes from all scoring/sync)
+  const [deactivatedConnections, setDeactivatedConnections] = useState<Array<{ marketplace_code: string; marketplace_name: string }>>([]);
+  const [deactivateTarget, setDeactivateTarget] = useState<{ code: string; name: string } | null>(null);
+  const [reactivateTarget, setReactivateTarget] = useState<{ code: string; name: string } | null>(null);
+
   // Confirmed (saved) codes for comparison
   const [confirmedCodes, setConfirmedCodes] = useState<Record<string, string>>({});
 
