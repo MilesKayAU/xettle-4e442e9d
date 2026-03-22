@@ -40,7 +40,8 @@ Important:
 - Do NOT invent or guess data that isn't visible on the screenshot`
 
 serve(async (req: Request) => {
-  const corsHeaders = getCorsHeaders(req)
+  const origin = req.headers.get('Origin') ?? ''
+  const corsHeaders = getCorsHeaders(origin)
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
