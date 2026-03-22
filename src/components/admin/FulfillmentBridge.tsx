@@ -763,6 +763,7 @@ function OrderMonitorTab() {
   const [syncing, setSyncing] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [pushingId, setPushingId] = useState<string | null>(null);
   const [screenshotOrder, setScreenshotOrder] = useState<any | null>(null);
   const [sellerCentralDomain, setSellerCentralDomain] = useState(DEFAULT_AMAZON_REGION.sellerCentralDomain);
 
