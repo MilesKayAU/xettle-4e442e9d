@@ -480,9 +480,10 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSel
     reader.onload = async (ev) => {
       const dataUrl = ev.target?.result as string;
       const compressed = await compressImage(dataUrl);
-      // Show preview using full data URL, but store raw base64 for sending
       setImagePreview(`data:image/jpeg;base64,${compressed}`);
       setImageBase64(compressed);
+      const sizeKb = Math.round((compressed.length * 3) / 4 / 1024);
+      console.log(`[ScreenshotExtract] compressed size: ${sizeKb} KB`);
     };
     reader.readAsDataURL(file);
   };
