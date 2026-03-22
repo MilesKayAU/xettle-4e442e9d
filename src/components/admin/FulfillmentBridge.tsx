@@ -1225,6 +1225,22 @@ function OrderMonitorTab() {
                                 <Camera className="h-3 w-3 mr-1" />
                                 Customer
                               </Button>
+                              {/* Push to Shopify — visible when screenshot PII has been saved */}
+                              {order.raw_amazon_payload?._screenshot_extraction && (
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  className="text-xs h-7"
+                                  onClick={(e) => { e.stopPropagation(); pushToShopify(order); }}
+                                  disabled={pushingId === order.id}
+                                  title="Update Shopify order with saved customer data"
+                                >
+                                  {pushingId === order.id
+                                    ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                    : <Upload className="h-3 w-3 mr-1" />}
+                                  Push to Shopify
+                                </Button>
+                              )}
                               <Button
                                 variant="outline"
                                 size="sm"
