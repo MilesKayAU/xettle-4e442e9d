@@ -172,6 +172,12 @@ export const RATE_LIMITS: Record<string, RateLimit> = {
 
   // Tokens API
   'createRestrictedDataToken': { rate: 1, burst: 10 },
+
+  // Fulfillment Outbound API v2020-07-01
+  'createFulfillmentOrder': { rate: 2, burst: 30 },
+  'getFulfillmentOrder': { rate: 2, burst: 30 },
+  'cancelFulfillmentOrder': { rate: 2, burst: 30 },
+  'listAllFulfillmentOrders': { rate: 2, burst: 30 },
 };
 
 /** Get rate limit for an SP-API operation. Returns null if unknown. */
