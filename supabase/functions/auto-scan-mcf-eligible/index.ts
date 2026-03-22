@@ -5,12 +5,8 @@ import { SHOPIFY_API_VERSION, getShopifyHeaders } from '../_shared/shopify-api-p
 /**
  * Auto-Scan MCF Eligible Orders
  * ──────────────────────────────
- * Scans unfulfilled Shopify orders, matches line items to product_links,
+ * Scans unfulfilled Shopify orders, matches line items to FBA product_links,
  * and either returns eligible orders (dry_run) or auto-submits them to MCF.
- *
- * Body: { dry_run?: boolean }
- * - dry_run=true (default): Returns list of eligible orders without submitting
- * - dry_run=false: Submits eligible orders to create-mcf-order
  */
 
 Deno.serve(async (req) => {
@@ -29,6 +25,10 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Read body once upfront
+    let body: any = {};
+    try { body = await req.json(); } catch { body = {}; }
+
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
 
@@ -40,19 +40,17 @@ Deno.serve(async (req) => {
     let userId: string;
 
     if (isServiceRole) {
-      // For cron calls, get the first user with active product links
-      const body = await req.json().catch(() => ({}));
       if (body.user_id) {
         userId = body.user_id;
       } else {
-        // Auto-resolve: find users with active FBA product links
         const { data: linkUsers } = await supabase
           .from('product_links')
           .select('user_id')
           .eq('enabled', true)
+          .eq('fulfilment_mode', 'fba')
           .limit(1);
         if (!linkUsers?.length) {
-          return new Response(JSON.stringify({ message: 'No users with active product links', scanned: 0 }), {
+          return new Response(JSON.stringify({ message: 'No users with active FBA product links', scanned: 0 }), {
             status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
@@ -73,21 +71,24 @@ Deno.serve(async (req) => {
       userId = user.id;
     }
 
-    const body = await req.json().catch(() => ({}));
     const dryRun = body.dry_run !== false; // default true
 
-    // 1. Get active product links for this user
-    const { data: productLinks } = await supabase
+    // 1. Get active FBA product links for this user
+    const { data: productLinks, error: plErr } = await supabase
       .from('product_links')
       .select('*')
       .eq('user_id', userId)
-      .eq('enabled', true);
+      .eq('enabled', true)
+      .eq('fulfilment_mode', 'fba');
+
+    console.log('[auto-scan-mcf] userId:', userId, 'fba links:', productLinks?.length, 'error:', plErr?.message);
 
     if (!productLinks?.length) {
       return new Response(JSON.stringify({
-        message: 'No active product links configured',
+        message: 'No active FBA/MCF product links configured. Make sure your product links are set to FBA/MCF mode.',
         eligible: [],
         scanned: 0,
+        product_links_count: 0,
       }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -139,6 +140,8 @@ Deno.serve(async (req) => {
       created_at_min: thirtyDaysAgo,
     });
 
+    console.log('[auto-scan-mcf] Fetching Shopify orders from', shopifyToken.shop_domain);
+
     const shopifyRes = await fetch(
       `https://${shopifyToken.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/orders.json?${params}`,
       { headers: getShopifyHeaders(shopifyToken.access_token) }
@@ -147,39 +150,36 @@ Deno.serve(async (req) => {
     if (!shopifyRes.ok) {
       const errText = await shopifyRes.text();
       console.error('[auto-scan-mcf] Shopify fetch failed:', shopifyRes.status, errText);
-      return new Response(JSON.stringify({ error: `Shopify API error: ${shopifyRes.status}` }), {
+      return new Response(JSON.stringify({ error: `Shopify API error: ${shopifyRes.status}`, detail: errText.slice(0, 200) }), {
         status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     const shopifyData = await shopifyRes.json();
     const orders = shopifyData.orders || [];
+    console.log('[auto-scan-mcf] Found', orders.length, 'unfulfilled orders');
 
     // 5. Match orders to product links
     const eligible: any[] = [];
     const skipped: any[] = [];
 
     for (const order of orders) {
-      // Skip if already submitted
       if (existingOrderIds.has(order.id)) {
         skipped.push({ order_id: order.id, name: order.name, reason: 'already_submitted' });
         continue;
       }
 
-      // Skip if already tagged as MCF
       const tags = (order.tags || '').toLowerCase();
       if (tags.includes('amazon-mcf-pending') || tags.includes('amazon-mcf-fulfilled')) {
         skipped.push({ order_id: order.id, name: order.name, reason: 'already_tagged' });
         continue;
       }
 
-      // Skip if no shipping address
       if (!order.shipping_address) {
         skipped.push({ order_id: order.id, name: order.name, reason: 'no_shipping_address' });
         continue;
       }
 
-      // Try to match all line items
       const lineItems = order.line_items || [];
       const mappings: any[] = [];
       let allMapped = true;
@@ -250,7 +250,6 @@ Deno.serve(async (req) => {
             shipping_speed: 'Standard',
           };
 
-          // Call create-mcf-order internally via fetch
           const mcfRes = await fetch(
             `${Deno.env.get('SUPABASE_URL')}/functions/v1/create-mcf-order`,
             {
