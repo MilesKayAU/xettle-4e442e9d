@@ -73,19 +73,24 @@ Deno.serve(async (req) => {
       userId = user.id;
     }
 
-    const body = await req.json().catch(() => ({}));
+    // Parse body — guard against double-read
+    let body: any = {};
+    try { body = await req.json(); } catch { body = {}; }
     const dryRun = body.dry_run !== false; // default true
 
-    // 1. Get active product links for this user
-    const { data: productLinks } = await supabase
+    // 1. Get active product links for this user (FBA mode only for MCF)
+    const { data: productLinks, error: plErr } = await supabase
       .from('product_links')
       .select('*')
       .eq('user_id', userId)
-      .eq('enabled', true);
+      .eq('enabled', true)
+      .eq('fulfilment_mode', 'fba');
+
+    console.log('[auto-scan-mcf] userId:', userId, 'productLinks:', productLinks?.length, 'plErr:', plErr?.message);
 
     if (!productLinks?.length) {
       return new Response(JSON.stringify({
-        message: 'No active product links configured',
+        message: 'No active FBA/MCF product links configured',
         eligible: [],
         scanned: 0,
       }), {
