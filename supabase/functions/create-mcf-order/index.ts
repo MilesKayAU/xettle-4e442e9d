@@ -152,7 +152,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Call Amazon Fulfillment Outbound API
+    // Call Amazon Fulfillment Outbound API (requires "Amazon Fulfillment" role — non-restricted)
     const apiUrl = `${endpoint}/fba/outbound/2020-07-01/fulfillmentOrders`;
     const headers = getSpApiHeaders(token.access_token!);
 
