@@ -233,7 +233,7 @@ function ProductLinksTab({ defaultMode = 'fbm' }: { defaultMode?: string }) {
           </div>
 
           {/* Resolved fields */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 pt-2 border-t">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3 pt-2 border-t">
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Amazon SKU</Label>
               <Input
