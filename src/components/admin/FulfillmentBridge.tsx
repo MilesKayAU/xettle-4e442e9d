@@ -270,6 +270,18 @@ function ProductLinksTab({ defaultMode = 'fbm' }: { defaultMode?: string }) {
                 className="font-mono text-sm"
               />
             </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Mode</Label>
+              <Select value={fulfilmentMode} onValueChange={setFulfilmentMode}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="fbm">FBM</SelectItem>
+                  <SelectItem value="fba">FBA / MCF</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex items-end gap-2">
               <div className="flex items-center gap-1.5 pb-2">
                 <Switch checked={enabled} onCheckedChange={setEnabled} />
