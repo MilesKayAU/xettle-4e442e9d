@@ -4,9 +4,10 @@ import { getEndpointForRegion, getSpApiHeaders, LWA, isTokenExpired } from '../_
 import { auditedFetch } from '../_shared/api-audit.ts';
 import { SHOPIFY_API_VERSION, getShopifyHeaders } from '../_shared/shopify-api-policy.ts';
 
-const corsHeaders = getCorsHeaders();
-
 Deno.serve(async (req) => {
+  const origin = req.headers.get('origin') || '';
+  const corsHeaders = getCorsHeaders(origin);
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -150,13 +151,14 @@ Deno.serve(async (req) => {
     const apiUrl = `${endpoint}/fba/outbound/2020-07-01/fulfillmentOrders/${encodeURIComponent(mcfOrder.seller_fulfillment_order_id)}`;
     const headers = getSpApiHeaders(token.access_token!);
 
-    const amazonRes = await auditedFetch(supabase, user.id, {
-      integration: 'amazon',
-      endpoint: `/fba/outbound/2020-07-01/fulfillmentOrders/${mcfOrder.seller_fulfillment_order_id}`,
+    const amazonRes = await auditedFetch(apiUrl, {
       method: 'PUT',
-      url: apiUrl,
       headers,
-      body: JSON.stringify({ /* Amazon cancel uses PUT with empty body or status update */ }),
+      body: JSON.stringify({}),
+    }, {
+      user_id: user.id,
+      integration: 'amazon',
+      context: { endpoint: `/fba/outbound/2020-07-01/fulfillmentOrders/${mcfOrder.seller_fulfillment_order_id}` },
     });
 
     // Amazon returns 200 for successful cancel
