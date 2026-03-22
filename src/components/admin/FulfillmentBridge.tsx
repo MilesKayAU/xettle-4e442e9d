@@ -169,7 +169,7 @@ function ProductLinksTab({ defaultMode = 'fbm' }: { defaultMode?: string }) {
     } else {
       toast({ title: 'Link added' });
       setAmazonInput(''); setShopifyInput('');
-      setAmazonSku(''); setAmazonAsin(''); setShopifyVariantId(''); setShopifySku('');
+      setAmazonSku(''); setAmazonAsin(''); setShopifyVariantId(''); setShopifySku(''); setFulfilmentMode(defaultMode);
       setEnabled(true);
       loadLinks();
     }
