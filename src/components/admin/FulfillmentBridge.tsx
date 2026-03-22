@@ -459,8 +459,9 @@ function PiiAccessCard({ payload }: { payload: any }) {
       {hasBlocking && (
         <p className="text-xs text-muted-foreground leading-relaxed">
           Amazon has not returned enough protected customer data for safe Shopify fulfilment.
-          Live sync is blocked until the app has <strong>Direct-to-Consumer Shipping</strong> and/or <strong>Tax Invoicing</strong> role approval in Seller Central.
-          After enabling the role, re-authorise the app to generate a new refresh token.
+          Live sync is blocked until the app has the <strong>Direct-to-Consumer Delivery</strong> role (restricted — requires approval) and/or <strong>Tax Invoicing</strong> role in Seller Central.
+          The <strong>Orders</strong> and <strong>Amazon Fulfillment</strong> roles are non-restricted and should be straightforward to obtain.
+          After enabling roles, re-authorise the app to generate a new refresh token.
         </p>
       )}
     </div>

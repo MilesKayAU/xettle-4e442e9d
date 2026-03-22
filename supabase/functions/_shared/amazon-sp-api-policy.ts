@@ -136,7 +136,7 @@ export const API_VERSIONS = {
     current: '2020-07-01',
     latest: '2020-07-01',
     deprecated: false,
-    migrationNote: 'Fulfillment Outbound API for Multi-Channel Fulfillment (MCF). See: https://developer-docs.amazon.com/sp-api/docs/fulfillment-outbound-api-v2020-07-01-reference',
+    migrationNote: 'Fulfillment Outbound API for Multi-Channel Fulfillment (MCF). Requires "Amazon Fulfillment" role (non-restricted). See: https://developer-docs.amazon.com/sp-api/docs/fulfillment-outbound-api-v2020-07-01-reference',
   },
 } as const;
 
@@ -173,7 +173,7 @@ export const RATE_LIMITS: Record<string, RateLimit> = {
   // Tokens API
   'createRestrictedDataToken': { rate: 1, burst: 10 },
 
-  // Fulfillment Outbound API v2020-07-01
+  // Fulfillment Outbound API v2020-07-01 (role: "Amazon Fulfillment", non-restricted)
   'createFulfillmentOrder': { rate: 2, burst: 30 },
   'getFulfillmentOrder': { rate: 2, burst: 30 },
   'cancelFulfillmentOrder': { rate: 2, burst: 30 },
@@ -222,8 +222,12 @@ export function getSpApiHeaders(accessToken: string): Record<string, string> {
 /**
  * With Orders v2026-01-01, PII access is role-based (not RDT-based).
  * Use `includedData=BUYER_INFO,SHIPPING_ADDRESS` in searchOrders.
- * Required SP-API roles: "Direct-to-Consumer Delivery" for address,
- * "Tax Invoicing" or "Tax Remittance" for buyer info.
+ *
+ * SP-API Role Summary:
+ *   - "Orders" role — non-restricted (order data)
+ *   - "Amazon Fulfillment" role — non-restricted (MCF / Fulfillment Outbound)
+ *   - "Direct-to-Consumer Delivery" role — RESTRICTED (shipping address PII, tracking push)
+ *   - "Tax Invoicing" or "Tax Remittance" — for buyer info
  *
  * @deprecated RDTs are no longer needed for Orders v2026-01-01.
  */
