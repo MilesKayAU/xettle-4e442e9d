@@ -2152,12 +2152,14 @@ export default function FulfillmentBridge() {
     }
   };
 
+  const [mode, setMode] = useState<'fbm' | 'fba'>('fbm');
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-foreground">Fulfillment Bridge</h2>
-          <p className="text-sm text-muted-foreground">Amazon FBM → Shopify order sync (Store: {STORE_KEY})</p>
+          <p className="text-sm text-muted-foreground">Amazon ↔ Shopify fulfillment (Store: {STORE_KEY})</p>
         </div>
         <Button
           variant="outline"
@@ -2170,41 +2172,64 @@ export default function FulfillmentBridge() {
         </Button>
       </div>
 
-      <Tabs defaultValue="links" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="links">Product Links</TabsTrigger>
-          <TabsTrigger value="orders">Order Monitor</TabsTrigger>
-          <TabsTrigger value="mcf">
-            <Package className="h-3.5 w-3.5 mr-1" />
-            MCF Orders
-          </TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
-          <TabsTrigger value="events">Event Log</TabsTrigger>
-          <TabsTrigger value="audit">
-            <FileText className="h-3.5 w-3.5 mr-1" />
-            API Audit
-          </TabsTrigger>
-        </TabsList>
+      {/* ── Mode Switcher ── */}
+      <div className="flex items-center gap-1 rounded-lg border bg-muted/40 p-1 w-fit">
+        <button
+          onClick={() => setMode('fbm')}
+          className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+            mode === 'fbm'
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <Download className="h-4 w-4" />
+          <span>FBM</span>
+          <span className="text-xs text-muted-foreground font-normal hidden sm:inline">Amazon → Shopify</span>
+        </button>
+        <button
+          onClick={() => setMode('fba')}
+          className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+            mode === 'fba'
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <Package className="h-4 w-4" />
+          <span>MCF / FBA</span>
+          <span className="text-xs text-muted-foreground font-normal hidden sm:inline">Shopify → Amazon</span>
+        </button>
+      </div>
 
-        <TabsContent value="links">
-          <ProductLinksTab />
-        </TabsContent>
-        <TabsContent value="orders">
-          <OrderMonitorTab />
-        </TabsContent>
-        <TabsContent value="mcf">
-          <McfOrdersTab />
-        </TabsContent>
-        <TabsContent value="settings">
-          <SettingsTab />
-        </TabsContent>
-        <TabsContent value="events">
-          <EventLogTab />
-        </TabsContent>
-        <TabsContent value="audit">
-          <ApiAuditTab />
-        </TabsContent>
-      </Tabs>
+      {mode === 'fbm' ? (
+        <Tabs defaultValue="links" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="links">Product Links</TabsTrigger>
+            <TabsTrigger value="orders">Order Monitor</TabsTrigger>
+            <TabsTrigger value="settings">Settings</TabsTrigger>
+            <TabsTrigger value="events">Event Log</TabsTrigger>
+            <TabsTrigger value="audit">
+              <FileText className="h-3.5 w-3.5 mr-1" />
+              API Audit
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="links"><ProductLinksTab /></TabsContent>
+          <TabsContent value="orders"><OrderMonitorTab /></TabsContent>
+          <TabsContent value="settings"><SettingsTab /></TabsContent>
+          <TabsContent value="events"><EventLogTab /></TabsContent>
+          <TabsContent value="audit"><ApiAuditTab /></TabsContent>
+        </Tabs>
+      ) : (
+        <Tabs defaultValue="mcf" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="mcf">MCF Orders</TabsTrigger>
+            <TabsTrigger value="links">Product Links</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="mcf"><McfOrdersTab /></TabsContent>
+          <TabsContent value="links"><ProductLinksTab /></TabsContent>
+        </Tabs>
+      )}
     </div>
   );
 }
