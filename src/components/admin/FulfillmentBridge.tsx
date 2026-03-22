@@ -2259,14 +2259,23 @@ export default function FulfillmentBridge() {
           <TabsContent value="audit"><ApiAuditTab /></TabsContent>
         </Tabs>
       ) : (
-        <Tabs defaultValue="mcf" className="space-y-4">
+        <Tabs defaultValue="links" className="space-y-4">
           <TabsList>
-            <TabsTrigger value="mcf">MCF Orders</TabsTrigger>
             <TabsTrigger value="links">Product Links</TabsTrigger>
+            <TabsTrigger value="mcf">MCF Orders</TabsTrigger>
+            <TabsTrigger value="settings">Settings</TabsTrigger>
+            <TabsTrigger value="events">Event Log</TabsTrigger>
+            <TabsTrigger value="audit">
+              <FileText className="h-3.5 w-3.5 mr-1" />
+              API Audit
+            </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="mcf"><McfOrdersTab /></TabsContent>
           <TabsContent value="links"><ProductLinksTab /></TabsContent>
+          <TabsContent value="mcf"><McfOrdersTab /></TabsContent>
+          <TabsContent value="settings"><SettingsTab /></TabsContent>
+          <TabsContent value="events"><EventLogTab /></TabsContent>
+          <TabsContent value="audit"><ApiAuditTab /></TabsContent>
         </Tabs>
       )}
     </div>
