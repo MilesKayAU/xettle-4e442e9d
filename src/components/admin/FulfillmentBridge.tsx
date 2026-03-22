@@ -2118,6 +2118,7 @@ function McfOrdersTab() {
                   <TableHead>Shopify Order</TableHead>
                   <TableHead>Amazon Ref</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Shopify</TableHead>
                   <TableHead>Speed</TableHead>
                    <TableHead>Tracking</TableHead>
                     <TableHead>Created</TableHead>
