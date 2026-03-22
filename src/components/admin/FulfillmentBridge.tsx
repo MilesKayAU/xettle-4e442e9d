@@ -892,6 +892,28 @@ function OrderMonitorTab() {
     setRetryingId(null);
   };
 
+  const pushToShopify = async (order: any) => {
+    setPushingId(order.id);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data, error } = await supabase.functions.invoke('sync-amazon-fbm-orders', {
+        body: { action: 'push_single', fbm_order_id: order.id, user_id: user!.id, store_key: STORE_KEY },
+      });
+      if (error) throw error;
+      if (data?.error) {
+        toast({ title: 'Push failed', description: data.error, variant: 'destructive' });
+      } else if (data?.status === 'updated') {
+        toast({ title: 'Shopify order updated!', description: `Customer ${data.customer_name} pushed to Shopify #${data.shopify_order_id}` });
+        loadOrders();
+      } else {
+        toast({ title: 'Unexpected response', description: JSON.stringify(data) });
+      }
+    } catch (err: any) {
+      toast({ title: 'Push failed', description: err.message, variant: 'destructive' });
+    }
+    setPushingId(null);
+  };
+
   const loadOrders = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase
