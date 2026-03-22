@@ -609,12 +609,21 @@ export default function AccountMapperCard() {
       const isSplit = splitSetting?.value === 'true';
       setSplitByMarketplace(isSplit);
 
-      // Load active marketplace connections
-      const { data: connections } = await supabase
-        .from('marketplace_connections')
-        .select('marketplace_name, marketplace_code, settings')
-        .eq('user_id', user.id)
-        .in('connection_status', ACTIVE_CONNECTION_STATUSES);
+      // Load active + deactivated marketplace connections in parallel
+      const [{ data: connections }, { data: deactivatedConns }] = await Promise.all([
+        supabase
+          .from('marketplace_connections')
+          .select('marketplace_name, marketplace_code, settings')
+          .eq('user_id', user.id)
+          .in('connection_status', ACTIVE_CONNECTION_STATUSES),
+        supabase
+          .from('marketplace_connections')
+          .select('marketplace_name, marketplace_code')
+          .eq('user_id', user.id)
+          .eq('connection_status', 'deactivated'),
+      ]);
+
+      setDeactivatedConnections(deactivatedConns || []);
 
       if (connections && connections.length > 0) {
         // Normalize marketplace names to canonical key labels for consistent override keys
