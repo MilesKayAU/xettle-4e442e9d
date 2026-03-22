@@ -105,15 +105,17 @@ Deno.serve(async (req) => {
     }
 
     // 2. Get Shopify token
-    const { data: shopifyToken } = await supabase
+    const { data: shopifyToken, error: shopifyTokenError } = await supabase
       .from('shopify_tokens')
       .select('*')
       .eq('user_id', userId)
       .eq('is_active', true)
-      .order('token_type', { ascending: true })
-      .order('created_at', { ascending: false })
+      .order('updated_at', { ascending: false })
+      .order('installed_at', { ascending: false })
       .limit(1)
       .maybeSingle();
+
+    console.log('[auto-scan-mcf] shopify token found:', !!shopifyToken, 'error:', shopifyTokenError?.message);
 
     if (!shopifyToken?.access_token || !shopifyToken?.shop_domain) {
       return new Response(JSON.stringify({ error: 'No active Shopify connection' }), {
