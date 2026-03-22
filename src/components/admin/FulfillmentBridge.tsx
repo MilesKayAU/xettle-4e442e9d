@@ -315,6 +315,7 @@ function ProductLinksTab({ defaultMode = 'fbm' }: { defaultMode?: string }) {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Mode</TableHead>
                   <TableHead>Amazon SKU</TableHead>
                   <TableHead>Amazon ASIN</TableHead>
                   <TableHead>Shopify Variant ID</TableHead>
@@ -326,6 +327,18 @@ function ProductLinksTab({ defaultMode = 'fbm' }: { defaultMode?: string }) {
               <TableBody>
                 {links.map(link => (
                   <TableRow key={link.id}>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={
+                          link.fulfilment_mode === 'fba'
+                            ? 'bg-purple-100 text-purple-800 border-purple-300'
+                            : 'bg-sky-100 text-sky-800 border-sky-300'
+                        }
+                      >
+                        {link.fulfilment_mode === 'fba' ? 'FBA' : 'FBM'}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="font-mono text-sm">{link.amazon_sku}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{link.amazon_asin || '—'}</TableCell>
                     <TableCell className="font-mono text-sm">{link.shopify_variant_id}</TableCell>
@@ -342,7 +355,7 @@ function ProductLinksTab({ defaultMode = 'fbm' }: { defaultMode?: string }) {
                 ))}
                 {links.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">No product links yet</TableCell>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">No product links yet</TableCell>
                   </TableRow>
                 )}
               </TableBody>
