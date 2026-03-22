@@ -1768,6 +1768,7 @@ function McfOrdersTab() {
   const [loading, setLoading] = useState(true);
   const [showNewOrder, setShowNewOrder] = useState(false);
   const [polling, setPolling] = useState(false);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   // New order form
   const [orderInput, setOrderInput] = useState('');
@@ -1930,6 +1931,25 @@ function McfOrdersTab() {
     setPolling(false);
   };
 
+  const handleCancelOrder = async (orderId: string) => {
+    setCancellingId(orderId);
+    try {
+      const { data, error } = await supabase.functions.invoke('cancel-mcf-order', {
+        body: { mcf_order_id: orderId },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) {
+        toast({ title: 'Cancel failed', description: data.detail || data.error, variant: 'destructive' });
+      } else {
+        toast({ title: 'Order cancelled', description: data.note || 'MCF order has been cancelled' });
+        loadOrders();
+      }
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    }
+    setCancellingId(null);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 p-3 rounded-md bg-blue-50 border border-blue-200 text-blue-800">
@@ -2072,8 +2092,9 @@ function McfOrdersTab() {
                   <TableHead>Amazon Ref</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Speed</TableHead>
-                  <TableHead>Tracking</TableHead>
-                  <TableHead>Created</TableHead>
+                   <TableHead>Tracking</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead className="w-[80px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -2114,11 +2135,29 @@ function McfOrdersTab() {
                     <TableCell className="text-xs text-muted-foreground">
                       {order.created_at ? new Date(order.created_at).toLocaleDateString() : '—'}
                     </TableCell>
+                    <TableCell>
+                      {['pending', 'submitted', 'processing'].includes(order.status) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs text-destructive hover:text-destructive"
+                          disabled={cancellingId === order.id}
+                          onClick={() => handleCancelOrder(order.id)}
+                        >
+                          {cancellingId === order.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <XCircle className="h-3.5 w-3.5 mr-1" />
+                          )}
+                          Cancel
+                        </Button>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
                 {orders.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                       No MCF orders yet — click "New MCF Order" to get started
                     </TableCell>
                   </TableRow>
