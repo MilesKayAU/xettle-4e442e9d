@@ -35,10 +35,11 @@ import { generateNextCode, getAccountTypeForCategory, getRangeForType, detectCod
 import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
 import { normalizeKeyLabel } from '@/utils/marketplace-codes';
 import { cn } from '@/lib/utils';
-import { Save, Upload, Copy } from 'lucide-react';
+import { Save, Upload, Copy, Power, PowerOff } from 'lucide-react';
 import CloneCoaDialog from './CloneCoaDialog';
 import CoaAuditPanel from './CoaAuditPanel';
 import XeroCoaSyncModal, { type SyncPreviewRow } from './XeroCoaSyncModal';
+import DeactivateMarketplaceDialog from './DeactivateMarketplaceDialog';
 
 type CoaValidation = 'valid' | 'missing' | 'inactive' | 'wrong_type' | 'reuse_existing';
 
