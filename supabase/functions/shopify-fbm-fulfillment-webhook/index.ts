@@ -305,7 +305,7 @@ async function handleManualRetry(
     .from('shopify_tokens')
     .select('*')
     .eq('user_id', fbmOrder.user_id)
-    .eq('status', 'Active')
+    .eq('is_active', true)
     .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle()
