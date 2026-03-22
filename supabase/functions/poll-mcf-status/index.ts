@@ -89,8 +89,8 @@ Deno.serve(async (req) => {
 
     // Refresh if expired
     if (isTokenExpired(token.expires_at)) {
-      const clientId = Deno.env.get('AMAZON_CLIENT_ID');
-      const clientSecret = Deno.env.get('AMAZON_CLIENT_SECRET');
+      const clientId = Deno.env.get('AMAZON_SP_CLIENT_ID');
+      const clientSecret = Deno.env.get('AMAZON_SP_CLIENT_SECRET');
       if (!clientId || !clientSecret) {
         return new Response(JSON.stringify({ error: 'Amazon OAuth not configured' }), {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
