@@ -482,6 +482,140 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ status: 'reset', count }), { status: 200, headers })
     }
 
+    // ─── Handle "push_single" action — update existing Shopify order with saved PII ──
+    if (body.action === 'push_single') {
+      const fbmOrderId = body.fbm_order_id
+      if (!fbmOrderId) {
+        return new Response(JSON.stringify({ error: 'fbm_order_id required' }), { status: 400, headers })
+      }
+
+      const userId = body.user_id || authenticatedUserId
+      if (!userId) {
+        return new Response(JSON.stringify({ error: 'user_id required' }), { status: 400, headers })
+      }
+
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      )
+
+      // Load the FBM order
+      const { data: fbmOrder, error: fbmErr } = await supabase
+        .from('amazon_fbm_orders')
+        .select('*')
+        .eq('id', fbmOrderId)
+        .eq('user_id', userId)
+        .single()
+
+      if (fbmErr || !fbmOrder) {
+        return new Response(JSON.stringify({ error: 'FBM order not found' }), { status: 404, headers })
+      }
+
+      if (!fbmOrder.shopify_order_id) {
+        return new Response(JSON.stringify({ error: 'No Shopify order linked — run a sync first' }), { status: 400, headers })
+      }
+
+      // Extract PII from the (enriched) raw_amazon_payload
+      const pii = extractPiiFromOrder(fbmOrder.raw_amazon_payload || {})
+      if (!pii.piiPresent) {
+        return new Response(JSON.stringify({
+          error: 'No customer data saved yet. Use the screenshot extraction first.',
+          pii_status: { missing: pii.missingRequiredFields },
+        }), { status: 400, headers })
+      }
+
+      // Get Shopify token
+      let shopifyToken: ShopifyInternalToken
+      try {
+        shopifyToken = await getShopifyInternalToken()
+      } catch (tokenErr: any) {
+        return new Response(JSON.stringify({ error: tokenErr.message }), { status: 500, headers })
+      }
+
+      // Build the update payload
+      const shippingAddress = {
+        first_name: pii.recipientName?.split(' ')[0] || '',
+        last_name: pii.recipientName?.split(' ').slice(1).join(' ') || '',
+        address1: pii.addressLine1 || '',
+        address2: pii.addressLine2 || '',
+        city: pii.city || '',
+        province: pii.stateOrRegion || '',
+        zip: pii.postalCode || '',
+        country_code: pii.countryCode || 'AU',
+        phone: pii.phone || '',
+      }
+
+      const buyerName = pii.recipientName || pii.buyerName || ''
+      const customer = buyerName ? {
+        first_name: buyerName.split(' ')[0] || '',
+        last_name: buyerName.split(' ').slice(1).join(' ') || '',
+        ...(pii.buyerEmail ? { email: pii.buyerEmail } : {}),
+      } : undefined
+
+      const shopifyPayload: any = {
+        order: {
+          id: fbmOrder.shopify_order_id,
+          shipping_address: shippingAddress,
+          note: `Amazon FBM Order: ${fbmOrder.amazon_order_id} — Customer data updated from screenshot`,
+        },
+      }
+      if (customer) {
+        shopifyPayload.order.customer = customer
+      }
+
+      // Remove placeholder-customer tag if present
+      const existingTags = (fbmOrder.raw_shopify_payload?.order?.tags || fbmOrder.raw_shopify_payload?.tags || '') as string
+      if (existingTags.includes('placeholder-customer')) {
+        shopifyPayload.order.tags = existingTags.replace(/,?\s*placeholder-customer/, '').replace(/^,\s*/, '')
+      }
+
+      // PUT to update the existing Shopify order
+      const shopifyUrl = `https://${shopifyToken.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/orders/${fbmOrder.shopify_order_id}.json`
+      console.log('[push_single] updating Shopify order', { shopifyUrl, amazonOrderId: fbmOrder.amazon_order_id })
+
+      const patchRes = await fetch(shopifyUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Access-Token': shopifyToken.access_token,
+        },
+        body: JSON.stringify(shopifyPayload),
+      })
+
+      if (!patchRes.ok) {
+        const errText = await patchRes.text()
+        console.error('[push_single] Shopify update failed', patchRes.status, errText)
+
+        await supabase.from('amazon_fbm_orders').update({
+          error_detail: `Shopify update failed (${patchRes.status}): ${errText.substring(0, 200)}`,
+        } as any).eq('id', fbmOrderId)
+
+        return new Response(JSON.stringify({
+          error: `Shopify returned ${patchRes.status}: ${errText.substring(0, 200)}`,
+        }), { status: 500, headers })
+      }
+
+      const shopifyData = await patchRes.json()
+
+      // Update our record
+      await supabase.from('amazon_fbm_orders').update({
+        raw_shopify_payload: shopifyData,
+        error_detail: `Customer updated: ${pii.recipientName}`,
+      } as any).eq('id', fbmOrderId)
+
+      await logEvent(supabase, userId, 'fbm_customer_pushed_to_shopify', {
+        shopify_order_id: fbmOrder.shopify_order_id,
+        customer_name: pii.recipientName,
+        source: 'push_single',
+      }, body.store_key || 'primary', fbmOrder.amazon_order_id)
+
+      return new Response(JSON.stringify({
+        status: 'updated',
+        shopify_order_id: fbmOrder.shopify_order_id,
+        customer_name: pii.recipientName,
+      }), { status: 200, headers })
+    }
+
     const userId = body.user_id || authenticatedUserId
     if (!userId) {
       return new Response(JSON.stringify({ error: 'user_id required' }), { status: 400, headers })
