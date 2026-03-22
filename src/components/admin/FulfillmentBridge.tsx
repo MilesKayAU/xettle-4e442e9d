@@ -2135,6 +2135,24 @@ function McfOrdersTab() {
                     <TableCell className="text-xs text-muted-foreground">
                       {order.created_at ? new Date(order.created_at).toLocaleDateString() : '—'}
                     </TableCell>
+                    <TableCell>
+                      {['pending', 'submitted', 'processing'].includes(order.status) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs text-destructive hover:text-destructive"
+                          disabled={cancellingId === order.id}
+                          onClick={() => handleCancelOrder(order.id)}
+                        >
+                          {cancellingId === order.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <XCircle className="h-3.5 w-3.5 mr-1" />
+                          )}
+                          Cancel
+                        </Button>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
                 {orders.length === 0 && (
