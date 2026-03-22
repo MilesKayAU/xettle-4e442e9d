@@ -591,7 +591,7 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSel
             Extract Customer from Screenshot
           </DialogTitle>
           <DialogDescription>
-            Upload a screenshot of the Amazon order detail page. AI will extract customer name, address, and contact info, then update the Shopify draft order.
+            Upload a screenshot of the Amazon order detail page. AI will extract customer name, address, and contact info, then update the Shopify order.
           </DialogDescription>
         </DialogHeader>
 
