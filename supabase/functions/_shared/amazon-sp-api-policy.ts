@@ -173,7 +173,7 @@ export const RATE_LIMITS: Record<string, RateLimit> = {
   // Tokens API
   'createRestrictedDataToken': { rate: 1, burst: 10 },
 
-  // Fulfillment Outbound API v2020-07-01
+  // Fulfillment Outbound API v2020-07-01 (role: "Amazon Fulfillment", non-restricted)
   'createFulfillmentOrder': { rate: 2, burst: 30 },
   'getFulfillmentOrder': { rate: 2, burst: 30 },
   'cancelFulfillmentOrder': { rate: 2, burst: 30 },
