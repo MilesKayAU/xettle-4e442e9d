@@ -1992,6 +1992,32 @@ function McfOrdersTab() {
           <Button variant="outline" size="sm" onClick={() => setShowNewOrder(true)}>
             <Plus className="h-4 w-4 mr-1" /> New MCF Order
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              setScanning(true);
+              setScanResults(null);
+              try {
+                const { data, error } = await supabase.functions.invoke('auto-scan-mcf-eligible', {
+                  body: { dry_run: true },
+                });
+                if (error) throw new Error(error.message);
+                setScanResults(data);
+                toast({
+                  title: 'Scan complete',
+                  description: `Scanned ${data?.scanned || 0} orders — ${data?.eligible_count || 0} eligible for MCF`,
+                });
+              } catch (err: any) {
+                toast({ title: 'Scan failed', description: err.message, variant: 'destructive' });
+              }
+              setScanning(false);
+            }}
+            disabled={scanning}
+          >
+            <Search className={`h-4 w-4 mr-1 ${scanning ? 'animate-pulse' : ''}`} />
+            {scanning ? 'Scanning…' : 'Auto-Scan Orders'}
+          </Button>
           <Button variant="outline" size="sm" onClick={handlePollStatus} disabled={polling}>
             <RefreshCw className={`h-4 w-4 mr-1 ${polling ? 'animate-spin' : ''}`} />
             Refresh Status
@@ -2001,6 +2027,86 @@ function McfOrdersTab() {
           <RefreshCw className="h-4 w-4" />
         </Button>
       </div>
+
+      {/* Auto-scan results */}
+      {scanResults && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="pt-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-medium">
+                Auto-Scan Results: {scanResults.scanned} orders scanned, {scanResults.eligible_count} eligible
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setScanResults(null)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {scanResults.eligible_count > 0 && (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Shopify Order</TableHead>
+                      <TableHead>Items</TableHead>
+                      <TableHead>Created</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(scanResults.eligible || []).map((order: any) => (
+                      <TableRow key={order.order_id}>
+                        <TableCell className="font-medium text-sm">{order.order_name || `#${order.order_id}`}</TableCell>
+                        <TableCell className="text-sm">
+                          {order.line_items?.map((li: any) => `${li.amazon_sku} ×${li.quantity}`).join(', ')}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {order.created_at ? new Date(order.created_at).toLocaleDateString() : '—'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+
+                <div className="flex gap-2 justify-end">
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      setScanning(true);
+                      try {
+                        const { data, error } = await supabase.functions.invoke('auto-scan-mcf-eligible', {
+                          body: { dry_run: false },
+                        });
+                        if (error) throw new Error(error.message);
+                        toast({
+                          title: 'MCF orders submitted',
+                          description: `${data?.submitted_count || 0} order(s) sent to Amazon FBA. ${data?.errors?.length ? `${data.errors.length} error(s).` : ''}`,
+                        });
+                        setScanResults(null);
+                        loadOrders();
+                      } catch (err: any) {
+                        toast({ title: 'Submit failed', description: err.message, variant: 'destructive' });
+                      }
+                      setScanning(false);
+                    }}
+                    disabled={scanning}
+                  >
+                    <Package className="h-4 w-4 mr-1" />
+                    {scanning ? 'Submitting…' : `Submit ${scanResults.eligible_count} to Amazon MCF`}
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {scanResults.eligible_count === 0 && (
+              <div className="text-sm text-muted-foreground">
+                No unfulfilled Shopify orders match your product links.
+                {scanResults.skipped_count > 0 && (
+                  <span> ({scanResults.skipped_count} skipped: {(scanResults.skipped || []).map((s: any) => s.reason).filter((v: string, i: number, a: string[]) => a.indexOf(v) === i).join(', ')})</span>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* New Order Dialog */}
       <Dialog open={showNewOrder} onOpenChange={setShowNewOrder}>
