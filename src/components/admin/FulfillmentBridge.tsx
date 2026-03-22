@@ -2279,7 +2279,7 @@ export default function FulfillmentBridge() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="links"><ProductLinksTab /></TabsContent>
+          <TabsContent value="links"><ProductLinksTab defaultMode="fbm" /></TabsContent>
           <TabsContent value="orders"><OrderMonitorTab /></TabsContent>
           <TabsContent value="settings"><SettingsTab /></TabsContent>
           <TabsContent value="events"><EventLogTab /></TabsContent>
