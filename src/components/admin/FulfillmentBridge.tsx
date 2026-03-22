@@ -735,17 +735,16 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSel
         <DialogFooter>
           {extractedData && (
             <Button
-              onClick={handlePatch}
+              onClick={handleSave}
               disabled={
                 patching ||
-                !order.shopify_order_id ||
                 (!!extractedData.amazon_order_id && extractedData.amazon_order_id !== order.amazon_order_id)
               }
             >
               {patching ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Updating Shopify…</>
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving…</>
               ) : (
-                <><MapPin className="h-4 w-4 mr-2" /> Patch Shopify Order</>
+                <><Download className="h-4 w-4 mr-2" /> Save Customer Data</>
               )}
             </Button>
           )}
