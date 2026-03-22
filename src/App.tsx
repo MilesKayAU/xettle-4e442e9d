@@ -64,6 +64,7 @@ function App() {
                   <Route path="/terms" element={<Terms />} />
                   <Route path="/pricing" element={<Pricing />} />
                   <Route path="/amazon" element={<Amazon />} />
+                  <Route path="/fulfillment-bridge" element={<FulfillmentBridge />} />
                   <Route path="/marketplaces" element={<Marketplaces />} />
                   <Route path="/insights" element={<Insights />} />
                   {/* Authenticated routes — trial banner renders on all */}
