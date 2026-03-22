@@ -198,8 +198,9 @@ serve(async (req: Request) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (err) {
-    console.error('extract_order_customer_error', err)
-    return new Response(JSON.stringify({ error: (err as Error).message }), {
+    const msg = (err as Error).message || 'Unknown error'
+    console.error('[extract-order-customer] unhandled', msg)
+    return new Response(JSON.stringify({ error: msg, stage: 'server' }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
