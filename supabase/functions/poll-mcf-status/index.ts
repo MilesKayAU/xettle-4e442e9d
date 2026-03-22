@@ -138,12 +138,13 @@ Deno.serve(async (req) => {
         const apiUrl = `${endpoint}/fba/outbound/2020-07-01/fulfillmentOrders/${encodeURIComponent(orderId)}`;
         const headers = getSpApiHeaders(token.access_token!);
 
-        const amazonRes = await auditedFetch(supabase, user.id, {
-          integration: 'amazon',
-          endpoint: `/fba/outbound/2020-07-01/fulfillmentOrders/${orderId}`,
+        const amazonRes = await auditedFetch(apiUrl, {
           method: 'GET',
-          url: apiUrl,
           headers,
+        }, {
+          user_id: user.id,
+          integration: 'amazon',
+          context: { endpoint: `/fba/outbound/2020-07-01/fulfillmentOrders/${orderId}` },
         });
 
         const data = await amazonRes.json().catch(() => null);
