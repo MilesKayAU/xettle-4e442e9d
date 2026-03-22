@@ -4,9 +4,10 @@ import { getEndpointForRegion, getSpApiHeaders, LWA, isTokenExpired } from '../_
 import { auditedFetch } from '../_shared/api-audit.ts';
 import { SHOPIFY_API_VERSION, getShopifyHeaders } from '../_shared/shopify-api-policy.ts';
 
-const corsHeaders = getCorsHeaders();
-
 Deno.serve(async (req) => {
+  const origin = req.headers.get('origin') || '';
+  const corsHeaders = getCorsHeaders(origin);
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -66,8 +67,8 @@ Deno.serve(async (req) => {
 
     // Refresh token if expired
     if (isTokenExpired(token.expires_at)) {
-      const clientId = Deno.env.get('AMAZON_CLIENT_ID');
-      const clientSecret = Deno.env.get('AMAZON_CLIENT_SECRET');
+      const clientId = Deno.env.get('AMAZON_SP_CLIENT_ID');
+      const clientSecret = Deno.env.get('AMAZON_SP_CLIENT_SECRET');
       if (!clientId || !clientSecret) {
         return new Response(JSON.stringify({ error: 'Amazon OAuth not configured' }), {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
