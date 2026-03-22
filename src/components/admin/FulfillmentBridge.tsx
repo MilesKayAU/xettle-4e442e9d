@@ -92,10 +92,11 @@ function ProductLinksTab({ defaultMode = 'fbm' }: { defaultMode?: string }) {
 
   const loadLinks = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('product_links').select('*').order('created_at', { ascending: false });
+    const modeFilter = defaultMode === 'fba' ? 'fba' : 'fbm';
+    const { data } = await supabase.from('product_links').select('*').eq('fulfilment_mode', modeFilter).order('created_at', { ascending: false });
     setLinks(data || []);
     setLoading(false);
-  }, []);
+  }, [defaultMode]);
 
   useEffect(() => { loadLinks(); }, [loadLinks]);
 
