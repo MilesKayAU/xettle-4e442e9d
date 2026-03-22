@@ -2223,6 +2223,21 @@ export default function AccountMapperCard() {
         queryClient.invalidateQueries({ queryKey: ['dashboard-task-counts'] });
       }}
     />
+    <DeactivateMarketplaceDialog
+      open={!!deactivateTarget}
+      onOpenChange={(open) => { if (!open) setDeactivateTarget(null); }}
+      marketplaceCode={deactivateTarget?.code || ''}
+      marketplaceName={deactivateTarget?.name || ''}
+      onStatusChanged={() => { setDeactivateTarget(null); loadCurrentState(); queryClient.invalidateQueries({ queryKey: ['dashboard-task-counts'] }); }}
+    />
+    <DeactivateMarketplaceDialog
+      open={!!reactivateTarget}
+      onOpenChange={(open) => { if (!open) setReactivateTarget(null); }}
+      marketplaceCode={reactivateTarget?.code || ''}
+      marketplaceName={reactivateTarget?.name || ''}
+      reactivate
+      onStatusChanged={() => { setReactivateTarget(null); loadCurrentState(); queryClient.invalidateQueries({ queryKey: ['dashboard-task-counts'] }); }}
+    />
     </>
   );
 }
