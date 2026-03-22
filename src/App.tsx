@@ -28,6 +28,7 @@ const Marketplaces = lazyWithRetry(() => import("@/pages/Marketplaces"));
 const Insights = lazyWithRetry(() => import("@/pages/Insights"));
 const Setup = lazyWithRetry(() => import("@/pages/Setup"));
 const XeroPostingAudit = lazyWithRetry(() => import("@/pages/XeroPostingAudit"));
+const FulfillmentBridge = lazyWithRetry(() => import("@/pages/FulfillmentBridge"));
 const NotFound = lazyWithRetry(() => import("@/pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -63,6 +64,7 @@ function App() {
                   <Route path="/terms" element={<Terms />} />
                   <Route path="/pricing" element={<Pricing />} />
                   <Route path="/amazon" element={<Amazon />} />
+                  <Route path="/fulfillment-bridge" element={<FulfillmentBridge />} />
                   <Route path="/marketplaces" element={<Marketplaces />} />
                   <Route path="/insights" element={<Insights />} />
                   {/* Authenticated routes — trial banner renders on all */}
