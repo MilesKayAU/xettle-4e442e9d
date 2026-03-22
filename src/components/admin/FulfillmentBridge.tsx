@@ -534,35 +534,27 @@ function ScreenshotExtractModal({ order, open, onOpenChange, onPatched, buildSel
     setExtracting(false);
   };
 
-  const handlePatch = async () => {
+  const handleSave = async () => {
     if (!extractedData) return;
     setPatching(true);
     setError(null);
     try {
       const { data, error: fnErr } = await supabase.functions.invoke('extract-order-customer', {
-        body: { image_base64: imageBase64, fbm_order_id: order.id },
+        body: { image_base64: imageBase64, fbm_order_id: order.id, action: 'save' },
       });
       if (fnErr) {
         const detail = typeof fnErr === 'object' && fnErr.message ? fnErr.message : String(fnErr);
         throw new Error(`Request failed: ${detail}`);
       }
-      if (data?.status === 'patched') {
-        toast({ title: 'Customer details updated!', description: `Shopify order ${data.shopify_order_id} patched with ${extractedData.customer_name}` });
+      if (data?.status === 'saved') {
+        toast({ title: 'Customer data saved!', description: `${extractedData.customer_name} saved to order. Use "Push to Shopify" to update the Shopify order.` });
         onOpenChange(false);
         onPatched();
-      } else if (data?.status === 'reauth_required') {
-        // Preserve extracted data but show specific permission error
-        const reason = data.reason || 'unknown';
-        const friendlyMsg = reason === 'missing_write_scope' || reason === 'merchant_approval_required'
-          ? 'Customer data was extracted, but Shopify write access is missing. Reconnect XettleInternal and approve write_orders scope, then retry.'
-          : reason === 'no_shopify_token'
-            ? 'No active Shopify connection found. Connect XettleInternal first.'
-            : data.error || 'Shopify reauthorisation required.';
-        setError(friendlyMsg);
-        // Keep extractedData visible so the user doesn't lose the scrape result
+      } else if (data?.status === 'extraction_incomplete') {
+        setError(data.error || 'Could not extract enough data from the screenshot.');
         if (data.data) setExtractedData(data.data);
-      } else if (data?.status === 'patch_failed') {
-        setError(data.error || 'Shopify patch failed.');
+      } else if (data?.status === 'save_failed') {
+        setError(data.error || 'Failed to save customer data.');
         if (data.data) setExtractedData(data.data);
       } else if (data?.error) {
         throw new Error(data.error);
