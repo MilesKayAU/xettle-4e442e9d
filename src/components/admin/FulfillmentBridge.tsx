@@ -1749,6 +1749,389 @@ function ApiAuditTab() {
 }
 
 
+// ═══════════════════════════════════════════════════════════════
+// Tab: MCF Orders (Multi-Channel Fulfillment)
+// ═══════════════════════════════════════════════════════════════
+
+const MCF_STATUS_COLORS: Record<string, string> = {
+  pending: 'bg-amber-100 text-amber-800 border-amber-300',
+  submitted: 'bg-blue-100 text-blue-800 border-blue-300',
+  processing: 'bg-indigo-100 text-indigo-800 border-indigo-300',
+  shipped: 'bg-green-100 text-green-800 border-green-300',
+  delivered: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+  cancelled: 'bg-gray-100 text-gray-800 border-gray-300',
+  failed: 'bg-red-100 text-red-800 border-red-300',
+};
+
+function McfOrdersTab() {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showNewOrder, setShowNewOrder] = useState(false);
+  const [polling, setPolling] = useState(false);
+
+  // New order form
+  const [orderInput, setOrderInput] = useState('');
+  const [fetchingOrder, setFetchingOrder] = useState(false);
+  const [orderDetails, setOrderDetails] = useState<any>(null);
+  const [shippingSpeed, setShippingSpeed] = useState('Standard');
+  const [submitting, setSubmitting] = useState(false);
+  const [skuMappings, setSkuMappings] = useState<any[]>([]);
+
+  const loadOrders = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from('mcf_orders')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(50);
+    setOrders(data || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadOrders(); }, [loadOrders]);
+
+  // Parse Shopify order URL/ID
+  const parseOrderInput = (input: string): string | null => {
+    const trimmed = input.trim();
+    // URL: /orders/12345 or /orders/12345.json
+    const urlMatch = trimmed.match(/\/orders\/(\d+)/);
+    if (urlMatch) return urlMatch[1];
+    // Pure number
+    if (/^\d+$/.test(trimmed)) return trimmed;
+    // Order name like #1042
+    if (/^#?\d+$/.test(trimmed)) return trimmed.replace('#', '');
+    return null;
+  };
+
+  const handleFetchOrder = async () => {
+    const orderId = parseOrderInput(orderInput);
+    if (!orderId) {
+      toast({ title: 'Invalid input', description: 'Enter a Shopify order URL, ID, or order number', variant: 'destructive' });
+      return;
+    }
+
+    setFetchingOrder(true);
+    setOrderDetails(null);
+    setSkuMappings([]);
+
+    try {
+      // Fetch order from Shopify via edge function
+      const { data, error } = await supabase.functions.invoke('fetch-shopify-orders', {
+        body: { order_id: orderId },
+      });
+
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      const order = data?.order || data;
+      if (!order) throw new Error('Order not found');
+
+      setOrderDetails(order);
+
+      // Load product links for SKU mapping
+      const { data: links } = await supabase
+        .from('product_links')
+        .select('*')
+        .eq('enabled', true);
+
+      // Map line items to Amazon SKUs
+      const mappings = (order.line_items || []).map((item: any) => {
+        const match = (links || []).find((link: any) =>
+          link.shopify_variant_id === item.variant_id ||
+          (link.shopify_sku && link.shopify_sku === item.sku)
+        );
+        return {
+          shopify_title: item.title || item.name,
+          shopify_sku: item.sku || '—',
+          shopify_variant_id: item.variant_id,
+          quantity: item.quantity || 1,
+          amazon_sku: match?.amazon_sku || '',
+          amazon_asin: match?.amazon_asin || '',
+          mapped: !!match,
+        };
+      });
+      setSkuMappings(mappings);
+
+      toast({ title: 'Order loaded', description: `${order.name || `#${orderId}`} — ${mappings.length} item(s)` });
+    } catch (err: any) {
+      toast({ title: 'Failed to fetch order', description: err.message, variant: 'destructive' });
+    }
+    setFetchingOrder(false);
+  };
+
+  const handleSubmitMcf = async () => {
+    if (!orderDetails) return;
+
+    const unmapped = skuMappings.filter(m => !m.amazon_sku);
+    if (unmapped.length > 0) {
+      toast({ title: 'Unmapped SKUs', description: `${unmapped.length} item(s) have no Amazon SKU mapping. Add them in Product Links first.`, variant: 'destructive' });
+      return;
+    }
+
+    const addr = orderDetails.shipping_address;
+    if (!addr) {
+      toast({ title: 'No shipping address', description: 'Order has no shipping address', variant: 'destructive' });
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-mcf-order', {
+        body: {
+          shopify_order_id: orderDetails.id,
+          shopify_order_name: orderDetails.name,
+          items: skuMappings.map(m => ({
+            amazon_sku: m.amazon_sku,
+            quantity: m.quantity,
+          })),
+          destination_address: {
+            name: `${addr.first_name || ''} ${addr.last_name || ''}`.trim() || addr.name || 'Customer',
+            address1: addr.address1,
+            address2: addr.address2 || '',
+            city: addr.city,
+            province: addr.province || addr.province_code || '',
+            zip: addr.zip,
+            country_code: addr.country_code || 'AU',
+            phone: addr.phone || '',
+          },
+          shipping_speed: shippingSpeed,
+        },
+      });
+
+      if (error) throw new Error(error.message);
+      if (data?.error) {
+        toast({ title: 'MCF submission failed', description: data.detail || data.error, variant: 'destructive' });
+      } else {
+        toast({ title: 'MCF order submitted', description: `Order sent to Amazon FBA — ${data.seller_fulfillment_order_id}` });
+        setShowNewOrder(false);
+        setOrderInput('');
+        setOrderDetails(null);
+        setSkuMappings([]);
+        loadOrders();
+      }
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    }
+    setSubmitting(false);
+  };
+
+  const handlePollStatus = async () => {
+    setPolling(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('poll-mcf-status', {
+        body: {},
+      });
+      if (error) throw new Error(error.message);
+      toast({ title: 'Status refreshed', description: `${data?.updated || 0} order(s) checked` });
+      loadOrders();
+    } catch (err: any) {
+      toast({ title: 'Poll failed', description: err.message, variant: 'destructive' });
+    }
+    setPolling(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 p-3 rounded-md bg-blue-50 border border-blue-200 text-blue-800">
+        <Package className="h-4 w-4" />
+        <span className="text-sm">Multi-Channel Fulfillment — Send Shopify orders to Amazon FBA for pick, pack & ship</span>
+      </div>
+
+      {/* Action bar */}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => setShowNewOrder(true)}>
+            <Plus className="h-4 w-4 mr-1" /> New MCF Order
+          </Button>
+          <Button variant="outline" size="sm" onClick={handlePollStatus} disabled={polling}>
+            <RefreshCw className={`h-4 w-4 mr-1 ${polling ? 'animate-spin' : ''}`} />
+            Refresh Status
+          </Button>
+        </div>
+        <Button variant="ghost" size="sm" onClick={loadOrders}>
+          <RefreshCw className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {/* New Order Dialog */}
+      <Dialog open={showNewOrder} onOpenChange={setShowNewOrder}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Submit MCF Order</DialogTitle>
+            <DialogDescription>Enter a Shopify order to fulfill via Amazon FBA</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Order input */}
+            <div className="flex gap-2">
+              <Input
+                placeholder="Shopify order URL, ID, or #number"
+                value={orderInput}
+                onChange={e => setOrderInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleFetchOrder()}
+              />
+              <Button variant="outline" onClick={handleFetchOrder} disabled={fetchingOrder || !orderInput.trim()}>
+                {fetchingOrder ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              </Button>
+            </div>
+
+            {/* Order details */}
+            {orderDetails && (
+              <div className="space-y-3">
+                <div className="rounded-md border p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-sm">{orderDetails.name || `Order #${orderDetails.id}`}</span>
+                    <Badge variant="outline">{orderDetails.financial_status || 'unknown'}</Badge>
+                  </div>
+                  {orderDetails.shipping_address && (
+                    <div className="text-xs text-muted-foreground flex items-start gap-1">
+                      <MapPin className="h-3 w-3 mt-0.5 shrink-0" />
+                      <span>
+                        {[
+                          orderDetails.shipping_address.name || `${orderDetails.shipping_address.first_name || ''} ${orderDetails.shipping_address.last_name || ''}`.trim(),
+                          orderDetails.shipping_address.city,
+                          orderDetails.shipping_address.province_code,
+                          orderDetails.shipping_address.zip,
+                        ].filter(Boolean).join(', ')}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* SKU mappings */}
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">Item Mapping</Label>
+                  {skuMappings.map((item, idx) => (
+                    <div key={idx} className={`flex items-center justify-between p-2 rounded text-xs border ${item.mapped ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
+                      <div className="flex-1">
+                        <span className="font-medium">{item.shopify_title}</span>
+                        <span className="text-muted-foreground ml-1">×{item.quantity}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {item.mapped ? (
+                          <>
+                            <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                            <span className="font-mono">{item.amazon_sku}</span>
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="h-3.5 w-3.5 text-red-500" />
+                            <span className="text-red-600">No mapping</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Shipping speed */}
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">Shipping Speed</Label>
+                  <Select value={shippingSpeed} onValueChange={setShippingSpeed}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Standard">Standard</SelectItem>
+                      <SelectItem value="Expedited">Expedited</SelectItem>
+                      <SelectItem value="Priority">Priority</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowNewOrder(false)}>Cancel</Button>
+            <Button
+              onClick={handleSubmitMcf}
+              disabled={submitting || !orderDetails || skuMappings.some(m => !m.mapped)}
+            >
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Package className="h-4 w-4 mr-1" />}
+              Submit to Amazon FBA
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Orders table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">MCF Orders</CardTitle>
+          <CardDescription>Orders fulfilled via Amazon Multi-Channel Fulfillment</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <LoadingSpinner size="sm" text="Loading..." />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Shopify Order</TableHead>
+                  <TableHead>Amazon Ref</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Speed</TableHead>
+                  <TableHead>Tracking</TableHead>
+                  <TableHead>Created</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {orders.map(order => (
+                  <TableRow key={order.id}>
+                    <TableCell>
+                      <div>
+                        <span className="font-medium text-sm">{order.shopify_order_name || `#${order.shopify_order_id}`}</span>
+                        <div className="text-xs text-muted-foreground">{order.shopify_order_id}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {order.seller_fulfillment_order_id
+                        ? order.seller_fulfillment_order_id.replace('XETTLE-', '').slice(0, 20)
+                        : '—'}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={MCF_STATUS_COLORS[order.status] || ''}>
+                        {order.status}
+                      </Badge>
+                      {order.error_detail && (
+                        <div className="text-xs text-destructive mt-1 max-w-[200px] truncate" title={order.error_detail}>
+                          {order.error_detail}
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm">{order.shipping_speed || '—'}</TableCell>
+                    <TableCell>
+                      {order.tracking_number ? (
+                        <div className="text-xs">
+                          <div className="font-mono">{order.tracking_number}</div>
+                          {order.carrier && <div className="text-muted-foreground">{order.carrier}</div>}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {order.created_at ? new Date(order.created_at).toLocaleDateString() : '—'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {orders.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                      No MCF orders yet — click "New MCF Order" to get started
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function FulfillmentBridge() {
   const [connectingInternal, setConnectingInternal] = useState(false);
 
@@ -1791,6 +2174,10 @@ export default function FulfillmentBridge() {
         <TabsList>
           <TabsTrigger value="links">Product Links</TabsTrigger>
           <TabsTrigger value="orders">Order Monitor</TabsTrigger>
+          <TabsTrigger value="mcf">
+            <Package className="h-3.5 w-3.5 mr-1" />
+            MCF Orders
+          </TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
           <TabsTrigger value="events">Event Log</TabsTrigger>
           <TabsTrigger value="audit">
@@ -1804,6 +2191,9 @@ export default function FulfillmentBridge() {
         </TabsContent>
         <TabsContent value="orders">
           <OrderMonitorTab />
+        </TabsContent>
+        <TabsContent value="mcf">
+          <McfOrdersTab />
         </TabsContent>
         <TabsContent value="settings">
           <SettingsTab />

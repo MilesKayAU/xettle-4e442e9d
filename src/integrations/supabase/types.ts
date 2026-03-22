@@ -1334,6 +1334,69 @@ export type Database = {
         }
         Relationships: []
       }
+      mcf_orders: {
+        Row: {
+          amazon_fulfillment_order_id: string | null
+          carrier: string | null
+          created_at: string
+          destination_address: Json | null
+          error_detail: string | null
+          estimated_arrival: string | null
+          id: string
+          items: Json | null
+          raw_amazon_response: Json | null
+          retry_count: number
+          seller_fulfillment_order_id: string | null
+          shipping_speed: string | null
+          shopify_order_id: number
+          shopify_order_name: string | null
+          status: string
+          tracking_number: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amazon_fulfillment_order_id?: string | null
+          carrier?: string | null
+          created_at?: string
+          destination_address?: Json | null
+          error_detail?: string | null
+          estimated_arrival?: string | null
+          id?: string
+          items?: Json | null
+          raw_amazon_response?: Json | null
+          retry_count?: number
+          seller_fulfillment_order_id?: string | null
+          shipping_speed?: string | null
+          shopify_order_id: number
+          shopify_order_name?: string | null
+          status?: string
+          tracking_number?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amazon_fulfillment_order_id?: string | null
+          carrier?: string | null
+          created_at?: string
+          destination_address?: Json | null
+          error_detail?: string | null
+          estimated_arrival?: string | null
+          id?: string
+          items?: Json | null
+          raw_amazon_response?: Json | null
+          retry_count?: number
+          seller_fulfillment_order_id?: string | null
+          shipping_speed?: string | null
+          shopify_order_id?: number
+          shopify_order_name?: string | null
+          status?: string
+          tracking_number?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       order_shipping_estimates: {
         Row: {
           calculation_basis: Json | null
