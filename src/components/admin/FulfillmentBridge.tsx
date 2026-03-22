@@ -2092,8 +2092,9 @@ function McfOrdersTab() {
                   <TableHead>Amazon Ref</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Speed</TableHead>
-                  <TableHead>Tracking</TableHead>
-                  <TableHead>Created</TableHead>
+                   <TableHead>Tracking</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead className="w-[80px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
