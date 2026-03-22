@@ -983,17 +983,22 @@ function OrderMonitorTab() {
           size="sm"
           onClick={async () => {
             setSyncing(true);
-            const { data: { user } } = await supabase.auth.getUser();
-            const { data, error } = await supabase.functions.invoke('sync-amazon-fbm-orders', {
-              body: { user_id: user!.id, store_key: STORE_KEY, action: 'retry_all_failed' },
-            });
-            if (error) {
-              toast({ title: 'Retry failed', description: error.message, variant: 'destructive' });
-            } else {
-              toast({ title: 'Failed orders reset', description: `${data?.count || 0} order(s) queued for retry` });
-              loadOrders();
+            try {
+              const { data: { user } } = await supabase.auth.getUser();
+              const { data, error } = await supabase.functions.invoke('sync-amazon-fbm-orders', {
+                body: { user_id: user!.id, store_key: STORE_KEY, action: 'retry_all_failed' },
+              });
+              if (error) {
+                toast({ title: 'Retry failed', description: error.message, variant: 'destructive' });
+              } else {
+                toast({ title: 'Failed orders reset', description: `${data?.count || 0} order(s) queued for retry` });
+                loadOrders();
+              }
+            } catch (err: any) {
+              toast({ title: 'Retry failed', description: err?.message || 'Unexpected error', variant: 'destructive' });
+            } finally {
+              setSyncing(false);
             }
-            setSyncing(false);
           }}
           disabled={syncing || orders.filter(o => o.status === 'failed' || o.status === 'manual_review').length === 0}
         >
