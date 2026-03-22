@@ -2298,7 +2298,7 @@ export default function FulfillmentBridge() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="links"><ProductLinksTab /></TabsContent>
+          <TabsContent value="links"><ProductLinksTab defaultMode="fba" /></TabsContent>
           <TabsContent value="mcf"><McfOrdersTab /></TabsContent>
           <TabsContent value="settings"><SettingsTab /></TabsContent>
           <TabsContent value="events"><EventLogTab /></TabsContent>
