@@ -1768,6 +1768,7 @@ function McfOrdersTab() {
   const [loading, setLoading] = useState(true);
   const [showNewOrder, setShowNewOrder] = useState(false);
   const [polling, setPolling] = useState(false);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   // New order form
   const [orderInput, setOrderInput] = useState('');
