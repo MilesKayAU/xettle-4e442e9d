@@ -496,10 +496,6 @@ function buildWoolworthsSettlements(
         currency: 'AUD',
         reference: `${g.displayName} Settlement ${bankPaymentRef}`,
         invoiceType: 'clearing',
-        salesAccountCode: '200',
-        shippingAccountCode: '200',
-        clearingAccountCode: '613',
-        feesAccountCode: '405',
         paymentType: 'direct_bank_transfer',
       },
     };
