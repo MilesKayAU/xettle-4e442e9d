@@ -393,6 +393,12 @@ export default function SettlementsOverview({
         onConfirm={handleBatchConfirm}
         settlements={batchSettlements}
       />
+
+      <SettlementDetailDrawer
+        settlementId={drawerSettlementId}
+        open={drawerOpen}
+        onClose={() => { setDrawerOpen(false); setDrawerSettlementId(null); }}
+      />
     </Card>
   );
 }

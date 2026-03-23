@@ -732,6 +732,12 @@ export default function ValidationSweep({
           onConfirm={async () => { setPreviewOpen(false); setSelectedIds(new Set()); loadData(); }}
         />
       )}
+
+      <SettlementDetailDrawer
+        settlementId={drawerSettlementId}
+        open={drawerOpen}
+        onClose={() => { setDrawerOpen(false); setDrawerSettlementId(null); }}
+      />
     </div>
   );
 }
