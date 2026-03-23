@@ -3,7 +3,8 @@
  * in the Settings tab. Wraps existing connection status components
  * under a clear heading with overview badges.
  * 
- * Includes Marketplace Data Sources preference (source priority guard).
+ * Includes Marketplace Data Sources preference (source priority guard)
+ * and per-API daily auto-sync toggles.
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -11,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Globe, CheckCircle2, XCircle, Info, FileText, ShoppingBag } from 'lucide-react';
+import { Globe, CheckCircle2, XCircle, Info, FileText, ShoppingBag, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { setSourcePreference } from '@/actions/settlements';
 import { toast } from 'sonner';
@@ -46,6 +47,15 @@ interface SubChannelPref {
   apiAvailable: boolean;
 }
 
+/** Rails that support daily auto-sync */
+const SYNC_RAILS = [
+  { key: 'amazon', label: 'Amazon', settingsKey: 'auto_sync_enabled:amazon' },
+  { key: 'shopify', label: 'Shopify', settingsKey: 'auto_sync_enabled:shopify' },
+  { key: 'ebay', label: 'eBay', settingsKey: 'auto_sync_enabled:ebay' },
+  { key: 'mirakl', label: 'Mirakl (Bunnings etc.)', settingsKey: 'auto_sync_enabled:mirakl' },
+  { key: 'xero', label: 'Xero', settingsKey: 'auto_sync_enabled:xero' },
+] as const;
+
 export default function ApiConnectionsPanel({
   isPaid = false,
   gstRate = 10,
@@ -63,6 +73,7 @@ export default function ApiConnectionsPanel({
   });
   const [subChannels, setSubChannels] = useState<SubChannelPref[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
+  const [autoSyncFlags, setAutoSyncFlags] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     checkConnections();
@@ -90,6 +101,22 @@ export default function ApiConnectionsPanel({
         mirakl: !!(miraklRes.data && miraklRes.data.length > 0),
       });
 
+      // Load auto-sync flags
+      const syncKeys = SYNC_RAILS.map(r => r.settingsKey);
+      const { data: syncSettings } = await supabase
+        .from('app_settings')
+        .select('key, value')
+        .eq('user_id', user.id)
+        .in('key', syncKeys);
+
+      const flags: Record<string, boolean> = {};
+      for (const r of SYNC_RAILS) {
+        const setting = syncSettings?.find(s => s.key === r.settingsKey);
+        // Default: true if no setting exists (opt-out model)
+        flags[r.key] = setting ? setting.value === 'true' : true;
+      }
+      setAutoSyncFlags(flags);
+
       // Load sub-channels for source preference
       const { data: channels } = await supabase
         .from('shopify_sub_channels')
@@ -98,7 +125,6 @@ export default function ApiConnectionsPanel({
         .eq('ignored', false);
 
       if (channels && channels.length > 0) {
-        // Load preferences and API-enabled flags
         const codes = channels.map(c => c.marketplace_code || c.source_name).filter(Boolean);
         const prefKeys = codes.map(c => `source_preference:${c}`);
         const apiEnabledKeys = codes.map(c => `api_enabled:${c}`);
@@ -118,7 +144,7 @@ export default function ApiConnectionsPanel({
           return {
             code,
             name: c.marketplace_label,
-            preference: pref === 'api' ? 'api' : 'csv', // Default to CSV
+            preference: pref === 'api' ? 'api' : 'csv',
             apiAvailable: apiEnabled,
           };
         }));
@@ -141,8 +167,31 @@ export default function ApiConnectionsPanel({
     }
   }, [userId]);
 
+  const handleAutoSyncToggle = useCallback(async (railKey: string, enabled: boolean) => {
+    if (!userId) return;
+    const settingsKey = SYNC_RAILS.find(r => r.key === railKey)?.settingsKey;
+    if (!settingsKey) return;
+
+    setAutoSyncFlags(prev => ({ ...prev, [railKey]: enabled }));
+
+    const { error } = await supabase.from('app_settings').upsert(
+      { user_id: userId, key: settingsKey, value: String(enabled) },
+      { onConflict: 'user_id,key' }
+    );
+
+    if (error) {
+      setAutoSyncFlags(prev => ({ ...prev, [railKey]: !enabled }));
+      toast.error('Failed to save sync preference');
+    } else {
+      toast.success(`${SYNC_RAILS.find(r => r.key === railKey)?.label} daily sync ${enabled ? 'enabled' : 'disabled'}`);
+    }
+  }, [userId]);
+
   const connectedCount = Object.values(summary).filter(Boolean).length;
   const totalCount = Object.keys(summary).length;
+
+  // Only show auto-sync toggles for connected APIs
+  const connectedSyncRails = SYNC_RAILS.filter(r => summary[r.key as keyof ConnectionSummary]);
 
   return (
     <div className="space-y-4">
@@ -216,6 +265,59 @@ export default function ApiConnectionsPanel({
           <ChannelManagement />
         </CardContent>
       </Card>
+
+      {/* Daily Auto-Sync — per-API toggles */}
+      {connectedSyncRails.length > 0 && (
+        <Card className="border-border">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <RefreshCw className="h-4 w-4 text-primary" />
+              Daily Auto-Sync
+            </CardTitle>
+            <CardDescription className="text-xs mt-1">
+              Control which connected APIs automatically fetch new settlements every day at 2:00 AM AEST. 
+              Disable to use manual sync or CSV uploads only.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="space-y-3">
+              {connectedSyncRails.map(rail => (
+                <div key={rail.key} className="flex items-center justify-between py-2 border-b border-border last:border-b-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-foreground">{rail.label}</span>
+                    {autoSyncFlags[rail.key] ? (
+                      <Badge variant="default" className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+                        Auto
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[9px] text-muted-foreground">
+                        Manual only
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor={`sync-${rail.key}`} className="text-xs text-muted-foreground">
+                      Daily sync
+                    </Label>
+                    <Switch
+                      id={`sync-${rail.key}`}
+                      checked={autoSyncFlags[rail.key] ?? true}
+                      onCheckedChange={(checked) => handleAutoSyncToggle(rail.key, checked)}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-start gap-2 mt-4 p-3 rounded-lg bg-muted/50 border border-border">
+              <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+              <p className="text-xs text-muted-foreground">
+                When enabled, Xettle will automatically fetch the latest settlements from each API during the nightly sync run. 
+                You can always trigger a manual sync from the dashboard regardless of this setting.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Marketplace Data Sources — source priority preferences */}
       {subChannels.length > 0 && (

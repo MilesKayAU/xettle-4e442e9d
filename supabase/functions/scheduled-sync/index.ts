@@ -32,6 +32,30 @@ Deno.serve(async (req) => {
   for (const t of ebayTokens || []) allUserIds.add(t.user_id);
   for (const t of miraklTokens || []) allUserIds.add(t.user_id);
 
+  // ─── Load per-user auto-sync preferences (opt-out model: default=true) ─────
+  const autoSyncKeys = [
+    'auto_sync_enabled:amazon', 'auto_sync_enabled:shopify',
+    'auto_sync_enabled:ebay', 'auto_sync_enabled:mirakl', 'auto_sync_enabled:xero',
+  ];
+  const { data: autoSyncSettings } = await adminClient
+    .from('app_settings')
+    .select('user_id, key, value')
+    .in('key', autoSyncKeys);
+
+  const autoSyncDisabled = new Map<string, Set<string>>(); // user_id -> Set of disabled rails
+  for (const s of autoSyncSettings || []) {
+    if (s.value === 'false') {
+      if (!autoSyncDisabled.has(s.user_id)) autoSyncDisabled.set(s.user_id, new Set());
+      const rail = s.key.replace('auto_sync_enabled:', '');
+      autoSyncDisabled.get(s.user_id)!.add(rail);
+    }
+  }
+
+  /** Check if a user has auto-sync enabled for a given rail (default: true) */
+  function isAutoSyncEnabled(userId: string, rail: string): boolean {
+    return !(autoSyncDisabled.get(userId)?.has(rail));
+  }
+
   // ─── Write interim "running" sync_history per user ─────────────
   const interimIds: Record<string, string> = {};
   for (const userId of allUserIds) {
@@ -98,6 +122,10 @@ Deno.serve(async (req) => {
   console.log("[scheduled-sync] Step 1: Xero status audit (discovery)...");
   results.xero_audit = { users: xeroUserIds.length, results: [] };
   for (const uid of xeroUserIds) {
+    if (!isAutoSyncEnabled(uid, 'xero')) {
+      console.log(`[scheduled-sync] Xero skipped for ${uid} — auto-sync disabled`);
+      continue;
+    }
     const auditResult = await callFunction("sync-xero-status", {}, { userId: uid });
     (results.xero_audit.results as any[]).push({ user_id: uid, ...auditResult });
     if (auditResult?.error) stepErrors.push('xero_audit');
@@ -180,6 +208,12 @@ Deno.serve(async (req) => {
   // Determine eligible Amazon users (no lock, no cooldown)
   const eligibleAmazonUsers: string[] = [];
   for (const uid of amazonUserIds) {
+    // Check if auto-sync is enabled for this user
+    if (!isAutoSyncEnabled(uid, 'amazon')) {
+      console.log(`[scheduled-sync] Amazon skipped for ${uid} — auto-sync disabled`);
+      continue;
+    }
+
     // Check lock atomically via RPC
     const { data: lockResult } = await adminClient.rpc('acquire_sync_lock', {
       p_user_id: uid,
@@ -241,6 +275,12 @@ Deno.serve(async (req) => {
   {
     const eligibleEbayUsers: string[] = [];
     for (const uid of ebayUserIds) {
+      // Check if auto-sync is enabled for this user
+      if (!isAutoSyncEnabled(uid, 'ebay')) {
+        console.log(`[scheduled-sync] eBay skipped for ${uid} — auto-sync disabled`);
+        continue;
+      }
+
       const { data: lockResult } = await adminClient.rpc('acquire_sync_lock', {
         p_user_id: uid,
         p_integration: 'ebay',
@@ -291,18 +331,20 @@ Deno.serve(async (req) => {
   // 4.7. Fetch Mirakl settlements (per-user)
   console.log("[scheduled-sync] Step 4.7: Mirakl fetch (per-user)...");
   const miraklUserIds = [...new Set((miraklTokens || []).map(t => t.user_id))];
-  if (miraklUserIds.length > 0 && Date.now() - startTime < MAX_ELAPSED_MS) {
-    results.mirakl = { users: miraklUserIds.length, results: [] };
-    for (const uid of miraklUserIds) {
+  // Filter out users who disabled auto-sync for mirakl
+  const eligibleMiraklUsers = miraklUserIds.filter(uid => isAutoSyncEnabled(uid, 'mirakl'));
+  if (eligibleMiraklUsers.length > 0 && Date.now() - startTime < MAX_ELAPSED_MS) {
+    results.mirakl = { users: eligibleMiraklUsers.length, results: [] };
+    for (const uid of eligibleMiraklUsers) {
       const syncFrom = userSyncFromMap[uid] || defaultSyncFrom;
       const miraklResult = await callFunction("fetch-mirakl-settlements", {}, { userId: uid, sync_from: syncFrom });
       (results.mirakl.results as any[]).push({ user_id: uid, ...miraklResult });
       if (miraklResult?.error) stepErrors.push('mirakl');
     }
-  } else if (miraklUserIds.length > 0) {
+  } else if (eligibleMiraklUsers.length > 0) {
     results.mirakl = { skipped: true, reason: 'elapsed_timeout' };
   } else {
-    results.mirakl = { skipped: true, reason: 'no_mirakl_users' };
+    results.mirakl = { skipped: true, reason: miraklUserIds.length > 0 ? 'all_users_disabled' : 'no_mirakl_users' };
   }
 
   // 5. Fetch Shopify payouts (with per-user Shopify mutex)
@@ -311,6 +353,12 @@ Deno.serve(async (req) => {
     // Acquire Shopify locks per user
     const eligibleShopifyUsers: string[] = [];
     for (const uid of shopifyUserIds) {
+      // Check if auto-sync is enabled for this user
+      if (!isAutoSyncEnabled(uid, 'shopify')) {
+        console.log(`[scheduled-sync] Shopify skipped for ${uid} — auto-sync disabled`);
+        continue;
+      }
+
       const { data: lockResult } = await adminClient.rpc('acquire_sync_lock', {
         p_user_id: uid,
         p_integration: 'shopify',
