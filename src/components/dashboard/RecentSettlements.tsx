@@ -454,7 +454,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
       if (data) {
         let ready = 0, readyTotal = 0, uploadNeeded = 0, gaps = 0;
         for (const r of data) {
-          if (r.overall_status === 'ready_to_push' || r.overall_status === 'pushed_to_xero') {
+          if (r.overall_status === 'ready_to_push') {
             ready++;
             readyTotal += (r as any).settlement_net || 0;
           }
