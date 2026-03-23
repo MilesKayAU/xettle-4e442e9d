@@ -122,6 +122,10 @@ Deno.serve(async (req) => {
   console.log("[scheduled-sync] Step 1: Xero status audit (discovery)...");
   results.xero_audit = { users: xeroUserIds.length, results: [] };
   for (const uid of xeroUserIds) {
+    if (!isAutoSyncEnabled(uid, 'xero')) {
+      console.log(`[scheduled-sync] Xero skipped for ${uid} — auto-sync disabled`);
+      continue;
+    }
     const auditResult = await callFunction("sync-xero-status", {}, { userId: uid });
     (results.xero_audit.results as any[]).push({ user_id: uid, ...auditResult });
     if (auditResult?.error) stepErrors.push('xero_audit');
