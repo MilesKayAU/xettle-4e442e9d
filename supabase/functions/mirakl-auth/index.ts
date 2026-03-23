@@ -61,6 +61,7 @@ Deno.serve(async (req) => {
             client_secret: client_secret || "",
             api_key: api_key || null,
             auth_mode: mode,
+            auth_header_type: auth_header_type || null,
             seller_company_id,
             marketplace_label: marketplace_label || "Bunnings",
             access_token: null,
