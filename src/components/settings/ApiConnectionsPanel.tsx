@@ -175,7 +175,7 @@ export default function ApiConnectionsPanel({
               { key: 'amazon', label: 'Amazon' },
               { key: 'shopify', label: 'Shopify' },
               { key: 'ebay', label: 'eBay' },
-              { key: 'mirakl', label: 'Mirakl' },
+              { key: 'mirakl', label: 'Bunnings' },
             ] as const).map(({ key, label }) => (
               <div key={key} className="flex items-center gap-1 text-xs">
                 {summary[key] ? (
@@ -209,7 +209,7 @@ export default function ApiConnectionsPanel({
           {/* eBay */}
           <EbayConnectionStatus />
 
-          {/* Mirakl */}
+          {/* Bunnings Marketplace */}
           <MiraklConnectionPanel />
 
           {/* Shopify Channel Management */}
