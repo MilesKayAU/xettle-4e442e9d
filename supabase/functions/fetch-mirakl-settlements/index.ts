@@ -167,7 +167,7 @@ async function fetchSettlementsForConnection(
   adminClient: any,
   userId: string,
   connection: any,
-  authHeader: string,
+  authResult: { headerName: string; headerValue: string },
   syncFrom?: string,
 ) {
   const baseUrl = connection.base_url.replace(/\/$/, "");
