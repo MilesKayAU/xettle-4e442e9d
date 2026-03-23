@@ -1,7 +1,7 @@
 /**
  * Master API Policy Registry
  * ═══════════════════════════
- * Wraps all three API policies (Amazon SP-API, Shopify, Xero) into a
+ * Wraps all four API policies (Amazon SP-API, Shopify, Xero, Mirakl) into a
  * single registry for health checks, deprecation audits, and version tracking.
  *
  * Usage:
@@ -32,6 +32,15 @@ import {
   XERO_REQUIRED_SCOPES,
   XERO_DEPRECATIONS,
 } from './xero-api-policy.ts';
+
+import {
+  MIRAKL_AUTH_URL,
+  MIRAKL_MARKETPLACE_ENDPOINTS,
+  MIRAKL_RATE_LIMITS,
+  MIRAKL_DEPRECATIONS,
+  MIRAKL_API_VERSION,
+  MIRAKL_POWERED_MARKETPLACES,
+} from './mirakl-api-policy.ts';
 
 // ═══════════════════════════════════════════════════════════════
 // Master Registry
@@ -79,6 +88,16 @@ export const API_REGISTRY = {
     rateLimits: XERO_RATE_LIMITS,
     scopes: [...XERO_REQUIRED_SCOPES],
     deprecations: [...XERO_DEPRECATIONS],
+  },
+
+  mirakl: {
+    name: 'Mirakl Marketplace API',
+    authUrl: MIRAKL_AUTH_URL,
+    version: MIRAKL_API_VERSION,
+    endpoints: MIRAKL_MARKETPLACE_ENDPOINTS,
+    rateLimits: MIRAKL_RATE_LIMITS,
+    poweredMarketplaces: [...MIRAKL_POWERED_MARKETPLACES],
+    deprecations: [...MIRAKL_DEPRECATIONS],
   },
 } as const;
 
@@ -134,11 +153,21 @@ export function getApiHealth(): ApiHealthEntry[] {
     notes: xeroDeprecations.map(d => `${d.feature}: ${d.note}`),
   });
 
+  // Mirakl
+  const miraklDeprecations = API_REGISTRY.mirakl.deprecations;
+  entries.push({
+    api: 'Mirakl Marketplace API',
+    version: MIRAKL_API_VERSION,
+    status: miraklDeprecations.length > 0 ? 'warning' : 'ok',
+    deprecationCount: miraklDeprecations.length,
+    notes: miraklDeprecations.map(d => `${d.feature}: ${d.note}`),
+  });
+
   return entries;
 }
 
 /**
- * Aggregates all deprecation warnings across all three APIs.
+ * Aggregates all deprecation warnings across all four APIs.
  * Used for weekly audit scans and warning logs.
  */
 export function getAllDeprecationWarnings(): Array<{ api: string; feature: string; status: string; note: string }> {
@@ -154,6 +183,10 @@ export function getAllDeprecationWarnings(): Array<{ api: string; feature: strin
 
   for (const dep of API_REGISTRY.xero.deprecations) {
     warnings.push({ api: 'Xero Accounting API', feature: dep.feature, status: dep.status, note: dep.note || '' });
+  }
+
+  for (const dep of API_REGISTRY.mirakl.deprecations) {
+    warnings.push({ api: 'Mirakl Marketplace API', feature: dep.feature, status: dep.status, note: dep.note || '' });
   }
 
   return warnings;
