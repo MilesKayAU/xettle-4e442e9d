@@ -38,6 +38,7 @@ export function getValidDestTypes(railCode: string): readonly string[] {
 /** Maps legacy/variant marketplace codes to canonical rail codes */
 export const RAIL_ALIASES: Record<string, string> = {
   ebay: 'ebay_au',
+  mirakl: 'mirakl_marketplace',
 };
 
 /** Normalise a marketplace code to its canonical rail code */
