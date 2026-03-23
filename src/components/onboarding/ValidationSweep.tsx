@@ -171,10 +171,7 @@ export default function ValidationSweep({
       ]);
 
       if (valRes.error) throw valRes.error;
-      // Filter out phantom rows created from reconciliation-only (shopify_auto_) settlements
-      const validationRows = ((valRes.data || []) as ValidationRow[]).filter(
-        r => !r.settlement_id?.startsWith('shopify_auto_')
-      );
+      const validationRows = (valRes.data || []) as ValidationRow[];
 
       // Load marketplace connections (paused codes + display names)
       const { data: connData } = await supabase
