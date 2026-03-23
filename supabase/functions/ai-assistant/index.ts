@@ -193,8 +193,9 @@ serve(async (req) => {
                      lastUserMsg.includes('[CODE & UX REVIEW]');
 
     const basePrompt = isQAMode ? QA_SYSTEM_PROMPT : SYSTEM_PROMPT;
+    const pageGuide = renderPageExplainers(context?.routeId);
     const systemPrompt = context
-      ? `${basePrompt}\n\nCurrent page context:\n${JSON.stringify(context, null, 2)}`
+      ? `${basePrompt}\n\nCurrent page context:\n${JSON.stringify(context, null, 2)}${pageGuide ? '\n\n' + pageGuide : ''}`
       : basePrompt;
 
     // ─── Route-filtered tools ────────────────────────────────────────
