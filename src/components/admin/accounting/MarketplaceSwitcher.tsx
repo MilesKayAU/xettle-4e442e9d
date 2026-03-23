@@ -39,7 +39,7 @@ export interface MarketplaceDefinition {
   icon: string;
   country: string;
   countryFlag: string;
-  connectionMethods: Array<'sp_api' | 'manual_csv' | 'api_key'>;
+  connectionMethods: Array<'sp_api' | 'manual_csv' | 'api_key' | 'mirakl_api'>;
   phase: 'live' | 'csv_ready' | 'coming_soon';
   description: string;
 }
