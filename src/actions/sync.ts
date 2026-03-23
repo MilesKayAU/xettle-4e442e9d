@@ -67,6 +67,7 @@ const DIRECT_FETCH_MAP: Record<string, string> = {
   ebay_au: 'fetch-ebay-settlements',
   ebay: 'fetch-ebay-settlements',
   shopify_payments: 'fetch-shopify-payouts',
+  bunnings: 'fetch-mirakl-settlements',
 };
 
 /**
