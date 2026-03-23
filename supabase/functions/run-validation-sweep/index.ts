@@ -668,20 +668,30 @@ async function sweepUser(adminSupabase: any, userId: string) {
 
         // Fallback: check xero_accounting_matches (covers LMB, A2X, manual external pushes)
         if (!record.xero_pushed && settlement && xamBySettlement.has(settlement.settlement_id)) {
+          const resolvedAt = new Date().toISOString()
           const xam = xamBySettlement.get(settlement.settlement_id)!
           if (['PAID', 'AUTHORISED'].includes(xam.xero_status)) {
             record.xero_pushed = true
             record.xero_invoice_id = xam.xero_invoice_id
-            record.xero_pushed_at = new Date().toISOString()
+            record.xero_pushed_at = resolvedAt
+            record.overall_status = 'already_recorded'
 
-            // For PAID matches, also mark the settlement itself as already_recorded
-            if (xam.xero_status === 'PAID') {
-              await adminSupabase.from('settlements')
-                .update({ status: 'already_recorded', sync_origin: 'external' })
-                .eq('settlement_id', settlement.settlement_id)
-                .eq('user_id', userId)
-              record.overall_status = 'already_recorded'
-            }
+            await adminSupabase.from('settlements')
+              .update({ status: 'already_recorded', sync_origin: 'external' })
+              .eq('settlement_id', settlement.settlement_id)
+              .eq('user_id', userId)
+
+            await adminSupabase.from('marketplace_validation')
+              .update({
+                xero_pushed: true,
+                xero_invoice_id: xam.xero_invoice_id,
+                xero_pushed_at: resolvedAt,
+                overall_status: 'already_recorded',
+                updated_at: resolvedAt,
+                last_checked_at: resolvedAt,
+              })
+              .eq('user_id', userId)
+              .eq('settlement_id', settlement.settlement_id)
           }
         }
 
