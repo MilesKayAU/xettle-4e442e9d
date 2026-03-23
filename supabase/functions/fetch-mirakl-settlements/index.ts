@@ -87,12 +87,15 @@ Deno.serve(async (req) => {
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
   try {
+    console.log("[fetch-mirakl-settlements] ▶ Invoked");
     const { userId, isCron } = await verifyRequest(req, { allowCron: true });
     const body = await req.json().catch(() => ({}));
+    console.log("[fetch-mirakl-settlements] userId:", userId, "isCron:", isCron, "body:", JSON.stringify(body));
 
     // Determine which user(s) to fetch for
     const targetUserId = isCron ? (body.userId || null) : userId;
     if (!targetUserId) {
+      console.log("[fetch-mirakl-settlements] No target user — aborting");
       return new Response(
         JSON.stringify({ error: "No target user" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
