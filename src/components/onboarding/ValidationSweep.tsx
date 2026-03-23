@@ -320,18 +320,18 @@ export default function ValidationSweep({
     const counts = { all: 0, complete: 0, ready_to_push: 0, settlement_needed: 0, settlement_needed_manual: 0, settlement_needed_api: 0, settlement_needed_recon: 0, gap_detected: 0 };
     activeRows.forEach((r) => {
       const isRecon = r.settlement_id?.startsWith('shopify_auto_');
-      // Exclude recon rows from main "all" count
-      if (!isRecon) counts.all++;
+      // Recon rows are always counted separately, regardless of their overall_status
+      if (isRecon) {
+        counts.settlement_needed_recon++;
+        return;
+      }
+      counts.all++;
       if (r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'already_recorded' || r.overall_status === 'synced_external') counts.complete++;
       else if (r.overall_status === 'ready_to_push') counts.ready_to_push++;
       else if (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') {
-        if (isRecon) {
-          counts.settlement_needed_recon++;
-        } else {
-          counts.settlement_needed++;
-          if (apiSyncedCodes.has(r.marketplace_code)) counts.settlement_needed_api++;
-          else counts.settlement_needed_manual++;
-        }
+        counts.settlement_needed++;
+        if (apiSyncedCodes.has(r.marketplace_code)) counts.settlement_needed_api++;
+        else counts.settlement_needed_manual++;
       }
       else if (r.overall_status === 'gap_detected') counts.gap_detected++;
     });
