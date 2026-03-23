@@ -152,7 +152,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
       <Card>
         <CardContent className="py-8 text-center">
           <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
-          <p className="text-sm text-muted-foreground mt-2">Checking Mirakl connection...</p>
+          <p className="text-sm text-muted-foreground mt-2">Checking Bunnings connection...</p>
         </CardContent>
       </Card>
     );
