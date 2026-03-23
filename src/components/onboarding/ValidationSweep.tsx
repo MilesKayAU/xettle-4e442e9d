@@ -258,7 +258,6 @@ export default function ValidationSweep({
     let result = rows.filter((r) => !pausedCodes.has(r.marketplace_code));
     if (filter !== 'all') {
       result = result.filter((r) => {
-        if (filter === 'complete') return r.overall_status === 'complete' || r.overall_status === 'bank_matched';
         if (filter === 'complete') return r.overall_status === 'complete' || r.overall_status === 'bank_matched'
           || r.overall_status === 'already_recorded' || r.overall_status === 'synced_external';
         if (filter === 'ready_to_push') return r.overall_status === 'ready_to_push' || r.overall_status === 'pushed_to_xero';
