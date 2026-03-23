@@ -1,75 +1,61 @@
 
 
-# Fix: Derive API-connected badges from actual connection data
+# Fix: Homepage Settlements Cards — Conflicting Counts and Redundant Navigation
 
 ## Problem
 
-The green "Auto" badge on marketplace pills in the Settlements tab is hardcoded from three boolean flags (`hasAmazon`, `hasShopify`, `hasEbay`) derived from token tables. Bunnings (mirakl_api) and any future API connection are completely ignored. When you add or remove an API connection in Settings, the badge never updates.
+The homepage has two separate components both showing "ready for Xero" data with conflicting numbers:
+
+1. **ActionCentre card** ("Ready for Xero" — badge 15): queries `marketplace_validation` filtering `overall_status === 'ready_to_push'` only
+2. **RecentSettlements card** ("Ready to Push to Xero" — shows 19): queries `marketplace_validation` filtering `overall_status === 'ready_to_push' OR 'pushed_to_xero'` — incorrectly including already-pushed items in the "ready" count
+
+Both cards navigate to the same Settlements Overview page. The labels sound identical yet show different numbers, which is confusing.
 
 ## Root Cause
 
-In `src/pages/Dashboard.tsx` (line ~1108), `apiConnectedCodes` is built as:
-
+In `RecentSettlements.tsx` line 457:
 ```typescript
-apiConnectedCodes={new Set([
-  ...(hasAmazon ? [amazonXettleCode] : []),
-  ...(hasShopify ? ['shopify_payments', 'shopify_orders'] : []),
-  ...(hasEbay ? ['ebay_au'] : []),
-])}
+if (r.overall_status === 'ready_to_push' || r.overall_status === 'pushed_to_xero') {
+  ready++;  // BUG: pushed_to_xero items are NOT "ready to push"
 ```
 
-This is a static list. It misses Bunnings (`mirakl_api`), and won't react to Settings changes.
+This inflates the count by including settlements already sent to Xero.
 
-## Fix
+## Fix (3 changes)
 
-### 1. Derive `apiConnectedCodes` from `marketplace_connections` table
+### 1. Fix the count in RecentSettlements (`src/components/dashboard/RecentSettlements.tsx`)
 
-In `Dashboard.tsx`, after `loadMarketplaces` fetches `userMarketplaces`, compute the set dynamically:
+In `fetchValidationCounts`, change the ready count to only include `ready_to_push` — not `pushed_to_xero`:
 
 ```typescript
-const apiConnectedCodes = useMemo(() => {
-  const codes = new Set<string>();
-  for (const um of userMarketplaces) {
-    if (isApiConnectionType(um.connection_type)) {
-      codes.add(um.marketplace_code);
-    }
-  }
-  // Also include token-derived APIs that may not have explicit connection_type set
-  if (hasAmazon) codes.add(amazonXettleCode);
-  if (hasShopify) { codes.add('shopify_payments'); codes.add('shopify_orders'); }
-  if (hasEbay) codes.add('ebay_au');
-  return codes;
-}, [userMarketplaces, hasAmazon, amazonXettleCode, hasShopify, hasEbay]);
+if (r.overall_status === 'ready_to_push') {
+  ready++;
+  readyTotal += r.settlement_net || 0;
+}
 ```
 
-This merges both sources: the `marketplace_connections.connection_type` field (catches Bunnings/mirakl_api and future APIs) and the legacy token-table booleans (backward compat).
+This makes both cards show the same number (15).
 
-### 2. Pass derived set to MarketplaceSwitcher
+### 2. Rename the bottom card to avoid confusion
 
-Replace the inline `new Set([...])` with the computed `apiConnectedCodes` variable.
+Change the `summaryCards` label from "Ready to Push to Xero" to "Ready for Xero" to match the ActionCentre card exactly — reinforcing that they show the same data. Both cards already navigate to the same place, so consistent naming removes ambiguity.
 
-### 3. Audit other pages for same issue
+### 3. Remove the redundant "Ready for Xero" card from ActionCentre OR the summary card from RecentSettlements
 
-Search for any other place that shows API/Auto indicators using hardcoded logic instead of `isApiConnectionType()`:
-- `ActionCentre.tsx` — already fixed in prior session
-- `ValidationSweep.tsx` — already fixed
-- `SettlementsOverview.tsx` — check and fix if needed
-- `GenericMarketplaceDashboard.tsx` — check header badge
+Since both cards show the same data and navigate to the same place, the bottom "Ready to Push to Xero" summary card in RecentSettlements is redundant when `actionableOnly` mode is active (homepage). Remove the "ready" summary card from RecentSettlements in `actionableOnly` mode, since ActionCentre already handles it with better detail (shows individual settlement rows, duplicate risk, manual vs auto-post breakdown).
 
-### 4. Ensure Settings changes propagate
-
-`loadMarketplaces` is already called after connection changes via `onMarketplacesChanged`. Since `apiConnectedCodes` is derived from `userMarketplaces` via `useMemo`, any Settings page change that updates `marketplace_connections.connection_type` will automatically reflect in the badge on next load.
+The RecentSettlements table below should still show the actionable rows — just without the duplicate summary card above it.
 
 ## Files to modify
 
 | File | Change |
 |------|--------|
-| `src/pages/Dashboard.tsx` | Replace hardcoded `apiConnectedCodes` with `useMemo` derived from `userMarketplaces` + `isApiConnectionType()` |
-| Any other files found in audit step 3 | Ensure consistent use of `isApiConnectionType()` |
+| `src/components/dashboard/RecentSettlements.tsx` | Fix `fetchValidationCounts` to exclude `pushed_to_xero` from ready count; hide the "Ready to Push" summary card when `actionableOnly` is true |
 
 ## Expected outcome
 
-- Bunnings shows green "Auto" badge immediately
-- Any future API marketplace gets the badge automatically
-- Adding/removing API connections in Settings reflects on the Settlements tab after reload
+- Both components agree on the same "ready" count
+- No duplicate "Ready for Xero" / "Ready to Push to Xero" cards on the homepage
+- The RecentSettlements table still shows actionable rows with their actions
+- Clicking "Review all ready items" in ActionCentre navigates to Settlements Overview with the correct filter
 
