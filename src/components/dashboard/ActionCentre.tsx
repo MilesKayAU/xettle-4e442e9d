@@ -500,9 +500,13 @@ export default function ActionCentre({
         </Card>
       )}
 
-      {/* ─── Section 3: Ready to Push to Xero ─── */}
-      {readyToPush.length > 0 && (() => {
-        const totalAmount = readyToPush.reduce((sum, r) => sum + (r.settlement_net || 0), 0);
+      {/* ─── Section 3: Ready for Xero ─── */}
+      {readySettlements.length > 0 && (() => {
+        const totalReadyCount = readySettlements.length;
+        const totalReadyAmount = readySettlements.reduce((sum, s) => sum + (s.bank_deposit || 0), 0);
+        const manualReadyCount = readyToPush.length;
+        const manualReadyAmount = readyToPush.reduce((sum, r) => sum + (r.settlement_net || 0), 0);
+        const automatedReadyCount = Math.max(0, totalReadyCount - manualReadyCount);
         const hasExternalRisk = readyToPush.some(r => r.settlement_id && externalMatchIds.has(r.settlement_id));
         return (
           <Card className={cn(
@@ -514,8 +518,8 @@ export default function ActionCentre({
             <CardContent className="py-4 space-y-3">
               <div className="flex items-center gap-2">
                 <Send className="h-4 w-4 text-blue-500" />
-                <h3 className="font-semibold text-sm">Ready to Push to Xero</h3>
-                <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-[10px]">{readyToPush.length}</Badge>
+                <h3 className="font-semibold text-sm">Ready for Xero</h3>
+                <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-[10px]">{totalReadyCount}</Badge>
               </div>
               {hasExternalRisk && (
                 <div className="flex items-start gap-2 rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2">
@@ -526,11 +530,21 @@ export default function ActionCentre({
                 </div>
               )}
               <div>
-                <p className="text-lg font-bold text-foreground">{formatAUD(totalAmount)} <span className="text-xs font-normal text-muted-foreground">ready to send</span></p>
-                <p className="text-xs text-muted-foreground">{readyToPush.length} settlement{readyToPush.length > 1 ? 's' : ''}</p>
+                <p className="text-lg font-bold text-foreground">{formatAUD(totalReadyAmount)} <span className="text-xs font-normal text-muted-foreground">total ready</span></p>
+                <p className="text-xs text-muted-foreground">
+                  {manualReadyCount > 0
+                    ? `${manualReadyCount} need manual review/send${automatedReadyCount > 0 ? ` · ${automatedReadyCount} are auto-post/queued` : ''}`
+                    : `${automatedReadyCount} ${automatedReadyCount === 1 ? 'settlement is' : 'settlements are'} auto-post/queued`}
+                </p>
+                {manualReadyCount > 0 && automatedReadyCount > 0 && (
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Showing the manual-send items first. Manual total: {formatAUD(manualReadyAmount)}.
+                  </p>
+                )}
               </div>
-              <ul className="space-y-1">
-                {(expandedCards['ready'] ? readyToPush : readyToPush.slice(0, 3)).map(r => {
+              {manualReadyCount > 0 && (
+                <ul className="space-y-1">
+                  {(expandedCards['ready'] ? readyToPush : readyToPush.slice(0, 3)).map(r => {
                   const isRisky = r.settlement_id ? externalMatchIds.has(r.settlement_id) : false;
                   return (
                     <li key={r.id} className={cn(
@@ -553,17 +567,18 @@ export default function ActionCentre({
                       {r.settlement_net ? ` — ${formatAUD(r.settlement_net)}` : ''}
                     </li>
                   );
-                })}
-                {readyToPush.length > 3 && (
-                  <li>
-                    <button onClick={() => setExpandedCards(prev => ({ ...prev, ready: !prev.ready }))} className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                      {expandedCards['ready'] ? '− Show less' : `+ ${readyToPush.length - 3} more`}
-                    </button>
-                  </li>
-                )}
-              </ul>
+                  })}
+                  {readyToPush.length > 3 && (
+                    <li>
+                      <button onClick={() => setExpandedCards(prev => ({ ...prev, ready: !prev.ready }))} className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                        {expandedCards['ready'] ? '− Show less' : `+ ${readyToPush.length - 3} more`}
+                      </button>
+                    </li>
+                  )}
+                </ul>
+              )}
               <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1" onClick={() => onSwitchToSettlements('ready_to_push')}>
-                <Search className="h-3 w-3" /> Review & send individually
+                <Search className="h-3 w-3" /> Review all ready items
               </Button>
             </CardContent>
           </Card>
