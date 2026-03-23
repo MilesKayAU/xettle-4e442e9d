@@ -259,6 +259,8 @@ export default function ValidationSweep({
     if (filter !== 'all') {
       result = result.filter((r) => {
         if (filter === 'complete') return r.overall_status === 'complete' || r.overall_status === 'bank_matched';
+        if (filter === 'ready_to_push') return r.overall_status === 'ready_to_push' || r.overall_status === 'pushed_to_xero';
+        if (filter === 'settlement_needed') return r.overall_status === 'settlement_needed' || r.overall_status === 'missing';
         return r.overall_status === filter;
       });
     }
@@ -438,10 +440,10 @@ export default function ValidationSweep({
           </p>
         </div>
       )}
-      {filter === 'settlement_needed' && filteredRows.length === 0 && rows.some(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing') && (
+      {filteredRows.length === 0 && filter !== 'all' && rows.length > 0 && (
         <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
           <p className="text-sm font-medium text-amber-800 dark:text-amber-300">No results — your date or marketplace filter may be hiding them.</p>
-          <Button variant="ghost" size="sm" className="mt-1 text-xs text-amber-700 dark:text-amber-400 h-7 px-2" onClick={() => { setDateFrom(''); setDateTo(''); setMarketplaceFilter('all'); }}>
+          <Button variant="ghost" size="sm" className="mt-1 text-xs text-amber-700 dark:text-amber-400 h-7 px-2" onClick={() => { setFilter('all'); setDateFrom(''); setDateTo(''); setMarketplaceFilter('all'); }}>
             Clear filters
           </Button>
         </div>
