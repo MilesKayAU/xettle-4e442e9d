@@ -472,7 +472,97 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
               )}
             </div>
 
-            {/* Refresh + Compare actions */}
+            {/* Reconciliation Gap Card */}
+            {settlement.reconciliation_status && settlement.reconciliation_status !== 'reconciled' && settlement.reconciliation_status !== 'matched' && (() => {
+              const gap = calculateReconGap(settlement);
+              const sales = (settlement.sales_principal || 0) + (settlement.sales_shipping || 0);
+              const fees = Math.abs(settlement.seller_fees || 0) + Math.abs(settlement.fba_fees || 0) + Math.abs(settlement.storage_fees || 0) + Math.abs(settlement.advertising_costs || 0) + Math.abs(settlement.other_fees || 0);
+              const expectedNet = sales - fees + (settlement.refunds || 0) + (settlement.reimbursements || 0);
+              return (
+                <div className="rounded-lg border-2 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    <span className="text-sm font-semibold text-amber-800 dark:text-amber-200">Reconciliation Gap: {formatAUD(Math.abs(gap))}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 text-xs">
+                    <span className="text-muted-foreground">Expected net (Sales − Fees + Refunds)</span>
+                    <span className="font-mono text-right text-foreground">{formatAUD(expectedNet)}</span>
+                    <span className="text-muted-foreground">Actual bank deposit</span>
+                    <span className="font-mono text-right text-foreground">{formatAUD(settlement.bank_deposit || 0)}</span>
+                    <span className="text-muted-foreground font-medium">Difference</span>
+                    <span className="font-mono text-right font-medium text-amber-700 dark:text-amber-300">{gap >= 0 ? '+' : ''}{formatAUD(gap)}</span>
+                  </div>
+                  {isEditable && !editing && (
+                    <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                      The file's figures don't add up — click <strong>Edit Figures</strong> below to correct.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Edit Figures Button / Edit Mode */}
+            {isEditable && !editing && (
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={startEditing}>
+                <Pencil className="h-3.5 w-3.5" />
+                Edit Figures
+              </Button>
+            )}
+
+            {editing && editFields && (
+              <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-3">
+                <h4 className="text-xs font-semibold text-foreground">Edit Settlement Figures</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  {([
+                    ['sales_principal', 'Sales (principal)'],
+                    ['seller_fees', 'Seller Fees'],
+                    ['refunds', 'Refunds'],
+                    ['reimbursements', 'Reimbursements'],
+                    ['other_fees', 'Other Fees'],
+                    ['bank_deposit', 'Bank Deposit'],
+                  ] as [keyof EditableFields, string][]).map(([key, label]) => (
+                    <div key={key} className="space-y-1">
+                      <label className="text-[10px] text-muted-foreground">{label}</label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        className="h-8 text-xs font-mono"
+                        value={editFields[key]}
+                        onChange={(e) => setEditFields(prev => prev ? { ...prev, [key]: parseFloat(e.target.value) || 0 } : prev)}
+                      />
+                    </div>
+                  ))}
+                </div>
+                {/* Live preview of new gap */}
+                {(() => {
+                  const previewGap = calculateReconGap({ ...settlement, ...editFields });
+                  const willReconcile = Math.abs(previewGap) < RECON_TOLERANCE;
+                  return (
+                    <div className={cn(
+                      "flex items-center justify-between text-xs p-2 rounded-md border",
+                      willReconcile ? "border-emerald-300 bg-emerald-50 dark:border-emerald-700 dark:bg-emerald-900/20" : "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20"
+                    )}>
+                      <span className="text-muted-foreground">
+                        {willReconcile ? '✓ Will reconcile on save' : `Gap remaining: ${formatAUD(Math.abs(previewGap))}`}
+                      </span>
+                      <span className="font-mono font-medium">{previewGap >= 0 ? '+' : ''}{formatAUD(previewGap)}</span>
+                    </div>
+                  );
+                })()}
+                <div className="flex items-center gap-2">
+                  <Button size="sm" className="h-7 text-xs gap-1.5" onClick={handleSaveAndRecheck} disabled={saving}>
+                    <Save className="h-3.5 w-3.5" />
+                    {saving ? 'Saving…' : 'Save & Re-check'}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={cancelEditing} disabled={saving}>
+                    <X className="h-3.5 w-3.5" />
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+
+
             {(settlement.xero_invoice_id || settlement.xero_journal_id) && (
               <div className="flex items-center gap-2">
                 <InvoiceRefreshButton
