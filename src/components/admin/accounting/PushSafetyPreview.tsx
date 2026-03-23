@@ -40,6 +40,7 @@ import {
   type SettlementForPosting,
 } from '@/utils/xero-posting-line-items';
 import { cn } from '@/lib/utils';
+import { isReconciliationOnly } from '@/utils/settlement-policy';
 
 // ─── Types ──────────────────────────────────────────────────────────
 
