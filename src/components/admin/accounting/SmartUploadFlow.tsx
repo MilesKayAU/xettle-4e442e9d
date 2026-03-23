@@ -44,7 +44,7 @@ import { parseGenericCSV, parseGenericXLSX } from '@/utils/generic-csv-parser';
 import { parseShopifyPayoutCSV } from '@/utils/shopify-payments-parser';
 import { parseShopifyOrdersCSV } from '@/utils/shopify-orders-parser';
 import { parseBunningsSummaryPdf } from '@/utils/bunnings-summary-parser';
-import { parseWoolworthsMarketPlusCSV } from '@/utils/woolworths-marketplus-parser';
+import { parseWoolworthsMarketPlusCSV, isTransactionFee } from '@/utils/woolworths-marketplus-parser';
 import { saveSettlement, validateSettlementSanity, MARKETPLACE_LABELS as ENGINE_LABELS, type StandardSettlement } from '@/utils/settlement-engine';
 import { createDraftFingerprint } from '@/utils/fingerprint-lifecycle';
 import { validateBookkeeperMinimumData, type BookkeeperReadinessResult } from '@/utils/bookkeeper-readiness';
@@ -870,10 +870,14 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                 amount: row.netAmount || 0,
                 amount_type: row.totalSalePrice < 0 ? 'refund' : 'order',
                 amount_description: row.product ? row.product.substring(0, 100) : null,
-                transaction_type: row.totalSalePrice < 0 ? 'Refund' : (row.commissionFee !== 0 && row.totalSalePrice === 0 ? 'Fee' : 'Order'),
+                transaction_type: row.totalSalePrice < 0 ? 'Refund'
+                  : isTransactionFee(row) ? 'TRANSACTION_FEE'
+                  : (row.commissionFee !== 0 && row.totalSalePrice === 0 ? 'Fee' : 'Order'),
                 posted_date: row.orderedDate || null,
                 marketplace_name: s.metadata?.displayName || orderSource,
-                accounting_category: row.totalSalePrice < 0 ? 'refund' : (row.totalSalePrice === 0 ? 'marketplace_fee' : 'revenue'),
+                accounting_category: row.totalSalePrice < 0 ? 'refund'
+                  : isTransactionFee(row) ? 'seller_fees'
+                  : (row.totalSalePrice === 0 ? 'marketplace_fee' : 'revenue'),
               }));
               for (let i = 0; i < lineRows.length; i += 500) {
                 await supabase.from('settlement_lines').insert(lineRows.slice(i, i + 500) as any);
