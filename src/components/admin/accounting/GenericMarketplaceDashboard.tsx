@@ -410,7 +410,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
           <ReconciliationStatus marketplaceCode={code} userId={currentUserId} />
         ) : settlements.length > 0 ? (
           <FileReconciliationStatus
-            settlements={settlements}
+            settlements={settlements.filter(s => !isReconciliationOnly((s as any).source, s.marketplace, s.settlement_id))}
             onSettlementClick={(sid) => {
               setDrawerSettlementId(sid);
               setDrawerOpen(true);
