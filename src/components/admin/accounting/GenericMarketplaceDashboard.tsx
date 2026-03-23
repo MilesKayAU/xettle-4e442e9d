@@ -273,6 +273,34 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
 
   const marketplaceName = def?.name || marketplace.marketplace_name;
 
+  // ── AI Page Context ──────────────────────────────────────────────────────────
+  const reconciledCount = useMemo(() => settlements.filter(s => s.reconciliation_status === 'reconciled' || s.reconciliation_status === 'matched').length, [settlements]);
+  const flaggedCount = useMemo(() => settlements.filter(s => s.reconciliation_status === 'warning' || s.reconciliation_status === 'alert').length, [settlements]);
+  const pushedCount = useMemo(() => settlements.filter(s => ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(s.status || '')).length, [settlements]);
+  const unpushedCount = useMemo(() => settlements.filter(s => s.status === 'ingested' || s.status === 'ready_to_push').length, [settlements]);
+
+  useAiPageContext(() => ({
+    routeId: 'settlements',
+    pageTitle: `${marketplaceName} Settlements`,
+    primaryEntities: { marketplace_codes: [code] },
+    pageStateSummary: {
+      marketplace: marketplaceName,
+      marketplace_code: code,
+      total_settlements: settlements.length,
+      reconciled: reconciledCount,
+      flagged_for_review: flaggedCount,
+      pushed_to_xero: pushedCount,
+      awaiting_push: unpushedCount,
+      connection_type: isCsvOnly ? 'CSV upload' : 'API connected',
+      active_filter: settlementFilter,
+    },
+    suggestedPrompts: [
+      'What does this table mean?',
+      flaggedCount > 0 ? `Why do ${flaggedCount} settlements need review?` : 'Are all my settlements reconciled?',
+      'What does "check required" mean?',
+      unpushedCount > 0 ? `Can I push ${unpushedCount} settlements to Xero?` : undefined,
+    ].filter(Boolean) as string[],
+  }));
 
   // Detect unique marketplace codes in settlements for the marketplace filter
   const uniqueMarketplaceCodes = useMemo(() => {
