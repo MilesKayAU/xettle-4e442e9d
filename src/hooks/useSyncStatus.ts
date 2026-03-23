@@ -62,6 +62,14 @@ const API_INTEGRATIONS = [
     eventTypes: ['ebay_settlement_imported', 'ebay_sync_debug', 'ebay_fetch_complete'],
     marketplaceAliases: ['ebay', 'ebay_au'] as const,
   },
+  {
+    rail: 'bunnings',
+    name: 'Bunnings',
+    tokenTable: 'mirakl_tokens' as const,
+    historyTypes: ['mirakl'],
+    eventTypes: ['mirakl_reconciliation_mismatch', 'mirakl_fetch_complete', 'settlement_saved'],
+    marketplaceAliases: ['bunnings'] as const,
+  },
 ] as const;
 
 type SyncHistoryRow = {
