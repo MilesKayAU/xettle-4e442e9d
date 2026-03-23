@@ -845,21 +845,22 @@ export default function ValidationSweep({
 }
 
 function SummaryCard({
-  label, count, emoji, active, onClick, bgClass, borderClass, subtitle,
+  label, count, emoji, active, onClick, bgClass, borderClass, subtitle, compact,
 }: {
   label: string; count: number; emoji: string; active: boolean;
-  onClick: () => void; bgClass: string; borderClass: string; subtitle?: string;
+  onClick: () => void; bgClass: string; borderClass: string; subtitle?: string; compact?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
       className={cn(
-        'rounded-lg border p-4 text-left transition-all hover:shadow-sm cursor-pointer',
+        'rounded-lg border text-left transition-all hover:shadow-sm cursor-pointer',
+        compact ? 'p-2.5' : 'p-4',
         bgClass, borderClass,
       )}
     >
-      <div className="text-2xl font-bold">{emoji} {count}</div>
-      <div className="text-xs font-medium text-muted-foreground mt-1">{label}</div>
+      <div className={cn('font-bold', compact ? 'text-lg' : 'text-2xl')}>{emoji} {count}</div>
+      <div className={cn('font-medium text-muted-foreground', compact ? 'text-[10px] mt-0.5' : 'text-xs mt-1')}>{label}</div>
       {subtitle && <div className="text-[10px] text-muted-foreground mt-0.5">{subtitle}</div>}
     </button>
   );
