@@ -8,6 +8,7 @@ import AccountingDashboard from '@/components/admin/accounting/AccountingDashboa
 import GenericMarketplaceDashboard from '@/components/admin/accounting/GenericMarketplaceDashboard';
 import MarketplaceSwitcher, { type UserMarketplace } from '@/components/admin/accounting/MarketplaceSwitcher';
 import { provisionAllMarketplaceConnections } from '@/utils/marketplace-token-map';
+import { ACTIVE_CONNECTION_STATUSES, isApiConnectionType } from '@/constants/connection-status';
 import { useDashboardTaskCounts } from '@/hooks/useDashboardTaskCounts';
 import { toast } from 'sonner';
 
@@ -492,6 +493,25 @@ export default function Dashboard() {
   const [outstandingCount, setOutstandingCount] = useState(0);
   const [settlementCounts, setSettlementCounts] = useState<Record<string, number>>({});
   const [readyToPushCount, setReadyToPushCount] = useState(0);
+
+  // Derive API-connected marketplace codes dynamically from marketplace_connections + legacy token flags
+  const apiConnectedCodes = useMemo(() => {
+    const codes = new Set<string>();
+    for (const um of userMarketplaces) {
+      if (
+        isApiConnectionType(um.connection_type) &&
+        (ACTIVE_CONNECTION_STATUSES as readonly string[]).includes(um.connection_status)
+      ) {
+        codes.add(um.marketplace_code);
+      }
+    }
+    // Backward compat: include token-derived APIs that may not have explicit connection_type set
+    if (hasAmazon) codes.add(amazonXettleCode);
+    if (hasShopify) { codes.add('shopify_payments'); codes.add('shopify_orders'); }
+    if (hasEbay) codes.add('ebay_au');
+    return codes;
+  }, [userMarketplaces, hasAmazon, amazonXettleCode, hasShopify, hasEbay]);
+
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -1105,11 +1125,7 @@ export default function Dashboard() {
                     userMarketplaces={userMarketplaces}
                     onMarketplacesChanged={loadMarketplaces}
                     settlementCounts={settlementCounts}
-                    apiConnectedCodes={new Set([
-                      ...(hasAmazon ? [amazonXettleCode] : []),
-                      ...(hasShopify ? ['shopify_payments', 'shopify_orders'] : []),
-                      ...(hasEbay ? ['ebay_au'] : []),
-                    ])}
+                    apiConnectedCodes={apiConnectedCodes}
                   />
                 )}
               </div>
