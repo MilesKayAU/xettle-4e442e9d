@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyRequest } from "../_shared/auth-guard.ts";
-import { getMiraklApiKey } from "../_shared/mirakl-token.ts";
+import { getMiraklAuthHeader } from "../_shared/mirakl-token.ts";
 
 // ═══════════════════════════════════════════════════════════════
 // MIRAKL TRANSACTION TYPE → STANDARD SETTLEMENT FIELD MAP
