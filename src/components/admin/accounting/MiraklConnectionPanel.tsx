@@ -291,7 +291,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                     <Label className="text-xs">Client Secret</Label>
                     <Input
                       type="password"
-                      placeholder="Your Mirakl Client Secret"
+                      placeholder="Your Client Secret"
                       value={clientSecret}
                       onChange={(e) => setClientSecret(e.target.value)}
                       className="font-mono text-xs h-8"
