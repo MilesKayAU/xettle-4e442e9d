@@ -755,7 +755,7 @@ export default function ValidationSweep({
                           )}
                         </div>
                       </td>
-                      </>); })()}
+                      
                     </tr>
                   ))
                 )}
