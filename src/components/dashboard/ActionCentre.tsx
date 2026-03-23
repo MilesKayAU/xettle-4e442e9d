@@ -93,20 +93,11 @@ export default function ActionCentre({
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
   const [drawerSettlementId, setDrawerSettlementId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [readySettlements, setReadySettlements] = useState<Array<{
-    id: string; marketplace: string | null; settlement_id: string;
-    period_start: string; period_end: string; bank_deposit: number | null;
-    status: string | null; posting_state: string | null;
-  }>>([]);
   const [autoPostRails, setAutoPostRails] = useState<Set<string>>(new Set());
   const [autoPostFailed, setAutoPostFailed] = useState<Array<{
     id: string; marketplace: string | null; settlement_id: string;
     period_start: string; period_end: string; bank_deposit: number | null;
     posting_error: string | null;
-  }>>([]);
-  const [ingestedSettlements, setIngestedSettlements] = useState<Array<{
-    id: string; marketplace: string | null; settlement_id: string;
-    period_start: string; period_end: string; bank_deposit: number | null;
   }>>([]);
   const [externalMatchIds, setExternalMatchIds] = useState<Set<string>>(new Set());
   const { xero: xeroSync, marketplaces: syncedIntegrations, loading: syncStatusLoading } = useSyncStatus();
@@ -119,30 +110,13 @@ export default function ActionCentre({
 
   const loadData = useCallback(async () => {
     try {
-      const [validationRes, eventsRes, userRes, boundaryRes, connectionsRes, lastSyncRes, readySettlementsRes, ingestedRes, autoPostRailsRes, autoPostFailedRes, xeroRes] = await Promise.all([
+      const [validationRes, eventsRes, userRes, boundaryRes, connectionsRes, lastSyncRes, autoPostRailsRes, autoPostFailedRes, xeroRes] = await Promise.all([
         supabase.from('marketplace_validation').select('*').order('marketplace_code').order('period_start', { ascending: false }),
         supabase.from('system_events').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.auth.getUser(),
         supabase.from('app_settings').select('value').eq('key', 'accounting_boundary_date').maybeSingle(),
         supabase.from('marketplace_connections').select('marketplace_code, connection_type').in('connection_status', ['active', 'connected']).order('created_at'),
         supabase.from('sync_history').select('created_at').eq('event_type', 'scheduled_sync').order('created_at', { ascending: false }).limit(1).maybeSingle(),
-        supabase.from('settlements')
-          .select('id, marketplace, settlement_id, period_start, period_end, bank_deposit, status, posting_state')
-          .eq('status', 'ready_to_push')
-          .eq('is_hidden', false)
-          .eq('is_pre_boundary', false)
-          .neq('source', 'api_sync')
-          .is('duplicate_of_settlement_id', null)
-          .order('marketplace')
-          .order('period_start', { ascending: false }),
-        supabase.from('settlements')
-          .select('id, marketplace, settlement_id, period_start, period_end, bank_deposit')
-          .eq('status', 'ingested')
-          .eq('is_hidden', false)
-          .eq('is_pre_boundary', false)
-          .neq('source', 'api_sync')
-          .is('duplicate_of_settlement_id', null)
-          .order('period_start', { ascending: false }),
         supabase.from('rail_posting_settings')
           .select('rail')
           .eq('posting_mode', 'auto'),
@@ -178,47 +152,26 @@ export default function ActionCentre({
         setLastAutoSync(new Date(lastSyncRes.data.created_at));
       }
       setXeroConnected(!!xeroRes.data?.length);
-      if (readySettlementsRes.data) {
-        const allReady = readySettlementsRes.data as any[];
-        // Fetch external matches for ready settlements with xero_status
-        const readyIds = allReady.map((s: any) => s.settlement_id).filter(Boolean);
+
+      // Fetch external Xero matches for duplicate-risk detection on ready rows
+      if (validationRes.data) {
+        const readyIds = (validationRes.data as ValidationRow[])
+          .filter(r => r.overall_status === 'ready_to_push' && r.settlement_id)
+          .map(r => r.settlement_id!);
         if (readyIds.length > 0) {
           const { data: matches } = await supabase
             .from('xero_accounting_matches')
             .select('settlement_id, xero_status')
             .in('settlement_id', readyIds);
           if (matches) {
-            // Auto-resolve PAID external matches — move to already_recorded
-            const paidMatchIds = new Set(
-              matches.filter((m: any) => m.xero_status === 'PAID').map((m: any) => m.settlement_id)
-            );
-            if (paidMatchIds.size > 0) {
-              const paidDbIds = allReady
-                .filter((s: any) => paidMatchIds.has(s.settlement_id))
-                .map((s: any) => s.id);
-              // Batch update in background — don't block UI
-              supabase.from('settlements')
-                .update({ status: 'already_recorded', sync_origin: 'external' } as any)
-                .in('id', paidDbIds)
-                .then(() => logger.debug(`[ActionCentre] Auto-resolved ${paidDbIds.length} PAID external matches`));
-            }
-            // Only non-PAID matches are "Duplicate Risk"
             const nonPaidMatchIds = new Set(
               matches.filter((m: any) => m.xero_status !== 'PAID').map((m: any) => m.settlement_id)
             );
             setExternalMatchIds(nonPaidMatchIds);
-            // Filter out PAID matches from ready settlements
-            const filteredReady = allReady.filter((s: any) => !paidMatchIds.has(s.settlement_id));
-            setReadySettlements(filteredReady);
           } else {
-            setReadySettlements(allReady);
+            setExternalMatchIds(new Set());
           }
-        } else {
-          setReadySettlements(allReady);
         }
-      }
-      if (ingestedRes.data) {
-        setIngestedSettlements(ingestedRes.data as any);
       }
       if (autoPostRailsRes.data) {
         setAutoPostRails(new Set(autoPostRailsRes.data.map((r: any) => r.rail)));
@@ -307,37 +260,19 @@ export default function ActionCentre({
     const periodEnd = new Date(r.period_end);
     return periodEnd < now; // only show if period already ended
   });
-  // Settlement-native "Send to Xero" — one row per real payout from settlements table
-  // Filter out settlements on auto-post rails (they post automatically)
+  // Derive ready-to-push rows from marketplace_validation (same source as Settlements → Overview)
   const readyToPush = useMemo(() => {
-    return readySettlements
-      .filter(s => {
-        const code = MARKETPLACE_ALIASES[s.marketplace || ''] || s.marketplace || 'unknown';
-        // Exclude auto-post rails from manual "Send to Xero" card
-        if (autoPostRails.has(code) || autoPostRails.has(s.marketplace || '')) return false;
-        // Exclude settlements already queued/posting
-        if (s.posting_state === 'posting' || s.posting_state === 'posted' || s.posting_state === 'queued') return false;
-        return true;
-      })
-      .map(s => ({
-        id: s.id,
-        marketplace_code: MARKETPLACE_ALIASES[s.marketplace || ''] || s.marketplace || 'unknown',
-        period_label: `${s.period_start} to ${s.period_end}`,
-        period_start: s.period_start,
-        period_end: s.period_end,
-        orders_found: false,
-        settlement_uploaded: true,
-        settlement_id: s.settlement_id,
-        settlement_net: s.bank_deposit || 0,
-        reconciliation_status: 'matched',
-        xero_pushed: false,
-        bank_matched: false,
-        overall_status: 'ready_to_push',
-        last_checked_at: null,
-      } as ValidationRow));
-  }, [readySettlements, autoPostRails]);
-  // Only show rows backed by a real settlement — exclude synthetic/pre-boundary rows
-  // Rail payout mode: rails with bank_match_required=false skip "waiting for payout"
+    return normalisedRows.filter(r => r.overall_status === 'ready_to_push');
+  }, [normalisedRows]);
+
+  // For the card listing, exclude auto-post rails so we only show manual-send items
+  const manualReadyToPush = useMemo(() => {
+    return readyToPush.filter(r => {
+      if (autoPostRails.has(r.marketplace_code)) return false;
+      return true;
+    });
+  }, [readyToPush, autoPostRails]);
+
   const postedRows = normalisedRows.filter(r =>
     r.settlement_id &&
     r.overall_status !== 'already_recorded' &&
@@ -351,7 +286,7 @@ export default function ActionCentre({
     ...settlementConfirmed,
   ];
   const gapDetected = normalisedRows.filter(r => r.overall_status === 'gap_detected');
-  const allComplete = rows.length > 0 && uploadNeededManual.length === 0 && readyToPush.length === 0 && awaitingBank.length === 0 && gapDetected.length === 0 && (complete.length > 0);
+  const allComplete = rows.length > 0 && uploadNeededManual.length === 0 && readyToPush.length === 0 && awaitingBank.length === 0 && gapDetected.length === 0 && complete.length > 0;
 
   // Build a lookup of last known settlement amount per marketplace
   const lastKnownAmounts = useMemo(() => {
@@ -523,11 +458,11 @@ export default function ActionCentre({
       )}
 
       {/* ─── Section 3: Ready for Xero ─── */}
-      {readySettlements.length > 0 && (() => {
-        const totalReadyCount = readySettlements.length;
-        const totalReadyAmount = readySettlements.reduce((sum, s) => sum + (s.bank_deposit || 0), 0);
-        const manualReadyCount = readyToPush.length;
-        const manualReadyAmount = readyToPush.reduce((sum, r) => sum + (r.settlement_net || 0), 0);
+      {readyToPush.length > 0 && (() => {
+        const totalReadyCount = readyToPush.length;
+        const totalReadyAmount = readyToPush.reduce((sum, r) => sum + (r.settlement_net || 0), 0);
+        const manualReadyCount = manualReadyToPush.length;
+        const manualReadyAmount = manualReadyToPush.reduce((sum, r) => sum + (r.settlement_net || 0), 0);
         const automatedReadyCount = Math.max(0, totalReadyCount - manualReadyCount);
         const hasExternalRisk = readyToPush.some(r => r.settlement_id && externalMatchIds.has(r.settlement_id));
         return (
@@ -566,7 +501,7 @@ export default function ActionCentre({
               </div>
               {manualReadyCount > 0 && (
                 <ul className="space-y-1">
-                  {(expandedCards['ready'] ? readyToPush : readyToPush.slice(0, 3)).map(r => {
+                  {(expandedCards['ready'] ? manualReadyToPush : manualReadyToPush.slice(0, 3)).map(r => {
                   const isRisky = r.settlement_id ? externalMatchIds.has(r.settlement_id) : false;
                   return (
                     <li key={r.id} className={cn(
@@ -590,10 +525,10 @@ export default function ActionCentre({
                     </li>
                   );
                   })}
-                  {readyToPush.length > 3 && (
+                  {manualReadyToPush.length > 3 && (
                     <li>
                       <button onClick={() => setExpandedCards(prev => ({ ...prev, ready: !prev.ready }))} className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                        {expandedCards['ready'] ? '− Show less' : `+ ${readyToPush.length - 3} more`}
+                        {expandedCards['ready'] ? '− Show less' : `+ ${manualReadyToPush.length - 3} more`}
                       </button>
                     </li>
                   )}
