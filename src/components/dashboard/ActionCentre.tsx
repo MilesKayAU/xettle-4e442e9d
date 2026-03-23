@@ -260,10 +260,10 @@ export default function ActionCentre({
     const periodEnd = new Date(r.period_end);
     return periodEnd < now; // only show if period already ended
   });
-  // Derive ready-to-push rows from marketplace_validation (same source as Settlements → Overview)
+  // Match Settlements summary cards exactly: count raw validation rows, not deduped homepage rows.
   const readyToPush = useMemo(() => {
-    return normalisedRows.filter(r => r.overall_status === 'ready_to_push');
-  }, [normalisedRows]);
+    return rows.filter(r => r.overall_status === 'ready_to_push');
+  }, [rows]);
 
   // For the card listing, exclude auto-post rails so we only show manual-send items
   const manualReadyToPush = useMemo(() => {
@@ -520,7 +520,7 @@ export default function ActionCentre({
                       ) : (
                         <span className="text-blue-400">•</span>
                       )}
-                      {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {formatPeriodShort(r.period_start, r.period_end)}
+                      {MARKETPLACE_LABELS[MARKETPLACE_ALIASES[r.marketplace_code] || r.marketplace_code] || MARKETPLACE_ALIASES[r.marketplace_code] || r.marketplace_code} — {formatPeriodShort(r.period_start, r.period_end)}
                       {r.settlement_net ? ` — ${formatAUD(r.settlement_net)}` : ''}
                     </li>
                   );
