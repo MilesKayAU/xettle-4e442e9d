@@ -615,7 +615,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
   const displayGaps = actionableOnly && validationCounts ? validationCounts.gaps : 0;
 
   // In actionableOnly mode, show "all clear" when nothing needs action
-  if (actionableOnly && displayReadyCount === 0 && counts.attention === 0 && displayUploadNeeded === 0) {
+  if (actionableOnly && displayReadyCount === 0 && counts.attention === 0 && displayUploadManual === 0) {
     return (
       <Card>
         <CardHeader className="pb-3">
