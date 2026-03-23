@@ -55,3 +55,5 @@ project_id = "cegwclxbqvitkqxikpss"
     verify_jwt = false
   [functions.extract-order-customer]
     verify_jwt = false
+  [functions.report-mirakl-issue]
+    verify_jwt = false

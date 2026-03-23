@@ -27,7 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail, Store, Bug, ShieldCheck, Rocket, BookOpen, Crosshair, BarChart3, Package, HeartPulse, Truck, ChevronRight, Shield } from 'lucide-react';
+import { LogOut, Users, ArrowLeft, CheckCircle, XCircle, RefreshCw, Trash2, KeyRound, UserPlus, Mail, Store, Bug, ShieldCheck, Rocket, BookOpen, Crosshair, BarChart3, Package, HeartPulse, Truck, ChevronRight, Shield, AlertTriangle } from 'lucide-react';
 import AccountResetButton from '@/components/admin/AccountResetButton';
 import { toast } from '@/hooks/use-toast';
 import MarketplaceConfigTab from '@/components/admin/marketplace/MarketplaceConfigTab';
@@ -42,6 +42,7 @@ import FulfillmentBridge from '@/components/admin/FulfillmentBridge';
 import HealthScannerDashboard from '@/components/admin/HealthScannerDashboard';
 import AmazonComplianceDashboard from '@/components/admin/AmazonComplianceDashboard';
 import ShippingEstimateSettings from '@/components/settings/ShippingEstimateSettings';
+import MiraklBetaFeedback from '@/components/admin/MiraklBetaFeedback';
 import { cn } from '@/lib/utils';
 
 interface UserRow {
@@ -69,6 +70,7 @@ const NAV_GROUPS = [
       { id: 'fulfillment', label: 'Fulfillment Bridge', icon: Package },
       { id: 'shipping', label: 'Shipping Estimates', icon: Truck },
       { id: 'amazon-compliance', label: 'Amazon API', icon: Shield },
+      { id: 'mirakl-beta', label: 'Mirakl Beta', icon: AlertTriangle },
     ],
   },
   {
@@ -345,6 +347,7 @@ export default function Admin() {
       case 'health': return <HealthScannerDashboard />;
       case 'shipping': return <ShippingEstimateSettings />;
       case 'amazon-compliance': return <AmazonComplianceDashboard />;
+      case 'mirakl-beta': return <MiraklBetaFeedback />;
       default: return null;
     }
   };
