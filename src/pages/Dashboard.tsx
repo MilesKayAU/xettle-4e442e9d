@@ -1106,11 +1106,7 @@ export default function Dashboard() {
                     userMarketplaces={userMarketplaces}
                     onMarketplacesChanged={loadMarketplaces}
                     settlementCounts={settlementCounts}
-                    apiConnectedCodes={new Set([
-                      ...(hasAmazon ? [amazonXettleCode] : []),
-                      ...(hasShopify ? ['shopify_payments', 'shopify_orders'] : []),
-                      ...(hasEbay ? ['ebay_au'] : []),
-                    ])}
+                    apiConnectedCodes={apiConnectedCodes}
                   />
                 )}
               </div>
