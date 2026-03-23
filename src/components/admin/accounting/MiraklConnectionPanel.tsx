@@ -64,7 +64,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
 
 
   const isFormValid = () => {
-    if (!baseUrl || !sellerCompanyId) return false;
+    if (!baseUrl) return false;
     if (authMode === 'oauth' || authMode === 'both') {
       if (!clientId || !clientSecret) return false;
     }
