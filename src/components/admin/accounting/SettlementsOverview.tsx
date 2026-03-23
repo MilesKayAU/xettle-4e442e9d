@@ -77,6 +77,9 @@ export default function SettlementsOverview({
         const latestReceived = marketplaceSettlements.length > 0
           ? marketplaceSettlements[0].period_end
           : null;
+        const latestSettlementId = marketplaceSettlements.length > 0
+          ? marketplaceSettlements[0].settlement_id
+          : null;
 
         // Latest sent to Xero
         const xeroSynced = marketplaceSettlements.filter(s =>
