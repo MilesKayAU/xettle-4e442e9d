@@ -410,7 +410,10 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         ) : settlements.length > 0 ? (
           <FileReconciliationStatus
             settlements={settlements}
-            onSettlementClick={(sid) => loadLineItems(sid)}
+            onSettlementClick={(sid) => {
+              setDrawerSettlementId(sid);
+              setDrawerOpen(true);
+            }}
           />
         ) : null}
       </div>
