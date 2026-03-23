@@ -20,6 +20,7 @@ import { triggerValidationSweep, formatAUD, MARKETPLACE_LABELS, GATEWAY_CODES, M
 import { isBankMatchRequired } from '@/constants/settlement-rails';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { isApiConnectionType } from '@/constants/connection-status';
 
 
 interface ValidationRow {
