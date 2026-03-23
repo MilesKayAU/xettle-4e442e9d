@@ -983,8 +983,8 @@ export default function Dashboard() {
                 }}
                 onMapBankAccounts={() => setShowBankMapper(!showBankMapper)}
                 onConnect={() => setShowUploadSheet(true)}
+                onNavigateToSettings={() => switchView('settings')}
                 onRefreshStatus={() => {
-                  // Trigger the validation sweep via ActionCentre's existing mechanism
                   import('@/utils/settlement-engine').then(({ triggerValidationSweep }) => {
                     triggerValidationSweep();
                     toast.success('Status refresh started');
