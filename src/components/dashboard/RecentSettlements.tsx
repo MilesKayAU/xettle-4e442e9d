@@ -855,7 +855,20 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
               {pageRows.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground text-sm">
-                    No settlements match this filter
+                    {actionableOnly ? (
+                      <div className="space-y-1">
+                        <p>No settlements waiting in the queue right now.</p>
+                        {(displayUploadManual > 0 || displayUploadApi > 0) && (
+                          <p className="text-xs text-muted-foreground/70">
+                            Upload or sync settlements from the{' '}
+                            {onViewAll ? (
+                              <button onClick={onViewAll} className="underline hover:text-foreground">Settlements Overview</button>
+                            ) : 'Settlements Overview'}{' '}
+                            to populate this table.
+                          </p>
+                        )}
+                      </div>
+                    ) : 'No settlements match this filter'}
                   </td>
                 </tr>
               )}
