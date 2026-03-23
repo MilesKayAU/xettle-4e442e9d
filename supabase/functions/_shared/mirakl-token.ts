@@ -1,8 +1,14 @@
 /**
- * Shared Mirakl OAuth token helper.
+ * Shared Mirakl token helper.
  *
- * Mirakl uses client_credentials grant. This helper checks expiry,
- * refreshes if needed, and updates the DB row.
+ * Mirakl has TWO auth modes:
+ * 1. Connect APIs (OAuth2 client_credentials via https://auth.mirakl.net/oauth/token)
+ * 2. Marketplace APIs (direct API key in Authorization header)
+ *
+ * The TL (transaction log) endpoints are Marketplace APIs and use the API key
+ * directly. The Connect APIs use OAuth2 Bearer tokens.
+ *
+ * This helper returns the appropriate token/key based on the API being called.
  */
 
 interface MiraklTokenRow {
@@ -16,12 +22,20 @@ interface MiraklTokenRow {
 }
 
 /**
- * Returns a valid Mirakl access token, refreshing if expired.
- * Some Mirakl instances use API-key auth instead of OAuth —
- * in that case, `client_secret` acts as the static API key
- * and we skip the token refresh.
+ * Returns the API key for Marketplace APIs (TL endpoints).
+ * Mirakl Marketplace APIs use direct API key auth, NOT OAuth Bearer tokens.
+ * The API key is stored as `client_secret` in the mirakl_tokens table.
  */
-export async function getValidMiraklToken(
+export function getMiraklApiKey(row: MiraklTokenRow): string {
+  return row.client_secret;
+}
+
+/**
+ * Returns a valid OAuth2 Bearer token for Mirakl Connect APIs.
+ * Uses the centralized auth endpoint: https://auth.mirakl.net/oauth/token
+ * Refreshes if expired (with 5-minute buffer).
+ */
+export async function getValidMiraklConnectToken(
   adminClient: any,
   row: MiraklTokenRow,
 ): Promise<string> {
@@ -34,47 +48,56 @@ export async function getValidMiraklToken(
     }
   }
 
-  // Attempt OAuth token refresh
-  const tokenUrl = `${row.base_url.replace(/\/$/, '')}/oauth/token`;
+  // OAuth2 client_credentials grant via centralized Mirakl auth endpoint
+  const tokenUrl = "https://auth.mirakl.net/oauth/token";
 
   try {
     const res = await fetch(tokenUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        grant_type: 'client_credentials',
+        grant_type: "client_credentials",
         client_id: row.client_id,
         client_secret: row.client_secret,
       }),
     });
 
     if (!res.ok) {
-      // If OAuth endpoint doesn't exist, fall back to API-key mode
-      // (client_secret IS the API key)
-      console.warn(`[mirakl-token] OAuth failed (${res.status}) for ${row.base_url} — using client_secret as API key`);
-      return row.client_secret;
+      console.warn(`[mirakl-token] OAuth failed (${res.status}) — Connect APIs may not be available`);
+      throw new Error(`OAuth token request failed: ${res.status}`);
     }
 
     const data = await res.json();
     const newToken = data.access_token;
-    const expiresIn = data.expires_in || 3600;
+    const expiresIn = data.expires_in || 3599;
     const newExpiry = new Date(Date.now() + expiresIn * 1000).toISOString();
 
-    // Update DB
+    // Update DB with fresh token
     await adminClient
-      .from('mirakl_tokens')
+      .from("mirakl_tokens")
       .update({
         access_token: newToken,
         expires_at: newExpiry,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', row.id);
+      .eq("id", row.id);
 
     return newToken;
   } catch (err) {
-    console.error(`[mirakl-token] Token refresh failed for ${row.base_url}:`, err);
-    // Fall back to client_secret as API key
+    console.error(`[mirakl-token] Connect token refresh failed:`, err);
+    // If we have a cached token, try it
     if (row.access_token) return row.access_token;
-    return row.client_secret;
+    throw err;
   }
+}
+
+/**
+ * @deprecated Use getMiraklApiKey() for Marketplace APIs or getValidMiraklConnectToken() for Connect APIs.
+ */
+export async function getValidMiraklToken(
+  adminClient: any,
+  row: MiraklTokenRow,
+): Promise<string> {
+  // For backward compat, return the API key (most callers use Marketplace APIs)
+  return getMiraklApiKey(row);
 }
