@@ -27,6 +27,7 @@ import { cn } from '@/lib/utils';
 import PushSafetyPreview from '@/components/admin/accounting/PushSafetyPreview';
 import { runMarketplaceSync, runDirectMarketplaceSync } from '@/actions/sync';
 import { ACTIVE_CONNECTION_STATUSES, isApiConnectionType } from '@/constants/connection-status';
+import { useApiSyncedCodes } from '@/hooks/useApiSyncedCodes';
 
 interface ValidationRow {
   id: string;
@@ -116,7 +117,7 @@ export default function ValidationSweep({
   const [confirmingBank, setConfirmingBank] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewSettlements, setPreviewSettlements] = useState<Array<{ settlementId: string; marketplace: string }>>([]);
-  const [apiSyncedCodes, setApiSyncedCodes] = useState<Set<string>>(new Set());
+  const { apiSyncedCodes } = useApiSyncedCodes();
   const [syncingRow, setSyncingRow] = useState<string | null>(null);
   const [pausedCodes, setPausedCodes] = useState<Set<string>>(new Set());
   const [allConnections, setAllConnections] = useState<Array<{ marketplace_code: string; marketplace_name: string; connection_status: string }>>([]);
@@ -172,18 +173,12 @@ export default function ValidationSweep({
       if (valRes.error) throw valRes.error;
       const validationRows = (valRes.data || []) as ValidationRow[];
 
-      // Load marketplace connections (API-synced codes + paused codes)
+      // Load marketplace connections (paused codes + display names)
       const { data: connData } = await supabase
         .from('marketplace_connections')
-        .select('marketplace_code, marketplace_name, connection_type, connection_status');
-      const allConns = (connData || []) as Array<{ marketplace_code: string; marketplace_name: string; connection_type: string; connection_status: string }>;
+        .select('marketplace_code, marketplace_name, connection_status');
+      const allConns = (connData || []) as Array<{ marketplace_code: string; marketplace_name: string; connection_status: string }>;
       setAllConnections(allConns.map(c => ({ marketplace_code: c.marketplace_code, marketplace_name: c.marketplace_name, connection_status: c.connection_status })));
-      const apiCodes = new Set<string>(
-        allConns
-          .filter((c) => isApiConnectionType(c.connection_type) && (ACTIVE_CONNECTION_STATUSES as readonly string[]).includes(c.connection_status))
-          .map((c) => c.marketplace_code)
-      );
-      setApiSyncedCodes(apiCodes);
       const paused = new Set<string>(
         allConns
           .filter((c) => c.connection_status === 'paused')

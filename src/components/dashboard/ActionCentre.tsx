@@ -20,8 +20,9 @@ import { triggerValidationSweep, formatAUD, MARKETPLACE_LABELS, GATEWAY_CODES, M
 import { isBankMatchRequired } from '@/constants/settlement-rails';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { isApiConnectionType } from '@/constants/connection-status';
+
 import { useSyncStatus } from '@/hooks/useSyncStatus';
+import { useApiSyncedCodes } from '@/hooks/useApiSyncedCodes';
 
 
 interface ValidationRow {
@@ -87,7 +88,7 @@ export default function ActionCentre({
   const [userCreatedAt, setUserCreatedAt] = useState<Date | null>(null);
   const [accountingBoundary, setAccountingBoundary] = useState<string | null>(null);
   const [connectedMarketplaces, setConnectedMarketplaces] = useState<string[]>([]);
-  const [trueApiChannels, setTrueApiChannels] = useState<Set<string>>(new Set());
+  const { apiSyncedCodes: connectedApiMarketplaces } = useApiSyncedCodes();
   const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
   const [xeroConnected, setXeroConnected] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
@@ -139,14 +140,6 @@ export default function ActionCentre({
       if (connectionsRes.data) {
         const allConns = connectionsRes.data as Array<{ marketplace_code: string; connection_type: string }>;
         setConnectedMarketplaces(allConns.map(c => c.marketplace_code));
-
-        // Build set of channels with dedicated API connections (not sub-channels)
-        const apiChannels = new Set<string>(
-          allConns
-            .filter(c => isApiConnectionType(c.connection_type))
-            .map(c => c.marketplace_code)
-        );
-        setTrueApiChannels(apiChannels);
       }
       if (lastSyncRes.data?.created_at) {
         setLastAutoSync(new Date(lastSyncRes.data.created_at));
@@ -244,15 +237,6 @@ export default function ActionCentre({
   const now = new Date();
 
   const uploadNeeded = normalisedRows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
-  // Filter out true API channels (with dedicated tokens), only show manual-upload channels
-  const connectedApiMarketplaces = useMemo(() => {
-    const connectedCodes = new Set<string>(trueApiChannels);
-    for (const integration of syncedIntegrations) {
-      const normalizedCode = MARKETPLACE_ALIASES[integration.rail] || integration.rail;
-      connectedCodes.add(normalizedCode);
-    }
-    return connectedCodes;
-  }, [trueApiChannels, syncedIntegrations]);
 
   const uploadNeededManual = uploadNeeded.filter(r => {
     if (connectedApiMarketplaces.has(r.marketplace_code)) return false;
