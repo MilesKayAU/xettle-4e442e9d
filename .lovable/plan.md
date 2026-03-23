@@ -1,72 +1,67 @@
 
 
-## Audit: Settlement Folder Routing — Root Cause & Fixes
+## Audit: Xero Push COA Alignment Across All Marketplaces
 
-### Problem Observed
-The Bunnings tab is displaying `shopify_auto_kogan_*` settlements. The screenshot confirms settlement IDs like `shopify_auto_kogan_2026-03_9d34d250` appear under "Bunnings Settlements" with Kogan order data.
+### Audit Scope
+Traced the full data pipeline from ingestion → DB storage → Xero push for every marketplace to verify that each financial category lands on the correct marketplace-specific COA account.
 
-### Database Audit Result — All Clean
-Every API save path and manual upload path writes the correct `marketplace` code:
+### How the Xero Push Works (Current Architecture)
 
-| Path | Marketplace Value | Status |
-|------|------------------|--------|
-| `fetch-amazon-settlements` | `'amazon_au'` hardcoded | Correct |
-| `fetch-ebay-settlements` | `'ebay_au'` hardcoded | Correct |
-| `fetch-shopify-payouts` | `'shopify_payments'` hardcoded | Correct |
-| `fetch-mirakl-settlements` | Dynamic from `connection.marketplace_label` → lowercase | Correct |
-| `auto-generate-shopify-settlements` | Dynamic `mpCode` from detection registry | Correct |
-| `SmartUploadFlow` (manual CSV) | From file detection / user override | Correct |
-| `BunningsDashboard` (PDF upload) | `'bunnings'` via `parseBunningsSummaryPdf` | Correct |
+The push pipeline has **two layers** — and they are already correctly structured:
 
-Database query confirms no cross-contamination:
-- `kogan` settlements have `marketplace: 'kogan'` (3 rows)
-- `bunnings` settlements have `marketplace: 'bunnings'` (12 rows)
-- No rows have mismatched marketplace values
+**Layer 1: Settlement Aggregates (what Xero sees)**
+Every settlement stores 10 canonical aggregate fields: `sales_principal`, `sales_shipping`, `seller_fees`, `refunds`, `reimbursements`, `fba_fees`, `storage_fees`, `advertising_costs`, `other_fees`, `promotional_discounts`.
 
-### Root Cause — Missing React `key` Prop
-The bug is a **UI rendering issue**, not a data issue. In `Dashboard.tsx` line 1150:
-
-```tsx
-<GenericMarketplaceDashboard marketplace={selectedUserMarketplace} ... />
+**Layer 2: Server-Side Line Item Builder**
+The `sync-settlement-to-xero` edge function rebuilds line items server-side from these aggregates. For each non-zero field, it resolves the COA account via:
+```
+getCode(legacyKey, marketplace) → checks marketplace-specific override → global default → null (blocks push)
 ```
 
-There is **no `key` prop**. When switching from Kogan → Bunnings (both use `GenericMarketplaceDashboard`), React reuses the same component instance. While `useSettlementManager` does re-fetch data when `marketplaceCode` changes, several pieces of internal state persist incorrectly:
+### Audit Results By Marketplace
 
-1. **`hasAutoAudited` / `hasAutoExpanded`** — boolean flags that don't reset on marketplace change, causing stale auto-expansion behavior
-2. **`expandedLines` / `lineItems`** from `useTransactionDrilldown` — line items from the previous marketplace stay visible
-3. **`reconResults`** from `useReconciliation` — reconciliation checks from previous marketplace linger
-4. **`selected` set** from `useBulkSelect` — selection state carries over
-5. **`settlementFilter` / `marketplaceFilter`** — filter state from previous tab persists
+| Marketplace | Ingestion Path | `seller_fees` Populated From | Marketplace Passed to `getCode` | COA Resolution | Status |
+|---|---|---|---|---|---|
+| Amazon AU | `fetch-amazon-settlements` | SP-API settlement data | `settlement.marketplace` | Per-marketplace override | Correct |
+| eBay AU | `fetch-ebay-settlements` | eBay API payout data | `settlement.marketplace` | Per-marketplace override | Correct |
+| Shopify Payments | `fetch-shopify-payouts` | Shopify payout API | `settlement.marketplace` | Per-marketplace override | Correct |
+| Woolworths (BigW/EM) | CSV parser + redistribution | Commission + redistributed tx fees | `settlement.marketplace` per group | Per-marketplace override | Correct |
+| Bunnings | PDF parser | Commission from PDF summary | `settlement.marketplace` | Per-marketplace override | Correct |
+| Kogan/Catch/etc | `auto-generate-shopify-settlements` | Shopify order aggregation | `settlement.marketplace` | Per-marketplace override | Correct |
+| Generic CSV | SmartUploadFlow | Parsed from CSV columns | `settlement.marketplace` | Per-marketplace override | Correct |
 
-The combination of stale expanded line items + the brief moment before the new query returns creates the visual effect of Kogan data appearing in the Bunnings tab.
+### Transaction Fee Redistribution (Woolworths) — Verified Correct
 
-### Fix — 2 Changes
+The recently added redistribution correctly flows through:
+1. Parser extracts tx fee rows → redistributes proportionally to BigW/Everyday Market groups
+2. Each group's `commission` total includes redistributed fees (line 329)
+3. Settlement builder converts `commission` → `fees_ex_gst` (line 471)
+4. Settlement engine stores `fees_ex_gst` → `seller_fees` column (line 611)
+5. Xero push reads `seller_fees` → resolves via `getCode('Seller Fees', 'bigw')` or `getCode('Seller Fees', 'everyday_market')`
+6. Each marketplace gets its own mapped COA account
 
-#### 1. Add `key` prop to force remount (`src/pages/Dashboard.tsx`)
-Line 1150 — add `key={selectedMarketplace}`:
-```tsx
-<GenericMarketplaceDashboard 
-  key={selectedMarketplace}
-  marketplace={selectedUserMarketplace} 
-  onMarketplacesChanged={loadMarketplaces} 
-  onSwitchToUpload={() => setShowUploadSheet(true)} 
-/>
-```
+### Issues Found
 
-This forces React to destroy and recreate the component when switching marketplaces, resetting all internal state cleanly.
+**1. Dead code: `buildWoolworthsInvoiceLines` (Medium — cleanup)**
+Lines 520-573 of `woolworths-marketplus-parser.ts` contain a legacy Xero line builder with hardcoded account codes (`'200'`, `'405'`, `'613'`). This function is exported but **never imported anywhere**. It bypasses the COA mapping system entirely. While it's not called, its presence is a maintenance risk — a future developer might use it by mistake.
 
-#### 2. Add `key` to `ShopifyOrdersDashboard` for consistency
-Line 1147 — same pattern:
-```tsx
-<ShopifyOrdersDashboard key={selectedMarketplace} onMarketplacesChanged={loadMarketplaces} />
-```
+**Fix**: Delete `buildWoolworthsInvoiceLines` and the `WoolworthsXeroLineItem` interface. All Xero pushes already go through the canonical `buildServerLineItems` in the edge function.
 
-### What This Fixes
-- Bunnings tab will only show Bunnings settlements
-- All expanded line items, reconciliation checks, and filter states reset on tab switch
-- No more stale data bleeding between marketplace tabs
-- No database changes needed — the data is already correct
+**2. Hardcoded fallback account codes in settlement metadata (Low — cosmetic)**
+The Woolworths settlement builder writes hardcoded codes into metadata (`salesAccountCode: '200'`, `feesAccountCode: '405'`, `clearingAccountCode: '613'`). These are never read by the Xero push (which uses the proper COA resolution), but they could mislead debugging.
 
-### Scope
-Two lines changed in `src/pages/Dashboard.tsx`. No parser, API, or database changes required.
+**Fix**: Remove `salesAccountCode`, `shippingAccountCode`, `clearingAccountCode`, `feesAccountCode` from the Woolworths metadata block. They serve no functional purpose.
+
+**3. `settlement_lines.accounting_category` not used by Xero push (Informational — no fix needed)**
+The `accounting_category` field on `settlement_lines` (where we set `'seller_fees'` for transaction fees) is only used for GST variance analysis and drill-down display. The actual Xero push reads from settlement-level aggregate columns. This is correct by design — `settlement_lines` are for audit trail, not for posting.
+
+### Summary
+The existing architecture is sound. Every marketplace push correctly resolves COA accounts via the per-marketplace override hierarchy. The two cleanup items above remove dead code that could cause confusion but do not affect any live push behavior.
+
+### Changes (1 file)
+
+**`src/utils/woolworths-marketplus-parser.ts`**
+1. Delete `WoolworthsXeroLineItem` interface (lines 511-518)
+2. Delete `buildWoolworthsInvoiceLines` function (lines 520-573)
+3. Remove hardcoded account code fields from settlement metadata (lines 499-502): `salesAccountCode`, `shippingAccountCode`, `clearingAccountCode`, `feesAccountCode`
 
