@@ -101,7 +101,7 @@ Deno.serve(async (req) => {
     if (action === "status") {
       const { data: rows } = await adminClient
         .from("mirakl_tokens")
-        .select("id, marketplace_label, base_url, seller_company_id, auth_mode, updated_at, expires_at")
+        .select("id, marketplace_label, base_url, seller_company_id, auth_mode, auth_header_type, updated_at, expires_at")
         .eq("user_id", userId);
 
       const connections = (rows || []).map((r: any) => ({
