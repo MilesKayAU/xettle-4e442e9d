@@ -495,7 +495,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      navigate('/auth');
+      navigate('/auth', { replace: true });
     }
   }, [isLoading, isAuthenticated, navigate]);
 
