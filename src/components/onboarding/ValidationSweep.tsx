@@ -670,6 +670,7 @@ export default function ValidationSweep({
                 ) : (
                   pagedRows.map((row) => (
                     <tr key={row.id} className={cn("border-b hover:bg-muted/20 transition-colors group", selectedIds.has(row.id) && "bg-primary/5")}>
+                      {(() => { const isReconRow = row.settlement_id?.startsWith('shopify_auto_'); return (<>
                       <td className="px-2 py-2 text-center w-8">
                         {row.overall_status === 'ready_to_push' && row.settlement_id ? (
                           <Checkbox
