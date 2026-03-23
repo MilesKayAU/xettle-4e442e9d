@@ -269,6 +269,14 @@ export default function ValidationSweep({
         return r.overall_status === filter;
       });
     }
+    // Apply manual/api sub-tab when settlement_needed filter is active
+    if (filter === 'settlement_needed') {
+      if (uploadSubTab === 'manual') {
+        result = result.filter(r => !apiSyncedCodes.has(r.marketplace_code));
+      } else if (uploadSubTab === 'api') {
+        result = result.filter(r => apiSyncedCodes.has(r.marketplace_code));
+      }
+    }
     if (marketplaceFilter !== 'all') {
       result = result.filter((r) => r.marketplace_code === marketplaceFilter);
     }
@@ -292,7 +300,7 @@ export default function ValidationSweep({
         : String(bVal).localeCompare(String(aVal));
     });
     return result;
-  }, [rows, filter, marketplaceFilter, dateFrom, dateTo, sortKey, sortDir, pausedCodes]);
+  }, [rows, filter, marketplaceFilter, dateFrom, dateTo, sortKey, sortDir, pausedCodes, uploadSubTab, apiSyncedCodes]);
 
   const uniqueMarketplaces = useMemo(() => [...new Set(rows.map((r) => r.marketplace_code))].sort(), [rows]);
 
