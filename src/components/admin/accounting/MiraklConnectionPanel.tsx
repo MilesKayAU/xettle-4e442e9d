@@ -342,13 +342,36 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                   />
                 </div>
               )}
+              {(authMode === 'api_key' || authMode === 'both') && (
+                <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground h-6 px-1">
+                      <Settings2 className="h-3 w-3" />
+                      Advanced
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-2">
+                    <div>
+                      <Label className="text-xs">Header Format</Label>
+                      <Select value={authHeaderType} onValueChange={(v) => setAuthHeaderType(v as AuthHeaderType)}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="auto" className="text-xs">Auto (recommended)</SelectItem>
+                          <SelectItem value="bearer" className="text-xs">Authorization: Bearer</SelectItem>
+                          <SelectItem value="authorization" className="text-xs">Authorization: key</SelectItem>
+                          <SelectItem value="x-api-key" className="text-xs">X-API-KEY: key</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        Most marketplaces use the default. Only change if your marketplace requires a specific header format.
+                      </p>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
               <div className="flex items-start gap-1.5 text-[10px] text-muted-foreground bg-muted/20 rounded p-2">
-                <Info className="h-3 w-3 mt-0.5 shrink-0" />
-                <span>
-                  Most Mirakl Connect apps use <strong>OAuth</strong> (Client ID + Secret from Settings → API Integrations).
-                  Some older setups use a direct <strong>API Key</strong>. Choose "Both" if unsure — Xettle will try OAuth first and fall back to API key.
-                </span>
-              </div>
             </div>
             <Button
               size="sm"
