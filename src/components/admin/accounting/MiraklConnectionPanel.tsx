@@ -221,7 +221,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleFetchNow}
+                onClick={(e) => handleFetchNow(e)}
                 disabled={fetching}
                 className="gap-1.5"
               >
