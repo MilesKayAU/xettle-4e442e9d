@@ -268,7 +268,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                   className="font-mono text-xs h-8"
                 />
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  Leave blank if you only have one store. You can find this in your seller portal under My Settings → Mirakl seller account.
+                  Leave blank if you only have one store. If you manage multiple shops, find your Shop ID in the seller portal URL (the numeric ID visible in the address bar on your shop settings page).
                 </p>
               </div>
               <div>
