@@ -192,6 +192,14 @@ function StatusBadge({ status, xeroStatus, syncOrigin, marketplace }: { status: 
       </Badge>
     );
   }
+  if (status === 'pre_boundary') {
+    return (
+      <Badge variant="outline" className="text-amber-600 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-900/30 dark:border-amber-800 text-xs">
+        <Info className="h-3 w-3 mr-1" />
+        Import Only — Before Boundary
+      </Badge>
+    );
+  }
   return (
     <Badge variant="outline" className="text-muted-foreground text-xs">
       <Clock className="h-3 w-3 mr-1" />
