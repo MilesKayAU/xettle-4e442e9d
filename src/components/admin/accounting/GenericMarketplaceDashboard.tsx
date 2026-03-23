@@ -1241,6 +1241,13 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         onConfirm={confirmBulkDelete}
         onCancel={cancelBulkDelete}
       />
+
+      {/* Settlement Detail Drawer */}
+      <SettlementDetailDrawer
+        settlementId={drawerSettlementId}
+        open={drawerOpen}
+        onClose={() => { setDrawerOpen(false); setDrawerSettlementId(null); }}
+      />
     </div>
   );
 }
