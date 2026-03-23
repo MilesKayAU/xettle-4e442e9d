@@ -33,7 +33,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
   // Form state
   const [selectedMarketplace] = useState('Bunnings');
   const [baseUrl] = useState<string>(BUNNINGS_BASE_URL);
-  const [authMode, setAuthMode] = useState<AuthMode>('oauth');
+  const [authMode, setAuthMode] = useState<AuthMode>('api_key');
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   const [apiKey, setApiKey] = useState('');
