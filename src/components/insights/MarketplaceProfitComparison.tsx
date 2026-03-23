@@ -210,6 +210,8 @@ export default function MarketplaceProfitComparison() {
           has_cost_data: true,
           has_estimated_fees: hasEstimated || redistUsedFallback,
           implied_commission_rate: null, // No fabricated rates
+          shipping_deduction: 0, // Already included in profit data
+          order_count: 0,
         });
       }
 
