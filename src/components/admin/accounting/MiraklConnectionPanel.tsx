@@ -321,11 +321,14 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                   <Label className="text-xs">API Key</Label>
                   <Input
                     type="password"
-                    placeholder="Your API Key"
+                    placeholder="e.g. bfb2d8a3-914b-4d8e-828b-3d75199754c5"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
                     className="font-mono text-xs h-8"
                   />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Paste the API key generated from your Bunnings seller portal.
+                  </p>
                 </div>
               )}
               {(authMode === 'api_key' || authMode === 'both') && (
