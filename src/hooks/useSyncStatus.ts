@@ -62,6 +62,14 @@ const API_INTEGRATIONS = [
     eventTypes: ['ebay_settlement_imported', 'ebay_sync_debug', 'ebay_fetch_complete'],
     marketplaceAliases: ['ebay', 'ebay_au'] as const,
   },
+  {
+    rail: 'bunnings',
+    name: 'Bunnings',
+    tokenTable: 'mirakl_tokens' as const,
+    historyTypes: ['mirakl'],
+    eventTypes: ['mirakl_reconciliation_mismatch', 'mirakl_fetch_complete', 'settlement_saved'],
+    marketplaceAliases: ['bunnings'] as const,
+  },
 ] as const;
 
 type SyncHistoryRow = {
@@ -102,6 +110,7 @@ async function fetchSyncStatus(): Promise<Omit<SyncStatusResult, 'loading'>> {
       supabase.from('amazon_tokens').select('id').limit(1),
       supabase.from('shopify_tokens').select('id').limit(1),
       supabase.from('ebay_tokens').select('id').limit(1),
+      supabase.from('mirakl_tokens').select('id').limit(1),
     ]),
     Promise.all(
       API_INTEGRATIONS.map(async integration => {
@@ -129,13 +138,14 @@ async function fetchSyncStatus(): Promise<Omit<SyncStatusResult, 'loading'>> {
     ),
   ]);
 
-  const [xeroRes, amazonRes, shopifyRes, ebayRes] = tokenResults;
+  const [xeroRes, amazonRes, shopifyRes, ebayRes, miraklRes] = tokenResults;
 
   const connectedSet = new Set<string>();
   if (xeroRes.data?.length) connectedSet.add('xero');
-  if (amazonRes.data?.length) connectedSet.add('amazon_au');
-  if (shopifyRes.data?.length) connectedSet.add('shopify');
-  if (ebayRes.data?.length) connectedSet.add('ebay_au');
+  if (amazonRes.data?.length) { connectedSet.add('amazon'); connectedSet.add('amazon_au'); }
+  if (shopifyRes.data?.length) { connectedSet.add('shopify'); }
+  if (ebayRes.data?.length) { connectedSet.add('ebay_au'); }
+  if (miraklRes.data?.length) { connectedSet.add('bunnings'); }
 
   function deriveStatus(
     historyRows: SyncHistoryRow[],

@@ -12,8 +12,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Globe, CheckCircle2, XCircle, Info, FileText, ShoppingBag, RefreshCw } from 'lucide-react';
+import { Globe, CheckCircle2, XCircle, Info, FileText, ShoppingBag, RefreshCw, Clock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { formatDistanceToNow } from 'date-fns';
 import { setSourcePreference } from '@/actions/settlements';
 import { toast } from 'sonner';
 import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
@@ -74,6 +75,8 @@ export default function ApiConnectionsPanel({
   const [subChannels, setSubChannels] = useState<SubChannelPref[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [autoSyncFlags, setAutoSyncFlags] = useState<Record<string, boolean>>({});
+  const [lastSyncRun, setLastSyncRun] = useState<Date | null>(null);
+  const [syncFrequencyHours, setSyncFrequencyHours] = useState<number | null>(null);
 
   useEffect(() => {
     checkConnections();
@@ -116,6 +119,23 @@ export default function ApiConnectionsPanel({
         flags[r.key] = setting ? setting.value === 'true' : true;
       }
       setAutoSyncFlags(flags);
+
+      // Load sync schedule info
+      const { data: syncRuns } = await supabase
+        .from('sync_history')
+        .select('created_at')
+        .eq('event_type', 'scheduled_sync')
+        .order('created_at', { ascending: false })
+        .limit(3);
+
+      if (syncRuns && syncRuns.length > 0) {
+        setLastSyncRun(new Date(syncRuns[0].created_at));
+        if (syncRuns.length >= 2) {
+          const diff = new Date(syncRuns[0].created_at).getTime() - new Date(syncRuns[1].created_at).getTime();
+          const hours = Math.round(diff / (1000 * 60 * 60));
+          if (hours > 0) setSyncFrequencyHours(hours);
+        }
+      }
 
       // Load sub-channels for source preference
       const { data: channels } = await supabase
@@ -275,9 +295,34 @@ export default function ApiConnectionsPanel({
               Daily Auto-Sync
             </CardTitle>
             <CardDescription className="text-xs mt-1">
-              Control which connected APIs automatically fetch new settlements every day at 2:00 AM AEST. 
+              Control which connected APIs automatically fetch new settlements. 
               Disable to use manual sync or CSV uploads only.
             </CardDescription>
+            {/* Sync schedule insight */}
+            {(lastSyncRun || syncFrequencyHours) && (
+              <div className="flex flex-wrap items-center gap-3 mt-2">
+                {syncFrequencyHours && (
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <Clock className="h-3 w-3 text-primary" />
+                    <span className="text-foreground font-medium">Every {syncFrequencyHours}h</span>
+                  </div>
+                )}
+                {lastSyncRun && (
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                    <span className="text-muted-foreground">Last run {formatDistanceToNow(lastSyncRun, { addSuffix: true })}</span>
+                  </div>
+                )}
+                {lastSyncRun && syncFrequencyHours && (
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <RefreshCw className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-muted-foreground">
+                      Next run ~{formatDistanceToNow(new Date(lastSyncRun.getTime() + syncFrequencyHours * 60 * 60 * 1000), { addSuffix: true })}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
           </CardHeader>
           <CardContent className="pt-0">
             <div className="space-y-3">
