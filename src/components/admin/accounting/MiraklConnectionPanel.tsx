@@ -164,11 +164,11 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="text-base flex items-center gap-2">
-              <span className="text-lg">🔗</span>
-              Mirakl API Connection
+              <span className="text-lg">🏠</span>
+              Bunnings Marketplace Sync
             </CardTitle>
             <CardDescription className="text-xs">
-              Connect your Mirakl seller portal to auto-import settlement data.
+              Auto-import settlement data from Bunnings Marketplace.
             </CardDescription>
           </div>
           {connected ? (
