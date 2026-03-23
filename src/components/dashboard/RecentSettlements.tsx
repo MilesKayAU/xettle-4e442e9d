@@ -572,15 +572,16 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
       color: 'border-sky-200 bg-sky-50/80 dark:border-sky-800 dark:bg-sky-900/20',
       icon: <Send className="h-4 w-4 text-sky-600 dark:text-sky-400" />,
     },
-    {
-      key: 'posted',
+    // Hide "In Xero — Processing" on homepage (actionableOnly mode)
+    ...(!actionableOnly ? [{
+      key: 'posted' as StatusCategory,
       label: 'In Xero — Processing',
       sublabel: 'Posted, awaiting reconciliation',
       count: counts.posted,
       total: counts.postedTotal,
       color: 'border-amber-300 bg-amber-50/80 dark:border-amber-700 dark:bg-amber-900/25',
       icon: <CheckCircle2 className="h-4 w-4 text-amber-600 dark:text-amber-400" />,
-    },
+    }] : []),
     // Only show Needs Attention when there are items
     ...(counts.attention > 0 ? [{
       key: 'attention' as StatusCategory,
