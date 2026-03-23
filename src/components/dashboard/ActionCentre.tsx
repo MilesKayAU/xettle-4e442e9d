@@ -237,15 +237,6 @@ export default function ActionCentre({
   const now = new Date();
 
   const uploadNeeded = normalisedRows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
-  // Filter out true API channels (with dedicated tokens), only show manual-upload channels
-  const connectedApiMarketplaces = useMemo(() => {
-    const connectedCodes = new Set<string>(trueApiChannels);
-    for (const integration of syncedIntegrations) {
-      const normalizedCode = MARKETPLACE_ALIASES[integration.rail] || integration.rail;
-      connectedCodes.add(normalizedCode);
-    }
-    return connectedCodes;
-  }, [trueApiChannels, syncedIntegrations]);
 
   const uploadNeededManual = uploadNeeded.filter(r => {
     if (connectedApiMarketplaces.has(r.marketplace_code)) return false;
