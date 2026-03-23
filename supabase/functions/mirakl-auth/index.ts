@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
       if (upsertErr) throw upsertErr;
 
       // ─── Item 5: Create marketplace_connections row ───
-      const effectiveMarketplaceCode = (marketplace_label || "bunnings").toLowerCase().replace(/\s+/g, "_");
+      const effectiveMarketplaceCode = body.marketplace_code || (marketplace_label || "bunnings").toLowerCase().replace(/\s+/g, "_");
       await adminClient
         .from("marketplace_connections")
         .upsert(

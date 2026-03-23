@@ -347,6 +347,7 @@ export default function Admin() {
       case 'health': return <HealthScannerDashboard />;
       case 'shipping': return <ShippingEstimateSettings />;
       case 'amazon-compliance': return <AmazonComplianceDashboard />;
+      case 'mirakl-beta': return <MiraklBetaFeedback />;
       default: return null;
     }
   };

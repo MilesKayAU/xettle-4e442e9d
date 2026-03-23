@@ -7,12 +7,17 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { CheckCircle2, XCircle, Loader2, Unplug, RefreshCw, Link2, Info, Settings2 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { CheckCircle2, XCircle, Loader2, Unplug, RefreshCw, Link2, Info, Settings2, AlertTriangle, Flag } from "lucide-react";
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-const BUNNINGS_BASE_URL = 'https://marketplace.bunnings.com.au';
-
+const KNOWN_MARKETPLACES = [
+  { code: 'bunnings', label: 'Bunnings', baseUrl: 'https://marketplace.bunnings.com.au', beta: false },
+  { code: 'jbhifi', label: 'JB Hi-Fi', baseUrl: '', beta: true, placeholder: 'e.g. https://marketplace.jbhifi.com.au — check your seller portal URL' },
+  { code: 'babybunting', label: 'Baby Bunting', baseUrl: '', beta: true, placeholder: 'e.g. https://marketplace.babybunting.com.au — check your seller portal URL' },
+  { code: 'other_mirakl', label: 'Other Mirakl', baseUrl: '', beta: false, placeholder: 'https://marketplace.example.com' },
+] as const;
 
 type AuthMode = 'oauth' | 'api_key' | 'both';
 type AuthHeaderType = 'auto' | 'bearer' | 'authorization' | 'x-api-key';
@@ -29,10 +34,12 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [fetching, setFetching] = useState(false);
+  const [lastError, setLastError] = useState<string | null>(null);
+  const [reporting, setReporting] = useState(false);
 
   // Form state
-  const [selectedMarketplace] = useState('Bunnings');
-  const [baseUrl] = useState<string>(BUNNINGS_BASE_URL);
+  const [selectedMpCode, setSelectedMpCode] = useState('bunnings');
+  const [baseUrl, setBaseUrl] = useState('https://marketplace.bunnings.com.au');
   const [authMode, setAuthMode] = useState<AuthMode>('api_key');
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
@@ -40,6 +47,19 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
   const [sellerCompanyId, setSellerCompanyId] = useState('');
   const [authHeaderType, setAuthHeaderType] = useState<AuthHeaderType>('auto');
   const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  const selectedMp = KNOWN_MARKETPLACES.find(m => m.code === selectedMpCode) || KNOWN_MARKETPLACES[0];
+
+  const handleMarketplaceChange = (code: string) => {
+    setSelectedMpCode(code);
+    const mp = KNOWN_MARKETPLACES.find(m => m.code === code);
+    if (mp?.baseUrl) {
+      setBaseUrl(mp.baseUrl);
+    } else {
+      setBaseUrl('');
+    }
+    setLastError(null);
+  };
 
   const checkStatus = useCallback(async () => {
     setLoading(true);
@@ -62,7 +82,6 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
     checkStatus();
   }, [checkStatus]);
 
-
   const isFormValid = () => {
     if (!baseUrl) return false;
     if (authMode === 'oauth' || authMode === 'both') {
@@ -80,6 +99,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
       return;
     }
     setConnecting(true);
+    setLastError(null);
     try {
       const { data, error } = await supabase.functions.invoke('mirakl-auth', {
         headers: { 'x-action': 'connect' },
@@ -91,17 +111,19 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
           auth_mode: authMode,
           auth_header_type: authHeaderType === 'auto' ? null : authHeaderType,
           seller_company_id: sellerCompanyId || 'default',
-          marketplace_label: selectedMarketplace,
+          marketplace_label: selectedMp.label,
+          marketplace_code: selectedMp.code === 'other_mirakl' ? baseUrl.replace(/https?:\/\//, '').split('.')[0] : selectedMp.code,
         },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      toast.success('Bunnings Marketplace connection saved');
+      toast.success(`${selectedMp.label} connection saved`);
       setClientId('');
       setClientSecret('');
       setApiKey('');
       await checkStatus();
     } catch (err: any) {
+      setLastError(err.message);
       toast.error(`Connection failed: ${err.message}`);
     } finally {
       setConnecting(false);
@@ -109,7 +131,8 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
   };
 
   const handleDisconnect = async () => {
-    if (!confirm('Disconnect Bunnings Marketplace? You can reconnect anytime.')) return;
+    const label = connection?.marketplace_label || 'Mirakl marketplace';
+    if (!confirm(`Disconnect ${label}? You can reconnect anytime.`)) return;
     setDisconnecting(true);
     try {
       const { error } = await supabase.functions.invoke('mirakl-auth', {
@@ -119,7 +142,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
       if (error) throw error;
       setConnected(false);
       setConnection(null);
-      toast.success('Bunnings Marketplace disconnected');
+      toast.success(`${label} disconnected`);
     } catch (err: any) {
       toast.error(`Disconnect failed: ${err.message}`);
     } finally {
@@ -130,16 +153,17 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
   const handleFetchNow = async (e?: React.MouseEvent) => {
     e?.preventDefault();
     setFetching(true);
+    setLastError(null);
     try {
       const { data, error } = await supabase.functions.invoke('fetch-mirakl-settlements');
       if (error) throw error;
       if (data?.error) {
-        // Surface API-level errors (e.g. 401 Unauthorized) clearly
         const msg = data.error;
+        setLastError(msg);
         if (msg.includes('401') || msg.toLowerCase().includes('unauthorized')) {
-          toast.error('Bunnings API credentials are invalid or expired. Please reconnect with updated credentials.');
+          toast.error('API credentials are invalid or expired. Please reconnect with updated credentials.');
         } else {
-          toast.error(`Bunnings sync error: ${msg}`);
+          toast.error(`Sync error: ${msg}`);
         }
         return;
       }
@@ -148,12 +172,34 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
       if (imported > 0) parts.push(`${imported} imported`);
       if (skipped > 0) parts.push(`${skipped} duplicates skipped`);
       if (empty_skipped > 0) parts.push(`${empty_skipped} empty periods skipped`);
-      toast.success(parts.length > 0 ? `Done! ${parts.join(', ')}.` : 'No new Bunnings settlements found.');
+      toast.success(parts.length > 0 ? `Done! ${parts.join(', ')}.` : 'No new settlements found.');
       if (imported > 0) onSettlementsAutoFetched?.();
     } catch (err: any) {
+      setLastError(err.message);
       toast.error(`Fetch failed: ${err.message}`);
     } finally {
       setFetching(false);
+    }
+  };
+
+  const handleReportIssue = async () => {
+    if (!lastError) return;
+    setReporting(true);
+    try {
+      const { error } = await supabase.functions.invoke('report-mirakl-issue', {
+        body: {
+          marketplace_label: connection?.marketplace_label || selectedMp.label,
+          base_url: baseUrl || connection?.base_url || '',
+          error_message: lastError,
+        },
+      });
+      if (error) throw error;
+      toast.success('Issue reported — our team will investigate.');
+      setLastError(null);
+    } catch (err: any) {
+      toast.error(`Failed to report: ${err.message}`);
+    } finally {
+      setReporting(false);
     }
   };
 
@@ -162,7 +208,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
       <Card>
         <CardContent className="py-8 text-center">
           <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
-          <p className="text-sm text-muted-foreground mt-2">Checking Bunnings connection...</p>
+          <p className="text-sm text-muted-foreground mt-2">Checking Mirakl connection...</p>
         </CardContent>
       </Card>
     );
@@ -175,10 +221,10 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
           <div>
             <CardTitle className="text-base flex items-center gap-2">
               <span className="text-lg">🏠</span>
-              Bunnings Marketplace Sync
+              Mirakl Marketplace Sync
             </CardTitle>
             <CardDescription className="text-xs">
-              Auto-import settlement data from Bunnings Marketplace.
+              Auto-import settlement data from Mirakl-powered marketplaces.
             </CardDescription>
           </div>
           {connected ? (
@@ -219,6 +265,25 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                 </div>
               )}
             </div>
+
+            {lastError && (
+              <Alert variant="destructive" className="py-2">
+                <AlertDescription className="text-xs flex items-center justify-between gap-2">
+                  <span className="truncate">{lastError}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 gap-1 text-xs h-6"
+                    onClick={handleReportIssue}
+                    disabled={reporting}
+                  >
+                    {reporting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Flag className="h-3 w-3" />}
+                    Report Issue
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
+
             <div className="flex gap-2">
               <Button
                 variant="outline"
@@ -244,10 +309,55 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
           </div>
         ) : (
           <div className="space-y-3">
+            {/* Marketplace selector */}
+            <div>
+              <Label className="text-xs">Marketplace</Label>
+              <Select value={selectedMpCode} onValueChange={handleMarketplaceChange}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {KNOWN_MARKETPLACES.map(mp => (
+                    <SelectItem key={mp.code} value={mp.code} className="text-xs">
+                      <span className="flex items-center gap-2">
+                        {mp.label}
+                        {mp.beta && (
+                          <Badge variant="outline" className="text-[9px] h-4 px-1 border-amber-400 text-amber-600">Beta</Badge>
+                        )}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Beta info banner */}
+            {selectedMp.beta && (
+              <Alert className="py-2 border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                <AlertDescription className="text-xs text-amber-700 dark:text-amber-400">
+                  This marketplace is in beta testing. Your connection helps us validate support. If something doesn't work, use the <strong>Report Issue</strong> button.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Base URL for non-Bunnings */}
+            {selectedMp.code !== 'bunnings' && (
+              <div>
+                <Label className="text-xs">Base URL</Label>
+                <Input
+                  placeholder={'placeholder' in selectedMp ? (selectedMp as any).placeholder : 'https://marketplace.example.com'}
+                  value={baseUrl}
+                  onChange={(e) => setBaseUrl(e.target.value)}
+                  className="font-mono text-xs h-8"
+                />
+              </div>
+            )}
+
             <div className="bg-muted/30 border border-border rounded-lg p-3 text-sm text-muted-foreground space-y-2">
               <p className="text-xs font-medium">How to find your API key:</p>
               <ol className="text-xs list-decimal list-inside space-y-0.5">
-                <li>Log into your <strong>Bunnings Marketplace seller portal</strong></li>
+                <li>Log into your <strong>{selectedMp.label} seller portal</strong></li>
                 <li>Click your <strong>profile initials</strong> (top right)</li>
                 <li>Select <strong>My Settings</strong></li>
                 <li>Click the <strong>API Key</strong> tab</li>
@@ -258,17 +368,18 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                 Xettle requests <strong>read-only</strong> access to settlement and transaction data.
               </p>
             </div>
+
             <div className="space-y-3">
               <div>
                 <Label className="text-xs">Shop ID <span className="text-muted-foreground font-normal">(optional)</span></Label>
                 <Input
-                  placeholder="e.g. your Bunnings vendor number or Mirakl shop ID"
+                  placeholder={`e.g. your ${selectedMp.label} vendor number or Mirakl shop ID`}
                   value={sellerCompanyId}
                   onChange={(e) => setSellerCompanyId(e.target.value)}
                   className="font-mono text-xs h-8"
                 />
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  Leave blank if you only have one store. If you manage multiple shops, find your Shop ID in the seller portal URL (the numeric ID visible in the address bar on your shop settings page).
+                  Leave blank if you only have one store.
                 </p>
               </div>
               <div>
@@ -286,15 +397,11 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                 >
                   <div className="flex items-center gap-2">
                     <RadioGroupItem value="oauth" id="auth-oauth" />
-                    <Label htmlFor="auth-oauth" className="text-xs font-normal cursor-pointer">
-                      OAuth
-                    </Label>
+                    <Label htmlFor="auth-oauth" className="text-xs font-normal cursor-pointer">OAuth</Label>
                   </div>
                   <div className="flex items-center gap-2">
                     <RadioGroupItem value="api_key" id="auth-apikey" />
-                    <Label htmlFor="auth-apikey" className="text-xs font-normal cursor-pointer">
-                      API Key (recommended)
-                    </Label>
+                    <Label htmlFor="auth-apikey" className="text-xs font-normal cursor-pointer">API Key (recommended)</Label>
                   </div>
                 </RadioGroup>
               </div>
@@ -302,22 +409,11 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                 <>
                   <div>
                     <Label className="text-xs">Client ID</Label>
-                    <Input
-                      placeholder="Your Client ID"
-                      value={clientId}
-                      onChange={(e) => setClientId(e.target.value)}
-                      className="font-mono text-xs h-8"
-                    />
+                    <Input placeholder="Your Client ID" value={clientId} onChange={(e) => setClientId(e.target.value)} className="font-mono text-xs h-8" />
                   </div>
                   <div>
                     <Label className="text-xs">Client Secret</Label>
-                    <Input
-                      type="password"
-                      placeholder="Your Client Secret"
-                      value={clientSecret}
-                      onChange={(e) => setClientSecret(e.target.value)}
-                      className="font-mono text-xs h-8"
-                    />
+                    <Input type="password" placeholder="Your Client Secret" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} className="font-mono text-xs h-8" />
                   </div>
                 </>
               )}
@@ -332,7 +428,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                     className="font-mono text-xs h-8"
                   />
                   <p className="text-[10px] text-muted-foreground mt-1">
-                    Paste the API key generated from your Bunnings seller portal.
+                    Paste the API key generated from your {selectedMp.label} seller portal.
                   </p>
                 </div>
               )}
@@ -358,9 +454,6 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                           <SelectItem value="x-api-key" className="text-xs">X-API-KEY: key</SelectItem>
                         </SelectContent>
                       </Select>
-                      <p className="text-[10px] text-muted-foreground mt-1">
-                        Most marketplaces use the default. Only change if your marketplace requires a specific header format.
-                      </p>
                     </div>
                   </CollapsibleContent>
                 </Collapsible>
@@ -368,11 +461,30 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
               <div className="flex items-start gap-1.5 text-[10px] text-muted-foreground bg-muted/20 rounded p-2">
                 <Info className="h-3 w-3 mt-0.5 shrink-0" />
                 <span>
-                  Most Bunnings sellers use a direct <strong>API Key</strong> from the seller portal.
+                  Most sellers use a direct <strong>API Key</strong> from the seller portal.
                   If your account uses OAuth credentials (Client ID + Secret), switch to OAuth above.
                 </span>
               </div>
             </div>
+
+            {lastError && (
+              <Alert variant="destructive" className="py-2">
+                <AlertDescription className="text-xs flex items-center justify-between gap-2">
+                  <span className="truncate">{lastError}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 gap-1 text-xs h-6"
+                    onClick={handleReportIssue}
+                    disabled={reporting}
+                  >
+                    {reporting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Flag className="h-3 w-3" />}
+                    Report Issue
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
+
             <Button
               size="sm"
               onClick={handleConnect}

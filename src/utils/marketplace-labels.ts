@@ -36,6 +36,8 @@ export const MARKETPLACE_LABELS: Record<string, string> = {
   tiktok_shop: 'TikTok Shop',
   temu: 'Temu',
   shein: 'Shein',
+  jbhifi: 'JB Hi-Fi',
+  babybunting: 'Baby Bunting',
   // Composite codes from Woolworths MarketPlus parser
   woolworths_marketplus_bigw: 'Big W',
   woolworths_marketplus_woolworths: 'Everyday Market',
