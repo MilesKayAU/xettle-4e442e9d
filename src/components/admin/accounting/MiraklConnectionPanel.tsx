@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CheckCircle2, XCircle, Loader2, Unplug, RefreshCw, Link2 } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, Unplug, RefreshCw, Link2, Info } from "lucide-react";
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -17,6 +17,8 @@ const MIRAKL_MARKETPLACES = [
   { label: 'Decathlon', baseUrl: 'https://marketplace.decathlon.com.au' },
   { label: 'Other', baseUrl: '' },
 ] as const;
+
+type AuthMode = 'oauth' | 'api_key' | 'both';
 
 interface MiraklConnectionPanelProps {
   onSettlementsAutoFetched?: () => void;
@@ -34,8 +36,10 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
   // Form state
   const [selectedMarketplace, setSelectedMarketplace] = useState('Bunnings');
   const [baseUrl, setBaseUrl] = useState<string>(MIRAKL_MARKETPLACES[0].baseUrl);
+  const [authMode, setAuthMode] = useState<AuthMode>('oauth');
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
+  const [apiKey, setApiKey] = useState('');
   const [sellerCompanyId, setSellerCompanyId] = useState('');
 
   const checkStatus = useCallback(async () => {
@@ -65,9 +69,20 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
     if (found && found.baseUrl) setBaseUrl(found.baseUrl);
   };
 
+  const isFormValid = () => {
+    if (!baseUrl || !sellerCompanyId) return false;
+    if (authMode === 'oauth' || authMode === 'both') {
+      if (!clientId || !clientSecret) return false;
+    }
+    if (authMode === 'api_key' || authMode === 'both') {
+      if (!apiKey) return false;
+    }
+    return true;
+  };
+
   const handleConnect = async () => {
-    if (!baseUrl || !clientId || !clientSecret || !sellerCompanyId) {
-      toast.error('Please fill in all fields');
+    if (!isFormValid()) {
+      toast.error('Please fill in all required fields');
       return;
     }
     setConnecting(true);
@@ -76,8 +91,10 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
         headers: { 'x-action': 'connect' },
         body: {
           base_url: baseUrl,
-          client_id: clientId,
-          client_secret: clientSecret,
+          client_id: clientId || '',
+          client_secret: clientSecret || '',
+          api_key: apiKey || null,
+          auth_mode: authMode,
           seller_company_id: sellerCompanyId,
           marketplace_label: selectedMarketplace,
         },
@@ -87,6 +104,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
       toast.success('Mirakl connection saved');
       setClientId('');
       setClientSecret('');
+      setApiKey('');
       await checkStatus();
     } catch (err: any) {
       toast.error(`Connection failed: ${err.message}`);
@@ -181,6 +199,12 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                 <span className="text-muted-foreground">Seller ID:</span>
                 <span className="font-mono text-xs">{connection.seller_company_id}</span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Auth mode:</span>
+                <Badge variant="outline" className="text-[10px] h-5">
+                  {connection.auth_mode === 'both' ? 'OAuth + API Key' : connection.auth_mode === 'api_key' ? 'API Key' : 'OAuth'}
+                </Badge>
+              </div>
               {connection.updated_at && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Last updated:</span>
@@ -215,8 +239,9 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
           <div className="space-y-3">
             <div className="bg-muted/30 border border-border rounded-lg p-3 text-sm text-muted-foreground">
               <p className="text-xs">
-                Enter your Mirakl API credentials from your seller portal.
-                Xettle requests <strong>read-only</strong> access to your settlement and transaction data.
+                Enter your Mirakl API credentials from your seller portal
+                (<strong>Settings → API Integrations</strong>).
+                Xettle requests <strong>read-only</strong> access to settlement and transaction data.
               </p>
             </div>
             <div className="space-y-3">
@@ -247,38 +272,74 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                 </div>
               )}
               <div>
-                <Label className="text-xs">Client ID</Label>
-                <Input
-                  placeholder="Your Mirakl Client ID"
-                  value={clientId}
-                  onChange={(e) => setClientId(e.target.value)}
-                  className="font-mono text-xs h-8"
-                />
-              </div>
-              <div>
-                <Label className="text-xs">Client Secret / API Key</Label>
-                <Input
-                  type="password"
-                  placeholder="Your Mirakl Client Secret or API Key"
-                  value={clientSecret}
-                  onChange={(e) => setClientSecret(e.target.value)}
-                  className="font-mono text-xs h-8"
-                />
-              </div>
-              <div>
                 <Label className="text-xs">Seller Company ID</Label>
                 <Input
-                  placeholder="e.g. 12345"
+                  placeholder="e.g. f2d2a8b4-896d-4451-a0f9-15c3bcaf1845"
                   value={sellerCompanyId}
                   onChange={(e) => setSellerCompanyId(e.target.value)}
                   className="font-mono text-xs h-8"
                 />
               </div>
+              <div>
+                <Label className="text-xs">Auth Method</Label>
+                <Select value={authMode} onValueChange={(v) => setAuthMode(v as AuthMode)}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="oauth" className="text-xs">OAuth (Client ID + Secret)</SelectItem>
+                    <SelectItem value="api_key" className="text-xs">API Key Only</SelectItem>
+                    <SelectItem value="both" className="text-xs">Both (OAuth + API Key fallback)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {(authMode === 'oauth' || authMode === 'both') && (
+                <>
+                  <div>
+                    <Label className="text-xs">Client ID</Label>
+                    <Input
+                      placeholder="Your Mirakl Client ID"
+                      value={clientId}
+                      onChange={(e) => setClientId(e.target.value)}
+                      className="font-mono text-xs h-8"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Client Secret</Label>
+                    <Input
+                      type="password"
+                      placeholder="Your Mirakl Client Secret"
+                      value={clientSecret}
+                      onChange={(e) => setClientSecret(e.target.value)}
+                      className="font-mono text-xs h-8"
+                    />
+                  </div>
+                </>
+              )}
+              {(authMode === 'api_key' || authMode === 'both') && (
+                <div>
+                  <Label className="text-xs">API Key</Label>
+                  <Input
+                    type="password"
+                    placeholder="Your Mirakl API Key"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    className="font-mono text-xs h-8"
+                  />
+                </div>
+              )}
+              <div className="flex items-start gap-1.5 text-[10px] text-muted-foreground bg-muted/20 rounded p-2">
+                <Info className="h-3 w-3 mt-0.5 shrink-0" />
+                <span>
+                  Most Mirakl Connect apps use <strong>OAuth</strong> (Client ID + Secret from Settings → API Integrations).
+                  Some older setups use a direct <strong>API Key</strong>. Choose "Both" if unsure — Xettle will try OAuth first and fall back to API key.
+                </span>
+              </div>
             </div>
             <Button
               size="sm"
               onClick={handleConnect}
-              disabled={connecting || !baseUrl || !clientId || !clientSecret || !sellerCompanyId}
+              disabled={connecting || !isFormValid()}
               className="gap-1.5"
             >
               {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}

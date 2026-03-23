@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyRequest } from "../_shared/auth-guard.ts";
-import { getValidMiraklToken } from "../_shared/mirakl-token.ts";
+import { getMiraklAuthHeader } from "../_shared/mirakl-token.ts";
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin") ?? "";
@@ -21,11 +21,31 @@ Deno.serve(async (req) => {
     // ─── CONNECT ─────────────────────────────────────────────────
     if (action === "connect") {
       const body = await req.json();
-      const { base_url, client_id, client_secret, seller_company_id, marketplace_label } = body;
+      const {
+        base_url, client_id, client_secret,
+        api_key, auth_mode,
+        seller_company_id, marketplace_label,
+      } = body;
 
-      if (!base_url || !client_id || !client_secret || !seller_company_id) {
+      if (!base_url || !seller_company_id) {
         return new Response(
-          JSON.stringify({ error: "Missing required fields: base_url, client_id, client_secret, seller_company_id" }),
+          JSON.stringify({ error: "Missing required fields: base_url, seller_company_id" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      const mode = auth_mode || "oauth";
+
+      // Validate required fields per auth mode
+      if ((mode === "oauth" || mode === "both") && (!client_id || !client_secret)) {
+        return new Response(
+          JSON.stringify({ error: "OAuth mode requires client_id and client_secret" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      if ((mode === "api_key" || mode === "both") && !api_key) {
+        return new Response(
+          JSON.stringify({ error: "API key mode requires api_key" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
@@ -37,8 +57,10 @@ Deno.serve(async (req) => {
           {
             user_id: userId,
             base_url: base_url.replace(/\/$/, ""),
-            client_id,
-            client_secret,
+            client_id: client_id || "",
+            client_secret: client_secret || "",
+            api_key: api_key || null,
+            auth_mode: mode,
             seller_company_id,
             marketplace_label: marketplace_label || "Bunnings",
             access_token: null,
@@ -50,7 +72,7 @@ Deno.serve(async (req) => {
 
       if (upsertErr) throw upsertErr;
 
-      // Verify connection by fetching a token
+      // Verify connection by testing auth
       const { data: row } = await adminClient
         .from("mirakl_tokens")
         .select("*")
@@ -61,10 +83,10 @@ Deno.serve(async (req) => {
 
       if (row) {
         try {
-          await getValidMiraklToken(adminClient, row);
+          await getMiraklAuthHeader(adminClient, row);
         } catch (tokenErr: any) {
-          // Credentials saved but token verification failed — warn but don't block
-          console.warn("[mirakl-auth] Token verification failed:", tokenErr.message);
+          // Credentials saved but auth verification failed — warn but don't block
+          console.warn("[mirakl-auth] Auth verification failed:", tokenErr.message);
         }
       }
 
@@ -78,7 +100,7 @@ Deno.serve(async (req) => {
     if (action === "status") {
       const { data: rows } = await adminClient
         .from("mirakl_tokens")
-        .select("id, marketplace_label, base_url, seller_company_id, updated_at, expires_at")
+        .select("id, marketplace_label, base_url, seller_company_id, auth_mode, updated_at, expires_at")
         .eq("user_id", userId);
 
       const connections = (rows || []).map((r: any) => ({
@@ -86,6 +108,7 @@ Deno.serve(async (req) => {
         marketplace_label: r.marketplace_label,
         base_url: r.base_url,
         seller_company_id: r.seller_company_id,
+        auth_mode: r.auth_mode || "oauth",
         updated_at: r.updated_at,
         has_token: !!r.expires_at,
       }));

@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyRequest } from "../_shared/auth-guard.ts";
-import { getMiraklApiKey } from "../_shared/mirakl-token.ts";
+import { getMiraklAuthHeader } from "../_shared/mirakl-token.ts";
 
 // ═══════════════════════════════════════════════════════════════
 // MIRAKL TRANSACTION TYPE → STANDARD SETTLEMENT FIELD MAP
@@ -117,10 +117,10 @@ Deno.serve(async (req) => {
 
     for (const connection of connections) {
       try {
-        // Marketplace APIs (TL endpoints) use direct API key auth, not OAuth Bearer
-        const apiKey = getMiraklApiKey(connection);
+        // Resolve auth header based on connection's auth_mode (oauth, api_key, or both)
+        const authHeader = await getMiraklAuthHeader(adminClient, connection);
         const result = await fetchSettlementsForConnection(
-          adminClient, targetUserId, connection, apiKey, body.sync_from,
+          adminClient, targetUserId, connection, authHeader, body.sync_from,
         );
         allResults.push({
           marketplace_label: connection.marketplace_label,
@@ -167,7 +167,7 @@ async function fetchSettlementsForConnection(
   adminClient: any,
   userId: string,
   connection: any,
-  apiKey: string,
+  authHeader: string,
   syncFrom?: string,
 ) {
   const baseUrl = connection.base_url.replace(/\/$/, "");
@@ -179,12 +179,12 @@ async function fetchSettlementsForConnection(
   const dateFrom = syncFrom || defaultFrom.toISOString().split("T")[0];
 
   // Fetch transaction logs from Mirakl Marketplace API (TL endpoints)
-  // Auth: direct API key in Authorization header (NOT Bearer)
+  // authHeader is pre-resolved: either "Bearer <token>" (OAuth) or raw API key
   const apiUrl = `${baseUrl}/api/sellerpayment/transactions_logs?start_date=${dateFrom}T00:00:00Z&paginate=false`;
 
   const res = await fetch(apiUrl, {
     headers: {
-      Authorization: apiKey,
+      Authorization: authHeader,
       Accept: "application/json",
     },
   });

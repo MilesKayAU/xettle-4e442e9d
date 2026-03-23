@@ -1400,6 +1400,8 @@ export type Database = {
       mirakl_tokens: {
         Row: {
           access_token: string | null
+          api_key: string | null
+          auth_mode: string
           base_url: string
           client_id: string
           client_secret: string
@@ -1413,6 +1415,8 @@ export type Database = {
         }
         Insert: {
           access_token?: string | null
+          api_key?: string | null
+          auth_mode?: string
           base_url: string
           client_id: string
           client_secret: string
@@ -1426,6 +1430,8 @@ export type Database = {
         }
         Update: {
           access_token?: string | null
+          api_key?: string | null
+          auth_mode?: string
           base_url?: string
           client_id?: string
           client_secret?: string
