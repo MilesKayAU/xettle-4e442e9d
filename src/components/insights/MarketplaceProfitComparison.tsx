@@ -225,14 +225,17 @@ export default function MarketplaceProfitComparison() {
 
         const fulfilmentMethod = getEffectiveMethod(mp, fulfilmentMethods[mp]);
         const postageCost = postageCosts[mp] || 0;
-        const shouldDeductShipping = fulfilmentMethod === 'self_ship' || fulfilmentMethod === 'third_party_logistics';
         
-        // Use canonical fee attribution — do NOT use rows.length as order count
+        // Use canonical fee attribution
         const attribution = attributeFees(mp, rows, redistFees[mp] || 0);
 
-        // Only deduct shipping if we have real order count data (not fabricated)
-        // For now, skip postage deduction here since we don't have order counts
-        const adjustedPayout = attribution.effectiveNetPayout;
+        // Get order count from settlement_lines and apply shipping deduction
+        const mpOrderCount = orderCountsByMp[mp] || 0;
+        const shippingDeduction = mpOrderCount > 0
+          ? getPostageDeductionForOrder(fulfilmentMethod, null, postageCost, mpOrderCount)
+          : 0;
+
+        const adjustedPayout = attribution.effectiveNetPayout - shippingDeduction;
         const margin = totalSales > 0 ? Math.min((adjustedPayout / totalSales) * 100, 100) : 0;
 
         results.push({
@@ -244,7 +247,9 @@ export default function MarketplaceProfitComparison() {
           periods: rows.length,
           has_cost_data: false,
           has_estimated_fees: attribution.hasEstimatedFees,
-          implied_commission_rate: null, // No fabricated rates — show "payout margin" badge instead
+          implied_commission_rate: null,
+          shipping_deduction: Math.round(shippingDeduction),
+          order_count: mpOrderCount,
         });
       }
 
