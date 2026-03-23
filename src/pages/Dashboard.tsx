@@ -831,7 +831,7 @@ export default function Dashboard() {
                 </Link>
               </Button>
             )}
-            <ConnectionStatusBar onNavigateToSettings={() => switchView('settings')} />
+            
             <span className="text-sm text-muted-foreground hidden sm:inline">
               {user?.email}
             </span>
