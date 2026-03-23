@@ -7,7 +7,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Upload, Send, Loader2, CheckCircle2, AlertTriangle, Clock, Circle } from 'lucide-react';
+import { Upload, Send, Loader2, CheckCircle2, AlertTriangle, Clock, Circle, Eye } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import SettlementDetailDrawer from '@/components/shared/SettlementDetailDrawer';
 import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_CATALOG } from './MarketplaceSwitcher';
 import type { UserMarketplace } from './MarketplaceSwitcher';
@@ -25,6 +27,7 @@ interface MarketplaceStatus {
   code: string;
   name: string;
   icon: string;
+  latestSettlementId: string | null;
   latestReceived: string | null;
   lastSentToXero: string | null;
   lastSentDate: string | null;
@@ -47,6 +50,8 @@ export default function SettlementsOverview({
   const [batchPreviewOpen, setBatchPreviewOpen] = useState(false);
   const [batchSettlements, setBatchSettlements] = useState<Array<{ settlementId: string; marketplace: string }>>([]);
   const [pendingBatchCode, setPendingBatchCode] = useState<string | null>(null);
+  const [drawerSettlementId, setDrawerSettlementId] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -71,6 +76,9 @@ export default function SettlementsOverview({
         // Latest received (most recent period_end)
         const latestReceived = marketplaceSettlements.length > 0
           ? marketplaceSettlements[0].period_end
+          : null;
+        const latestSettlementId = marketplaceSettlements.length > 0
+          ? marketplaceSettlements[0].settlement_id
           : null;
 
         // Latest sent to Xero
@@ -129,6 +137,7 @@ export default function SettlementsOverview({
           code,
           name: cat?.name || code,
           icon: cat?.icon || '📦',
+          latestSettlementId,
           latestReceived,
           lastSentToXero,
           lastSentDate,
@@ -320,6 +329,26 @@ export default function SettlementsOverview({
 
               {/* Actions */}
               <div className="flex items-center justify-end gap-1.5 min-w-[120px]">
+                {row.latestSettlementId && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0"
+                          onClick={() => {
+                            setDrawerSettlementId(row.latestSettlementId);
+                            setDrawerOpen(true);
+                          }}
+                        >
+                          <Eye className="h-3 w-3 text-muted-foreground" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="left" className="text-xs">Preview settlement</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
@@ -363,6 +392,12 @@ export default function SettlementsOverview({
         }}
         onConfirm={handleBatchConfirm}
         settlements={batchSettlements}
+      />
+
+      <SettlementDetailDrawer
+        settlementId={drawerSettlementId}
+        open={drawerOpen}
+        onClose={() => { setDrawerOpen(false); setDrawerSettlementId(null); }}
       />
     </Card>
   );

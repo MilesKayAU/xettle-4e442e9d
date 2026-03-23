@@ -14,8 +14,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   CheckCircle2, XCircle, AlertTriangle, Loader2, RefreshCw,
   Upload, ArrowRight, Send, Search, PartyPopper, Clock, Filter,
-  ArrowUpDown, ArrowUp, ArrowDown, CalendarDays, Pause, Play, ChevronDown, ChevronUp, Square, CheckSquare,
+  ArrowUpDown, ArrowUp, ArrowDown, CalendarDays, Pause, Play, ChevronDown, ChevronUp, Square, CheckSquare, Eye,
 } from 'lucide-react';
+import SettlementDetailDrawer from '@/components/shared/SettlementDetailDrawer';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
@@ -123,6 +124,8 @@ export default function ValidationSweep({
   const [togglingPause, setTogglingPause] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkPushing, setBulkPushing] = useState(false);
+  const [drawerSettlementId, setDrawerSettlementId] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const handleConfirmBankMatch = async (row: ValidationRow, transactionId: string) => {
     setConfirmingBank(row.id);
@@ -637,15 +640,37 @@ export default function ValidationSweep({
                         <StatusPill status={row.overall_status} isApiSynced={apiSyncedCodes.has(row.marketplace_code)} />
                       </td>
                       <td className="px-3 py-2 text-center">
-                        <RowAction
-                          row={row}
-                          pushing={pushing === row.id}
-                          syncing={syncingRow === row.id}
-                          isApiSynced={apiSyncedCodes.has(row.marketplace_code)}
-                          onUpload={() => onSwitchToUpload?.(row.marketplace_code, row.period_label)}
-                          onPush={() => handlePush(row)}
-                          onSync={() => handleSyncRow(row)}
-                        />
+                        <div className="inline-flex items-center gap-1">
+                          {row.settlement_id && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0"
+                                    onClick={() => {
+                                      setDrawerSettlementId(row.settlement_id);
+                                      setDrawerOpen(true);
+                                    }}
+                                  >
+                                    <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="text-xs">Preview settlement details</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                          <RowAction
+                            row={row}
+                            pushing={pushing === row.id}
+                            syncing={syncingRow === row.id}
+                            isApiSynced={apiSyncedCodes.has(row.marketplace_code)}
+                            onUpload={() => onSwitchToUpload?.(row.marketplace_code, row.period_label)}
+                            onPush={() => handlePush(row)}
+                            onSync={() => handleSyncRow(row)}
+                          />
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -707,6 +732,12 @@ export default function ValidationSweep({
           onConfirm={async () => { setPreviewOpen(false); setSelectedIds(new Set()); loadData(); }}
         />
       )}
+
+      <SettlementDetailDrawer
+        settlementId={drawerSettlementId}
+        open={drawerOpen}
+        onClose={() => { setDrawerOpen(false); setDrawerSettlementId(null); }}
+      />
     </div>
   );
 }
