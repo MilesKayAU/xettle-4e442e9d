@@ -471,12 +471,12 @@ export default function ValidationSweep({
   return (
     <div className="space-y-4">
       {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-        <SummaryCard label="All Periods" count={statusCounts.all} emoji="📋" active={filter === 'all'} onClick={() => { setFilter('all'); }} bgClass="bg-muted/50" borderClass="border-border" />
-        <SummaryCard label="Complete" count={statusCounts.complete} emoji="✅" active={filter === 'complete'} onClick={() => { setFilter('complete'); }} bgClass="bg-emerald-50 dark:bg-emerald-900/20" borderClass="border-emerald-200 dark:border-emerald-800" />
+      <div className="grid grid-cols-2 sm:grid-cols-[1.3fr_1.3fr_1fr_1fr_1fr] gap-2">
         <SummaryCard label="Ready to Push" count={statusCounts.ready_to_push} emoji="🚀" active={filter === 'ready_to_push'} onClick={() => { setFilter('ready_to_push'); }} bgClass="bg-blue-50 dark:bg-blue-900/20" borderClass="border-blue-200 dark:border-blue-800" />
         <SummaryCard label="Upload Needed" count={statusCounts.settlement_needed_manual} emoji="📤" active={filter === 'settlement_needed'} onClick={() => { setFilter('settlement_needed'); setDateFrom(''); setDateTo(''); setMarketplaceFilter('all'); }} bgClass="bg-amber-50 dark:bg-amber-900/20" borderClass="border-amber-200 dark:border-amber-800" subtitle={statusCounts.settlement_needed_api > 0 ? `${statusCounts.settlement_needed_manual} manual · ${statusCounts.settlement_needed_api} auto-sync` : undefined} />
-        <SummaryCard label="Gaps" count={statusCounts.gap_detected} emoji="⚠️" active={filter === 'gap_detected'} onClick={() => { setFilter('gap_detected'); setDateFrom(''); setDateTo(''); setMarketplaceFilter('all'); }} bgClass="bg-red-50 dark:bg-red-900/20" borderClass="border-red-200 dark:border-red-800" />
+        <SummaryCard label="All Periods" count={statusCounts.all} emoji="📋" active={filter === 'all'} onClick={() => { setFilter('all'); }} bgClass="bg-muted/50" borderClass="border-border" compact />
+        <SummaryCard label="Complete" count={statusCounts.complete} emoji="✅" active={filter === 'complete'} onClick={() => { setFilter('complete'); }} bgClass="bg-emerald-50 dark:bg-emerald-900/20" borderClass="border-emerald-200 dark:border-emerald-800" compact />
+        <SummaryCard label="Gaps" count={statusCounts.gap_detected} emoji="⚠️" active={filter === 'gap_detected'} onClick={() => { setFilter('gap_detected'); setDateFrom(''); setDateTo(''); setMarketplaceFilter('all'); }} bgClass="bg-red-50 dark:bg-red-900/20" borderClass="border-red-200 dark:border-red-800" compact />
       </div>
 
       {/* Upload Needed sub-tabs: Manual vs API */}
@@ -845,21 +845,22 @@ export default function ValidationSweep({
 }
 
 function SummaryCard({
-  label, count, emoji, active, onClick, bgClass, borderClass, subtitle,
+  label, count, emoji, active, onClick, bgClass, borderClass, subtitle, compact,
 }: {
   label: string; count: number; emoji: string; active: boolean;
-  onClick: () => void; bgClass: string; borderClass: string; subtitle?: string;
+  onClick: () => void; bgClass: string; borderClass: string; subtitle?: string; compact?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
       className={cn(
-        'rounded-lg border p-4 text-left transition-all hover:shadow-sm cursor-pointer',
+        'rounded-lg border text-left transition-all hover:shadow-sm cursor-pointer',
+        compact ? 'p-2.5' : 'p-4',
         bgClass, borderClass,
       )}
     >
-      <div className="text-2xl font-bold">{emoji} {count}</div>
-      <div className="text-xs font-medium text-muted-foreground mt-1">{label}</div>
+      <div className={cn('font-bold', compact ? 'text-lg' : 'text-2xl')}>{emoji} {count}</div>
+      <div className={cn('font-medium text-muted-foreground', compact ? 'text-[10px] mt-0.5' : 'text-xs mt-1')}>{label}</div>
       {subtitle && <div className="text-[10px] text-muted-foreground mt-0.5">{subtitle}</div>}
     </button>
   );
