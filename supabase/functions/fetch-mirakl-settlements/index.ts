@@ -117,9 +117,10 @@ Deno.serve(async (req) => {
 
     for (const connection of connections) {
       try {
-        const token = await getValidMiraklToken(adminClient, connection);
+        // Marketplace APIs (TL endpoints) use direct API key auth, not OAuth Bearer
+        const apiKey = getMiraklApiKey(connection);
         const result = await fetchSettlementsForConnection(
-          adminClient, targetUserId, connection, token, body.sync_from,
+          adminClient, targetUserId, connection, apiKey, body.sync_from,
         );
         allResults.push({
           marketplace_label: connection.marketplace_label,
