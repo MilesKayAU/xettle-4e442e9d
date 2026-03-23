@@ -263,8 +263,8 @@ export default function ValidationSweep({
     let result = rows.filter((r) => !pausedCodes.has(r.marketplace_code));
     if (filter !== 'all') {
       result = result.filter((r) => {
-        // Always keep recon rows available when settlement_needed filter is active
-        if (filter === 'settlement_needed' && r.settlement_id?.startsWith('shopify_auto_')) return true;
+        // Keep useful recon rows available when settlement_needed filter is active
+        if (filter === 'settlement_needed' && isUsefulRecon(r)) return true;
         if (filter === 'complete') return r.overall_status === 'complete' || r.overall_status === 'bank_matched'
           || r.overall_status === 'already_recorded' || r.overall_status === 'synced_external';
         if (filter === 'ready_to_push') return r.overall_status === 'ready_to_push';
@@ -279,10 +279,10 @@ export default function ValidationSweep({
       } else if (uploadSubTab === 'api') {
         result = result.filter(r => apiSyncedCodes.has(r.marketplace_code) && !r.settlement_id?.startsWith('shopify_auto_'));
       } else if (uploadSubTab === 'recon') {
-        result = result.filter(r => r.settlement_id?.startsWith('shopify_auto_'));
+        result = result.filter(r => isUsefulRecon(r));
       }
     } else {
-      // Outside the settlement_needed filter, hide recon rows from all other views
+      // Outside the settlement_needed filter, hide all recon rows
       result = result.filter(r => !r.settlement_id?.startsWith('shopify_auto_'));
     }
     if (marketplaceFilter !== 'all') {
