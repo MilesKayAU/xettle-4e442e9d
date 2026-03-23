@@ -33,7 +33,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
 
   // Form state
   const [selectedMarketplace, setSelectedMarketplace] = useState('Bunnings');
-  const [baseUrl, setBaseUrl] = useState(MIRAKL_MARKETPLACES[0].baseUrl);
+  const [baseUrl, setBaseUrl] = useState<string>(MIRAKL_MARKETPLACES[0].baseUrl);
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   const [sellerCompanyId, setSellerCompanyId] = useState('');
