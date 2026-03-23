@@ -271,6 +271,12 @@ Deno.serve(async (req) => {
   {
     const eligibleEbayUsers: string[] = [];
     for (const uid of ebayUserIds) {
+      // Check if auto-sync is enabled for this user
+      if (!isAutoSyncEnabled(uid, 'ebay')) {
+        console.log(`[scheduled-sync] eBay skipped for ${uid} — auto-sync disabled`);
+        continue;
+      }
+
       const { data: lockResult } = await adminClient.rpc('acquire_sync_lock', {
         p_user_id: uid,
         p_integration: 'ebay',
