@@ -384,17 +384,16 @@ export default function ActionCentre({
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const currentMonth = new Date().toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
 
-  // Build API sync status for Section 1
+  // Build API sync status for Section 1 — only channels with dedicated API tokens
   const apiConnections = useMemo(() => {
-    const apiRails = ['amazon_au', 'ebay_au', 'shopify_payments', 'bunnings'];
     return connectedMarketplaces
-      .filter(code => apiRails.includes(code) || apiSyncedMarketplaces.has(code))
+      .filter(code => trueApiChannels.has(code))
       .map(code => ({
         code,
         label: MARKETPLACE_LABELS[code] || code,
         synced: apiSyncedMarketplaces.has(code),
       }));
-  }, [connectedMarketplaces, apiSyncedMarketplaces]);
+  }, [connectedMarketplaces, apiSyncedMarketplaces, trueApiChannels]);
 
   const allApiSynced = apiConnections.length > 0 && apiConnections.every(c => c.synced);
 
