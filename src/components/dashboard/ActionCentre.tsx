@@ -140,14 +140,6 @@ export default function ActionCentre({
       if (connectionsRes.data) {
         const allConns = connectionsRes.data as Array<{ marketplace_code: string; connection_type: string }>;
         setConnectedMarketplaces(allConns.map(c => c.marketplace_code));
-
-        // Build set of channels with dedicated API connections (not sub-channels)
-        const apiChannels = new Set<string>(
-          allConns
-            .filter(c => isApiConnectionType(c.connection_type))
-            .map(c => c.marketplace_code)
-        );
-        setTrueApiChannels(apiChannels);
       }
       if (lastSyncRes.data?.created_at) {
         setLastAutoSync(new Date(lastSyncRes.data.created_at));
