@@ -19,6 +19,7 @@ import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
 import ShopifyConnectionStatus from '@/components/admin/ShopifyConnectionStatus';
 import EbayConnectionStatus from '@/components/admin/EbayConnectionStatus';
 import AmazonConnectionPanel from '@/components/admin/accounting/AmazonConnectionPanel';
+import MiraklConnectionPanel from '@/components/admin/accounting/MiraklConnectionPanel';
 import ChannelManagement from '@/components/shopify/ChannelManagement';
 
 interface ApiConnectionsPanelProps {
