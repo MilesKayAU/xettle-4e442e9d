@@ -96,7 +96,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      toast.success('Mirakl connection saved');
+      toast.success('Bunnings Marketplace connection saved');
       setClientId('');
       setClientSecret('');
       setApiKey('');
