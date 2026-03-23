@@ -147,8 +147,9 @@ export interface UserMarketplace {
   country_code: string;
 }
 
-/** Codes that have API auto-sync capability */
+/** Codes that have API auto-sync capability — derived from connection_type at runtime */
 const API_MARKETPLACE_CODES = new Set(['amazon_au', 'shopify_payments', 'shopify_orders', 'ebay_au']);
+export { isApiConnectionType };
 
 interface MarketplaceSwitcherProps {
   selectedMarketplace: string;
