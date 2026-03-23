@@ -68,27 +68,6 @@ interface ActionCentreProps {
 }
 
 
-function getPipelineForRow(r: ValidationRow): PipelineStage {
-  const hasSettlement = r.settlement_uploaded || r.overall_status === 'ready_to_push' || r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external' || r.overall_status === 'complete' || r.overall_status === 'bank_matched';
-  const hasXero = r.xero_pushed || r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external' || r.overall_status === 'complete' || r.overall_status === 'bank_matched';
-  // For settlement-confirmed rails, bank stage is auto-complete once posted to Xero
-  const settlementConfirmed = hasXero && !isBankMatchRequired(r.marketplace_code);
-  const hasBank = r.bank_matched || r.overall_status === 'complete' || r.overall_status === 'bank_matched' || settlementConfirmed;
-  const isReconciled = r.overall_status === 'complete' || r.overall_status === 'bank_matched' || settlementConfirmed;
-  return { settlement: hasSettlement, xero: hasXero, bank: hasBank, reconciled: isReconciled };
-}
-
-function getPipelineForCell(rows: ValidationRow[]): PipelineStage {
-  if (rows.length === 0) return { settlement: false, xero: false, bank: false, reconciled: false };
-  // Aggregate: a stage is "done" if ALL rows in the cell have it
-  return {
-    settlement: rows.every(r => getPipelineForRow(r).settlement),
-    xero: rows.every(r => getPipelineForRow(r).xero),
-    bank: rows.every(r => getPipelineForRow(r).bank),
-    reconciled: rows.every(r => getPipelineForRow(r).reconciled),
-  };
-}
-
 const EVENT_ICONS: Record<string, { icon: React.ReactNode; color: string }> = {
   settlement_saved: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: 'text-emerald-500' },
   xero_push_success: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: 'text-emerald-500' },
