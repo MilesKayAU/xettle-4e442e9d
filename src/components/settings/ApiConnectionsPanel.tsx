@@ -87,6 +87,7 @@ export default function ApiConnectionsPanel({
         amazon: !!(amazonRes.data && amazonRes.data.length > 0),
         shopify: !!(shopifyRes.data && shopifyRes.data.length > 0),
         ebay: !!(ebayRes.data && ebayRes.data.length > 0),
+        mirakl: !!(miraklRes.data && miraklRes.data.length > 0),
       });
 
       // Load sub-channels for source preference
