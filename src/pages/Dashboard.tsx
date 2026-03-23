@@ -21,7 +21,7 @@ import SkuComparisonView from '@/components/insights/SkuComparisonView';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import BugReportNotificationBanner from '@/components/bug-report/BugReportNotificationBanner';
-import ConnectionStatusBar from '@/components/shared/ConnectionStatusBar';
+// ConnectionStatusBar removed — connections now shown in SystemStatusStrip
 import XettleLogo from '@/components/shared/XettleLogo';
 import SystemStatusStrip from '@/components/dashboard/SystemStatusStrip';
 import ChannelAlertsBanner from '@/components/dashboard/ChannelAlertsBanner';
