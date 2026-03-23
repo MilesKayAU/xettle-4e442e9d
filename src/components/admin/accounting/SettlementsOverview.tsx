@@ -50,6 +50,8 @@ export default function SettlementsOverview({
   const [batchPreviewOpen, setBatchPreviewOpen] = useState(false);
   const [batchSettlements, setBatchSettlements] = useState<Array<{ settlementId: string; marketplace: string }>>([]);
   const [pendingBatchCode, setPendingBatchCode] = useState<string | null>(null);
+  const [drawerSettlementId, setDrawerSettlementId] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
