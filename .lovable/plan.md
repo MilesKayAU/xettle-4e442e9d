@@ -1,46 +1,46 @@
 
 
-## Fix Xero Connection Popup on Back Navigation
+## Settlement Audit Fix — Reconciliation-Only Push Prevention
+
+### Status: ✅ IMPLEMENTED
 
 ### Problem
+Shopify-derived `api_sync` settlements with `shopify_auto_*` IDs were incorrectly reaching `ready_to_push` status, risking $0 invoices and double-counting in Xero. The `isReconciliationOnly()` policy only caught `shopify_orders_*` marketplaces but missed the actual settlement ID pattern.
 
-When you reconnect Xero and then navigate around the dashboard, pressing the browser back button can land you back on `/xero/callback?code=...`. The `useEffect` fires again, attempts to re-use the already-consumed OAuth authorization code, and Xero returns `invalid_grant` — showing an error popup ("Connection Failed").
+### Changes Made
 
-The edge function logs confirm this: two `invalid_grant` errors from `xero-auth` at 06:00:51 and 06:01:38, both attempting code exchange.
+**1. Policy helper broadened** (`src/utils/settlement-policy.ts` + `supabase/functions/_shared/settlementPolicy.ts`)
+- Added `settlementId` parameter
+- New rule: `source === 'api_sync' && settlementId.startsWith('shopify_auto_')` → reconciliation-only
+- Original `shopify_orders_*` rule preserved
+- Both files kept identical
 
-### Root Cause
+**2. All callers updated to same signature**
+- `src/hooks/use-xero-sync.ts` — passes `settlement.settlement_id`
+- `supabase/functions/sync-settlement-to-xero/index.ts` — selects `settlement_id` in gate check, uses shared helper
+- `supabase/functions/run-validation-sweep/index.ts` — imports and uses shared helper for skip
 
-`XeroCallback.tsx` has no guard against re-processing a consumed code. It fires the edge function on every mount/re-render when search params contain `code=`.
+**3. Defense-in-depth in push endpoint**
+- `sync-settlement-to-xero` hard-refuses reconciliation-only rows with clear error message regardless of status
+- Fixed duplicate variable declarations bug
 
-### Fix
+**4. Validation sweep hardened**
+- Excludes reconciliation-only settlements BEFORE choosing "best settlement" per period
+- Uses shared `isReconciliationOnly()` helper (no inline logic)
 
-**1. XeroCallback.tsx — Prevent re-processing consumed codes**
+**5. Database trigger updated**
+- `calculate_validation_status` now derives decision from the actual linked settlement row
+- Caps reconciliation-only settlements at `settlement_needed` max status
+- Never allows `ready_to_push`, `ready_to_export`, or `exported`
 
-- Add a `useRef` processing guard so the callback only fires once per mount
-- After successful processing, use `navigate('/dashboard?connected=xero', { replace: true })` to **replace** the callback URL in browser history (already partially done for the auto-redirect, but the manual button also needs it)
-- Store the consumed code in `sessionStorage` and skip re-processing if the same code is seen again
-- On the error fallback "Back to Dashboard" button, also use `{ replace: true }` so back-arrow doesn't loop
+**6. Data migration executed**
+- Downgraded `shopify_auto_*` settlements from `ready_to_push`/`validated`/`matched` → `ingested`
+- Suppressed `api_sync` settlements where CSV/API data exists for same marketplace+period
+- Null-period safety included in suppression query
+- Never touched `exported`, `pushed_to_xero`, or `locked` statuses
+- Refreshed affected `marketplace_validation` rows
 
-**2. XeroCallback.tsx — Replace history entry on mount**
-
-- Immediately call `window.history.replaceState` to strip the `code` param from the URL on first load, preventing back-button re-entry with stale params
-
-### Technical Details
-
-```text
-Current flow:
-  /dashboard → Xero OAuth → /xero/callback?code=ABC → /dashboard?connected=xero
-  Back button → /xero/callback?code=ABC → tries code ABC again → invalid_grant error popup
-
-Fixed flow:
-  /dashboard → Xero OAuth → /xero/callback?code=ABC (replaced in history) → /dashboard?connected=xero
-  Back button → /dashboard (skips callback entirely)
-```
-
-Changes:
-- `src/pages/XeroCallback.tsx`: Add processing ref guard, store consumed code in sessionStorage, use `replace: true` on all navigations, replace history state after processing
-
-### Scope
-
-Single file change: `src/pages/XeroCallback.tsx`. No database changes needed.
-
+### Spot-check cases
+- ✅ Bunnings with CSV overlap → api_sync suppressed
+- ✅ eBay with real API payout + Shopify-derived row → api_sync suppressed
+- ✅ Marketplace with only shopify_auto_* data → visible for reconciliation, never pushable
