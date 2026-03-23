@@ -1095,15 +1095,15 @@ serve(async (req) => {
       const readySids = readySettlements.map(s => s.settlement_id);
       const { data: paidMatches } = await supabase
         .from('xero_accounting_matches')
-        .select('settlement_id')
+        .select('settlement_id, xero_invoice_id')
         .eq('user_id', userId)
-        .eq('xero_status', 'PAID')
+        .in('xero_status', ['PAID', 'AUTHORISED'])
         .in('settlement_id', readySids);
 
       if (paidMatches && paidMatches.length > 0) {
-        const paidSids = new Set(paidMatches.map(m => m.settlement_id));
+        const matchedSids = new Map(paidMatches.map(m => [m.settlement_id, m.xero_invoice_id]));
         const idsToResolve = readySettlements
-          .filter(s => paidSids.has(s.settlement_id))
+          .filter(s => matchedSids.has(s.settlement_id))
           .map(s => s.id);
 
         if (idsToResolve.length > 0) {
@@ -1111,7 +1111,28 @@ serve(async (req) => {
             .update({ status: 'already_recorded', sync_origin: 'external' })
             .in('id', idsToResolve);
           autoResolved = idsToResolve.length;
-          console.log(`[sync-xero-status] Auto-resolved ${autoResolved} ready_to_push settlements with PAID external matches`);
+          console.log(`[sync-xero-status] Auto-resolved ${autoResolved} ready_to_push settlements with PAID/AUTHORISED external matches`);
+
+          // Also update marketplace_validation so dashboard reflects the change
+          for (const s of readySettlements.filter(s => matchedSids.has(s.settlement_id))) {
+            const xeroInvId = matchedSids.get(s.settlement_id);
+            const { data: sett } = await supabase.from('settlements')
+              .select('marketplace, period_start, period_end')
+              .eq('settlement_id', s.settlement_id).eq('user_id', userId).maybeSingle();
+            if (sett) {
+              const periodLabel = `${sett.period_start} → ${sett.period_end}`;
+              await supabase.from('marketplace_validation').upsert({
+                user_id: userId,
+                marketplace_code: sett.marketplace || 'unknown',
+                period_label: periodLabel,
+                period_start: sett.period_start,
+                period_end: sett.period_end,
+                xero_pushed: true,
+                xero_invoice_id: xeroInvId,
+                xero_pushed_at: new Date().toISOString(),
+              }, { onConflict: 'user_id,marketplace_code,period_label' });
+            }
+          }
         }
       }
     }

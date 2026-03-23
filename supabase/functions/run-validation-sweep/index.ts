@@ -644,6 +644,25 @@ async function sweepUser(adminSupabase: any, userId: string) {
           record.xero_pushed_at = settlement.created_at || new Date().toISOString()
         }
 
+        // Fallback: check xero_accounting_matches (covers LMB, A2X, manual external pushes)
+        if (!record.xero_pushed && settlement && xamBySettlement.has(settlement.settlement_id)) {
+          const xam = xamBySettlement.get(settlement.settlement_id)!
+          if (['PAID', 'AUTHORISED'].includes(xam.xero_status)) {
+            record.xero_pushed = true
+            record.xero_invoice_id = xam.xero_invoice_id
+            record.xero_pushed_at = new Date().toISOString()
+
+            // For PAID matches, also mark the settlement itself as already_recorded
+            if (xam.xero_status === 'PAID') {
+              await adminSupabase.from('settlements')
+                .update({ status: 'already_recorded', sync_origin: 'external' })
+                .eq('settlement_id', settlement.settlement_id)
+                .eq('user_id', userId)
+              record.overall_status = 'already_recorded'
+            }
+          }
+        }
+
         // Step 5: Bank matching
         if (record.xero_pushed && settlement) {
           const depositAmount = Math.abs(settlement.bank_deposit || 0)
