@@ -141,24 +141,17 @@ export default function ReconciliationHealthPanel() {
         actionSection: unmappedRails.length > 0 ? 'destination-accounts' : undefined,
       });
 
-      // 4. Account mappings
-      const hasCoaWarning = setupWarnings.some(w => w.key === 'coa_mapping_incomplete');
-      const mappings = mappingsRes.data || [];
-      const connections = connectionsRes.data || [];
-      const mappedMarketplaces = new Set(mappings.map(m => m.marketplace_code));
-      const unmappedMarketplaces = connections.filter(c => !mappedMarketplaces.has(c.marketplace_code));
-
-      if (hasCoaWarning || unmappedMarketplaces.length > 0) {
+      // 4. Account mappings — use setupWarnings from useDashboardTaskCounts (source of truth)
+      const coaWarning = setupWarnings.find(w => w.key === 'coa_mapping_incomplete' || w.key === 'coa_mapping_unconfirmed');
+      if (coaWarning) {
         results.push({
-          label: 'Account mappings',
+          label: coaWarning.label,
           status: 'warn',
-          detail: unmappedMarketplaces.length > 0
-            ? `Mappings needed for: ${unmappedMarketplaces.map(m => m.marketplace_name).join(', ')}`
-            : 'Some categories are missing required Xero account codes',
-          actionLabel: 'Set up mappings',
+          detail: coaWarning.message,
+          actionLabel: coaWarning.actionLabel || 'Set up mappings',
           actionSection: 'account-mapper',
         });
-      } else if (connections.length > 0) {
+      } else if (connections.length > 0 && xeroConnected) {
         results.push({
           label: 'Account mappings complete',
           status: 'pass',
