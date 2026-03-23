@@ -389,8 +389,22 @@ export default function ActionCentre({
     );
   }
 
+  // Build API sync status for Section 1
+  const apiConnections = useMemo(() => {
+    const apiRails = ['amazon_au', 'ebay_au', 'shopify_payments', 'bunnings'];
+    return connectedMarketplaces
+      .filter(code => apiRails.includes(code) || apiSyncedMarketplaces.has(code))
+      .map(code => ({
+        code,
+        label: MARKETPLACE_LABELS[code] || code,
+        synced: apiSyncedMarketplaces.has(code),
+      }));
+  }, [connectedMarketplaces, apiSyncedMarketplaces]);
+
+  const allApiSynced = apiConnections.length > 0 && apiConnections.every(c => c.synced);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Greeting header */}
       <div className="flex items-start justify-between">
         <div>
@@ -398,107 +412,131 @@ export default function ActionCentre({
             {greeting}{userName ? `, ${userName}` : ''}.
           </h2>
           <p className="text-muted-foreground mt-1">
-            Here's your accounting health — {currentMonth}
+            Here's what needs your attention — {currentMonth}
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
           {lastAutoSync && (
             <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
               <CheckCircle2 className="h-3 w-3" />
               Auto-sync {formatTimeAgo(lastAutoSync)}
             </span>
           )}
-          {lastChecked && <span>Updated {formatTimeAgo(lastChecked)}</span>}
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" disabled={refreshing} onClick={handleRefresh}>
+            <RefreshCw className={cn("h-3 w-3", refreshing && "animate-spin")} />
+            Refresh
+          </Button>
         </div>
       </div>
 
-      {/* All-complete banner OR 4 workflow cards */}
-      {allComplete ? (
-        <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20">
-          <CardContent className="py-8 text-center space-y-2">
-            <PartyPopper className="h-8 w-8 text-emerald-600 dark:text-emerald-400 mx-auto" />
-            <h3 className="text-lg font-semibold text-emerald-800 dark:text-emerald-300">
-              All settlements reconciled for {currentMonth}
-            </h3>
-            <p className="text-sm text-emerald-700/80 dark:text-emerald-400/80">
-              Everything is matched and in Xero.
-            </p>
+      {/* ─── Section 1: API Sync Status ─── */}
+      {apiConnections.length > 0 && (
+        <Card className={cn(
+          allApiSynced
+            ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10"
+            : "border-border"
+        )}>
+          <CardContent className="py-4">
+            <div className="flex items-center gap-2 mb-3">
+              {allApiSynced ? (
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              ) : (
+                <RefreshCw className="h-4 w-4 text-muted-foreground" />
+              )}
+              <h3 className="font-semibold text-sm">
+                {allApiSynced ? 'All API channels synced' : 'API Sync Status'}
+              </h3>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {apiConnections.map(conn => (
+                <div key={conn.code} className="flex items-center gap-2 text-xs rounded-lg bg-background/50 px-3 py-2">
+                  {conn.synced ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                  ) : (
+                    <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  )}
+                  <span className={conn.synced ? 'text-foreground' : 'text-muted-foreground'}>{conn.label}</span>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Card 1 — Needs Upload (only closed months) */}
-          {uploadNeededManual.length > 0 && (
-            <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10">
-              <CardContent className="py-5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-amber-400 inline-block" />
-                    <h3 className="font-semibold text-sm">Needs Upload</h3>
-                  </div>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                    disabled={refreshingUploads}
-                    onClick={handleRefreshUploads}
-                  >
-                    <RefreshCw className={cn("h-3.5 w-3.5", refreshingUploads && "animate-spin")} />
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {refreshingUploads ? 'Checking...' : `${uploadNeededManual.length} missing settlement${uploadNeededManual.length > 1 ? 's' : ''} from closed periods`}
-                </p>
-                <ul className="space-y-1">
-                  {uploadNeededManual.map(r => (
-                    <li key={r.id} className="text-xs flex items-center gap-1.5">
-                      <span className="text-amber-400">•</span>
-                      {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {formatPeriod(r.period_start)}
-                    </li>
-                  ))}
-                </ul>
-                <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400" onClick={() => {
-                  onSwitchToUpload(buildMissingList());
-                }}>
-                  <Upload className="h-3 w-3" /> Upload now
-                </Button>
-              </CardContent>
-            </Card>
-          )}
+      )}
 
-          {/* Card 2 — Ready to Post */}
-          {readyToPush.length > 0 && (() => {
-            const totalAmount = readyToPush.reduce((sum, r) => sum + (r.settlement_net || 0), 0);
-            const hasExternalRisk = readyToPush.some(r => r.settlement_id && externalMatchIds.has(r.settlement_id));
-            return (
-            <Card className={cn(
-              "bg-blue-50/50 dark:bg-blue-900/10",
-              hasExternalRisk
-                ? "border-destructive/60 ring-1 ring-destructive/30"
-                : "border-blue-200 dark:border-blue-800"
-            )}>
-              <CardContent className="py-5 space-y-3">
-                <div className="flex items-center gap-2">
-                   <span className="h-2.5 w-2.5 rounded-full bg-blue-400 inline-block" />
-                   <h3 className="font-semibold text-sm">Send to Xero</h3>
-                 </div>
-                 <p className="text-[10px] text-muted-foreground/70 -mt-1">Not yet posted</p>
-                 {hasExternalRisk && (
-                   <div className="flex items-start gap-2 rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2">
-                     <ShieldAlert className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-                     <p className="text-[11px] text-destructive font-medium leading-tight">
-                       Some settlements below may already exist in Xero (e.g. posted by Link My Books). Open each flagged row to review before pushing.
-                     </p>
-                   </div>
-                 )}
-                 <div>
-                   <p className="text-lg font-bold text-foreground">{formatAUD(totalAmount)} <span className="text-xs font-normal text-muted-foreground">ready to send</span></p>
-                  <p className="text-xs text-muted-foreground">{readyToPush.length} settlement{readyToPush.length > 1 ? 's' : ''}</p>
+      {/* ─── Section 2: Manual Uploads Needed ─── */}
+      {uploadNeededManual.length > 0 && (
+        <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10">
+          <CardContent className="py-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Upload className="h-4 w-4 text-amber-500" />
+                <h3 className="font-semibold text-sm">Manual Uploads Needed</h3>
+                <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-[10px]">{uploadNeededManual.length}</Badge>
+              </div>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                disabled={refreshingUploads}
+                onClick={handleRefreshUploads}
+              >
+                <RefreshCw className={cn("h-3.5 w-3.5", refreshingUploads && "animate-spin")} />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              These marketplaces don't have API connections — upload settlement CSVs to keep Xero up to date.
+            </p>
+            <ul className="space-y-1.5">
+              {uploadNeededManual.map(r => (
+                <li key={r.id} className="text-xs flex items-center gap-2 bg-background/50 rounded px-3 py-1.5">
+                  <span className="text-amber-400">↑</span>
+                  <span className="font-medium">{MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code}</span>
+                  <span className="text-muted-foreground">— {formatPeriod(r.period_start)}</span>
+                </li>
+              ))}
+            </ul>
+            <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400" onClick={() => {
+              onSwitchToUpload(buildMissingList());
+            }}>
+              <Upload className="h-3 w-3" /> Upload now
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ─── Section 3: Ready to Push to Xero ─── */}
+      {readyToPush.length > 0 && (() => {
+        const totalAmount = readyToPush.reduce((sum, r) => sum + (r.settlement_net || 0), 0);
+        const hasExternalRisk = readyToPush.some(r => r.settlement_id && externalMatchIds.has(r.settlement_id));
+        return (
+          <Card className={cn(
+            "bg-blue-50/50 dark:bg-blue-900/10",
+            hasExternalRisk
+              ? "border-destructive/60 ring-1 ring-destructive/30"
+              : "border-blue-200 dark:border-blue-800"
+          )}>
+            <CardContent className="py-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <Send className="h-4 w-4 text-blue-500" />
+                <h3 className="font-semibold text-sm">Ready to Push to Xero</h3>
+                <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-[10px]">{readyToPush.length}</Badge>
+              </div>
+              {hasExternalRisk && (
+                <div className="flex items-start gap-2 rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2">
+                  <ShieldAlert className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-destructive font-medium leading-tight">
+                    Some settlements may already exist in Xero. Review flagged rows before pushing.
+                  </p>
                 </div>
-                <ul className="space-y-1">
-                  {(expandedCards['ready'] ? readyToPush : readyToPush.slice(0, 3)).map(r => {
-                    const isRisky = r.settlement_id ? externalMatchIds.has(r.settlement_id) : false;
-                    return (
+              )}
+              <div>
+                <p className="text-lg font-bold text-foreground">{formatAUD(totalAmount)} <span className="text-xs font-normal text-muted-foreground">ready to send</span></p>
+                <p className="text-xs text-muted-foreground">{readyToPush.length} settlement{readyToPush.length > 1 ? 's' : ''}</p>
+              </div>
+              <ul className="space-y-1">
+                {(expandedCards['ready'] ? readyToPush : readyToPush.slice(0, 3)).map(r => {
+                  const isRisky = r.settlement_id ? externalMatchIds.has(r.settlement_id) : false;
+                  return (
                     <li key={r.id} className={cn(
                       "text-xs flex items-center gap-1.5 cursor-pointer hover:bg-muted/40 rounded px-1 -mx-1 py-0.5",
                       isRisky && "bg-destructive/5"
@@ -518,238 +556,64 @@ export default function ActionCentre({
                       {MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code} — {formatPeriodShort(r.period_start, r.period_end)}
                       {r.settlement_net ? ` — ${formatAUD(r.settlement_net)}` : ''}
                     </li>
-                    );
-                  })}
-                  {readyToPush.length > 3 && (
-                    <li>
-                      <button onClick={() => setExpandedCards(prev => ({ ...prev, ready: !prev.ready }))} className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                        {expandedCards['ready'] ? '− Show less' : `+ ${readyToPush.length - 3} more`}
-                      </button>
-                    </li>
-                  )}
-                </ul>
-                <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1" onClick={onSwitchToSettlements}>
-                   <Search className="h-3 w-3" /> Review & send individually
-                 </Button>
-              </CardContent>
-            </Card>
-            );
-          })()}
+                  );
+                })}
+                {readyToPush.length > 3 && (
+                  <li>
+                    <button onClick={() => setExpandedCards(prev => ({ ...prev, ready: !prev.ready }))} className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                      {expandedCards['ready'] ? '− Show less' : `+ ${readyToPush.length - 3} more`}
+                    </button>
+                  </li>
+                )}
+              </ul>
+              <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1" onClick={onSwitchToSettlements}>
+                <Search className="h-3 w-3" /> Review & send individually
+              </Button>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
-          {/* Card 2b — Uploaded, needs review */}
-          {ingestedSettlements.length > 0 && (
-            <Card className="border-muted bg-muted/30">
-              <CardContent className="py-5 space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/40 inline-block" />
-                  <h3 className="font-semibold text-sm">Uploaded — needs review</h3>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {ingestedSettlements.length} settlement{ingestedSettlements.length > 1 ? 's' : ''} uploaded but not yet validated for posting.
-                </p>
-                <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1" onClick={onSwitchToSettlements}>
-                  <Search className="h-3 w-3" /> Review in Settlement Matching
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Card 2c — Auto-post failed */}
-          {autoPostFailed.length > 0 && (
-            <Card className="border-destructive/30 bg-destructive/5">
-              <CardContent className="py-5 space-y-3">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-destructive" />
-                  <h3 className="font-semibold text-sm">Auto-post Failed</h3>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {autoPostFailed.length} settlement{autoPostFailed.length > 1 ? 's' : ''} failed to auto-post.
-                </p>
-                <ul className="space-y-1">
-                  {autoPostFailed.slice(0, 3).map(s => (
-                    <li key={s.id} className="text-xs flex items-center gap-1.5 cursor-pointer hover:bg-muted/40 rounded px-1 -mx-1 py-0.5" onClick={() => { setDrawerSettlementId(s.settlement_id); setDrawerOpen(true); }}>
-                      <span className="text-destructive">•</span>
-                      {MARKETPLACE_LABELS[s.marketplace || ''] || s.marketplace} — {formatPeriodShort(s.period_start, s.period_end)}
-                    </li>
-                  ))}
-                  {autoPostFailed.length > 3 && (
-                    <li className="text-xs text-muted-foreground">+ {autoPostFailed.length - 3} more</li>
-                  )}
-                </ul>
-                <p className="text-[10px] text-muted-foreground">
-                  Review and retry in Settings → Rail Posting Mode
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Card 3 — Posted — Awaiting Deposit */}
-          {awaitingBank.length > 0 && (() => {
-            const grouped = groupByMarketplaceMonth(awaitingBank);
-            return (
-            <Card className="border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-900/20">
-              <CardContent className="py-5 space-y-3">
-                 <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-amber-400 inline-block" />
-                    <h3 className="font-semibold text-sm">Waiting for Payout</h3>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground/70 -mt-1">Posted, awaiting destination match</p>
-                  <div>
-                    <p className="text-lg font-bold text-foreground">{formatAUD(awaitingBank.reduce((sum, r) => sum + (r.settlement_net || 0), 0))} <span className="text-xs font-normal text-muted-foreground">awaiting payout</span></p>
-                    <p className="text-xs text-muted-foreground">{awaitingBank.length} settlement{awaitingBank.length > 1 ? 's' : ''} posted to Xero</p>
-                    {(() => {
-                      const oldestDate = awaitingBank.reduce((oldest, r) => {
-                        const d = new Date(r.period_end);
-                        return !oldest || d < oldest ? d : oldest;
-                      }, null as Date | null);
-                      if (!oldestDate) return null;
-                      const daysWaiting = Math.floor((Date.now() - oldestDate.getTime()) / 86400000);
-                      return (
-                        <p className={cn("text-[10px] mt-0.5", daysWaiting > 7 ? "text-amber-600 dark:text-amber-400 font-medium" : "text-muted-foreground")}>
-                          Oldest waiting: {daysWaiting} day{daysWaiting !== 1 ? 's' : ''}
-                          {daysWaiting > 7 && ' ⚠'}
-                        </p>
-                      );
-                    })()}
-                </div>
-                <ul className="space-y-1">
-                  {(expandedCards['bank'] ? grouped : grouped.slice(0, 3)).map(g => (
-                    <li key={g.key} className="text-xs flex items-center gap-1.5">
-                      <span className="text-muted-foreground">•</span>
-                      <span>{g.label}</span>
-                      {g.count > 1 ? (
-                        <span className="text-muted-foreground">· {g.count} settlements{g.total ? ` · ${formatAUD(g.total)}` : ''}</span>
-                      ) : g.total ? (
-                        <span className="text-muted-foreground">· {formatAUD(g.total)}</span>
-                      ) : null}
-                    </li>
-                  ))}
-                  {grouped.length > 3 && (
-                    <li>
-                      <button onClick={() => setExpandedCards(prev => ({ ...prev, bank: !prev.bank }))} className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                        {expandedCards['bank'] ? '− Show less' : `+ ${grouped.length - 3} more`}
-                      </button>
-                    </li>
-                  )}
-                </ul>
-                <p className="text-[10px] text-muted-foreground italic">
-                   This is normal — marketplace payouts typically arrive within 1–3 business days.
-                 </p>
-              </CardContent>
-            </Card>
-            );
-          })()}
-
-          {/* Card 4 — Fully Reconciled */}
-          {complete.length > 0 && (() => {
-            const grouped = groupByMarketplaceMonth(complete);
-            return (
-            <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10">
-              <CardContent className="py-5 space-y-3">
-                <div className="flex items-center gap-2">
-                   <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                   <h3 className="font-semibold text-sm">All Good</h3>
-                 </div>
-                 <p className="text-[10px] text-muted-foreground/70 -mt-1">Verified payouts</p>
-                <p className="text-xs text-muted-foreground">
-                  {complete.length} settlement{complete.length > 1 ? 's' : ''} matched
-                </p>
-                <ul className="space-y-1">
-                  {(expandedCards['complete'] ? grouped : grouped.slice(0, 3)).map(g => (
-                    <li key={g.key} className="text-xs flex items-center gap-1.5">
-                      <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                      <span>{g.label}</span>
-                      {g.count > 1 && (
-                        <span className="text-muted-foreground">· {g.count} settlements{g.total ? ` · ${formatAUD(g.total)}` : ''}</span>
-                      )}
-                    </li>
-                  ))}
-                  {grouped.length > 3 && (
-                    <li>
-                      <button onClick={() => setExpandedCards(prev => ({ ...prev, complete: !prev.complete }))} className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                        {expandedCards['complete'] ? '− Show less' : `+ ${grouped.length - 3} more`}
-                      </button>
-                    </li>
-                  )}
-                </ul>
-              </CardContent>
-            </Card>
-            );
-          })()}
-        </div>
-      )}
-
-
-      {/* Activity log */}
-      {events.length > 0 && (
-        <Card className="border-border">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Issues & recent actions</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="space-y-2">
-              {groupActivityEvents(events).map((item, idx) => {
-                 const cfg = EVENT_ICONS[item.event_type] || { icon: <Clock className="h-3.5 w-3.5" />, color: 'text-muted-foreground' };
-                 const isActionable = item.event_type === 'bank_match_failed' || item.event_type === 'xero_push_failed' || item.event_type === 'reconciliation_mismatch';
-                 return (
-                   <div key={idx} className="flex items-center gap-2.5 text-xs">
-                     <span className={cfg.color}>{cfg.icon}</span>
-                     <span className="text-foreground flex-1">
-                       {item.label}
-                       {item.count > 1 && (
-                         <span className="text-muted-foreground ml-1">({item.count} periods)</span>
-                       )}
-                     </span>
-                     {isActionable && (
-                       <Button
-                         variant="ghost"
-                         size="sm"
-                         className="h-6 px-2 text-[10px] text-primary hover:text-primary"
-                         onClick={() => {
-                           if (item.event_type === 'bank_match_failed' && onSwitchToReconciliation) onSwitchToReconciliation();
-                           else if (item.event_type === 'xero_push_failed') onSwitchToSettlements();
-                           else if (item.event_type === 'reconciliation_mismatch' && onSwitchToReconciliation) onSwitchToReconciliation();
-                         }}
-                       >
-                         {item.event_type === 'bank_match_failed' ? 'Sync feed →' : item.event_type === 'xero_push_failed' ? 'Retry →' : 'View →'}
-                       </Button>
-                     )}
-                     <span className="text-muted-foreground flex-shrink-0">
-                       {formatTimeAgo(new Date(item.created_at))}
-                     </span>
-                   </div>
-                 );
-               })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Quick link to Reconciliation Hub */}
-      {(awaitingBank.length > 0 || gapDetected.length > 0) && onSwitchToReconciliation && (
-        <Card className="border-border">
-          <CardContent className="py-4 flex items-center justify-between">
+      {/* Auto-post failed — always surface errors */}
+      {autoPostFailed.length > 0 && (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="py-4 space-y-3">
             <div className="flex items-center gap-2">
-              <Search className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-foreground">Review reconciliation issues in detail</span>
+              <AlertTriangle className="h-4 w-4 text-destructive" />
+              <h3 className="font-semibold text-sm">Auto-post Failed</h3>
             </div>
-            <Button variant="outline" size="sm" className="text-xs gap-1" onClick={onSwitchToReconciliation}>
-              Open Reconciliation Hub <ArrowRight className="h-3 w-3" />
-            </Button>
+            <p className="text-xs text-muted-foreground">
+              {autoPostFailed.length} settlement{autoPostFailed.length > 1 ? 's' : ''} failed to auto-post. Review in Settings → Rail Posting Mode.
+            </p>
+            <ul className="space-y-1">
+              {autoPostFailed.slice(0, 3).map(s => (
+                <li key={s.id} className="text-xs flex items-center gap-1.5 cursor-pointer hover:bg-muted/40 rounded px-1 -mx-1 py-0.5" onClick={() => { setDrawerSettlementId(s.settlement_id); setDrawerOpen(true); }}>
+                  <span className="text-destructive">•</span>
+                  {MARKETPLACE_LABELS[s.marketplace || ''] || s.marketplace} — {formatPeriodShort(s.period_start, s.period_end)}
+                </li>
+              ))}
+              {autoPostFailed.length > 3 && (
+                <li className="text-xs text-muted-foreground">+ {autoPostFailed.length - 3} more</li>
+              )}
+            </ul>
           </CardContent>
         </Card>
       )}
 
-      {/* Floating upload button — secondary style, dashboard is read-only feeling */}
-      <div className="fixed bottom-6 right-6 z-40">
-        <Button
-          variant="outline"
-          onClick={() => onSwitchToUpload()}
-          className="h-10 px-4 gap-2 shadow-md rounded-full bg-background/90 backdrop-blur-sm text-xs"
-        >
-          <Plus className="h-3.5 w-3.5" /> Upload settlement
-        </Button>
-      </div>
+      {/* All-complete banner */}
+      {allComplete && (
+        <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20">
+          <CardContent className="py-6 text-center space-y-2">
+            <PartyPopper className="h-7 w-7 text-emerald-600 dark:text-emerald-400 mx-auto" />
+            <h3 className="text-base font-semibold text-emerald-800 dark:text-emerald-300">
+              You're all caught up for {currentMonth}
+            </h3>
+            <p className="text-xs text-emerald-700/80 dark:text-emerald-400/80">
+              All settlements are processed and in Xero.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Settlement Detail Drawer */}
       <SettlementDetailDrawer
