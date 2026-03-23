@@ -62,7 +62,8 @@ export async function getMiraklAuthHeader(
     return buildApiKeyResult(row.api_key, row.auth_header_type);
   }
 
-  // OAuth or both — try OAuth first
+  // OAuth or both — always use Bearer regardless of auth_header_type.
+  // OAuth mode overrides the header type column.
   try {
     const bearerToken = await refreshOAuthToken(adminClient, row);
     return { headerName: "Authorization", headerValue: `Bearer ${bearerToken}` };
