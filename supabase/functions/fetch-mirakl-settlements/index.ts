@@ -109,9 +109,10 @@ Deno.serve(async (req) => {
       .eq("user_id", targetUserId);
 
     if (connErr) throw connErr;
+    console.log("[fetch-mirakl-settlements] Connections found:", connections?.length ?? 0);
     if (!connections || connections.length === 0) {
       return new Response(
-        JSON.stringify({ error: "No Mirakl connections found" }),
+        JSON.stringify({ error: "No Bunnings connections found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
