@@ -1,34 +1,50 @@
 import { useEffect, useRef, useState } from 'react';
 import { logger } from '@/utils/logger';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, CheckCircle, XCircle } from 'lucide-react';
+import {
+  buildXeroCompletionPath,
+  clearXeroOauthReturnPath,
+  clearXeroOauthState,
+  getXeroOauthReturnPath,
+  XERO_OAUTH_STATE_KEY,
+} from '@/utils/xero-oauth';
 
 const XeroCallback = () => {
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('Processing Xero authorization...');
   const [tenants, setTenants] = useState<Array<{ id: string; name: string }>>([]);
   const processingRef = useRef(false);
+  const completionPathRef = useRef('/dashboard?connected=xero');
+  const redirectTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const code = searchParams.get('code');
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const error = params.get('error');
+    const errorDescription = params.get('error_description');
+    const state = params.get('state');
+    const returnPath = getXeroOauthReturnPath();
+    const completionPath = buildXeroCompletionPath(returnPath);
 
-    // Immediately strip code from URL to prevent back-button re-entry
-    if (code) {
-      const cleanUrl = window.location.pathname;
-      window.history.replaceState(null, '', cleanUrl);
+    completionPathRef.current = completionPath;
+
+    if (code || error || state) {
+      window.history.replaceState({ xeroCallbackHandled: true }, '', completionPath);
     }
 
     const handleCallback = async () => {
-      const error = searchParams.get('error');
-      const errorDescription = searchParams.get('error_description');
-      const state = searchParams.get('state');
+      if (!code && !error) {
+        clearXeroOauthState();
+        navigate(completionPath, { replace: true });
+        return;
+      }
 
-      const storedState = sessionStorage.getItem('xero_oauth_state');
+      const storedState = sessionStorage.getItem(XERO_OAUTH_STATE_KEY);
       if (storedState && state !== storedState) {
         setStatus('error');
         setMessage('Security validation failed. Please try again.');
@@ -41,18 +57,15 @@ const XeroCallback = () => {
         return;
       }
 
-      if (!code) {
-        setStatus('error');
-        setMessage('No authorization code received from Xero.');
-        return;
-      }
-
       // Guard: prevent re-processing the same code
       const consumedKey = `xero_code_consumed_${code}`;
       if (sessionStorage.getItem(consumedKey)) {
-        navigate('/dashboard?connected=xero', { replace: true });
+        clearXeroOauthState();
+        clearXeroOauthReturnPath();
+        navigate(completionPath, { replace: true });
         return;
       }
+
       if (processingRef.current) return;
       processingRef.current = true;
 
@@ -79,7 +92,8 @@ const XeroCallback = () => {
         setTenants(result?.tenants || []);
         setStatus('success');
         setMessage('Successfully connected to Xero!');
-        sessionStorage.removeItem('xero_oauth_state');
+        clearXeroOauthState();
+        clearXeroOauthReturnPath();
 
         // Auto-trigger AI Account Mapper (caches CoA + suggests mappings)
         try {
@@ -159,18 +173,32 @@ const XeroCallback = () => {
         }
         
         // Auto-redirect after brief success display
-        setTimeout(() => {
-          navigate('/dashboard?connected=xero', { replace: true });
+        redirectTimerRef.current = window.setTimeout(() => {
+          navigate(completionPath, { replace: true });
         }, 2000);
       } catch (err: any) {
         console.error('Xero callback error:', err);
+
+        if (/invalid_grant/i.test(err?.message || '')) {
+          clearXeroOauthState();
+          clearXeroOauthReturnPath();
+          navigate(completionPath, { replace: true });
+          return;
+        }
+
         setStatus('error');
         setMessage(err.message || 'Failed to complete Xero authorization.');
       }
     };
 
     handleCallback();
-  }, []);
+
+    return () => {
+      if (redirectTimerRef.current !== null) {
+        window.clearTimeout(redirectTimerRef.current);
+      }
+    };
+  }, [navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -202,7 +230,7 @@ const XeroCallback = () => {
               </ul>
             </div>
           )}
-          <Button onClick={() => navigate('/dashboard?connected=xero', { replace: true })} className="w-full">
+          <Button onClick={() => navigate(completionPathRef.current, { replace: true })} className="w-full">
             {status === 'success' ? 'Continue to Dashboard' : 'Back to Dashboard'}
           </Button>
         </CardContent>

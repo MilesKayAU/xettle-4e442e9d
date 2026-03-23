@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Link2, Unlink, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { storeXeroOauthReturnPath, XERO_OAUTH_STATE_KEY } from '@/utils/xero-oauth';
 
 interface Tenant {
   id: string;
@@ -92,11 +93,12 @@ const XeroConnectionStatus = () => {
 
       // Store state for CSRF protection
       if (result?.state) {
-        sessionStorage.setItem('xero_oauth_state', result.state);
+        sessionStorage.setItem(XERO_OAUTH_STATE_KEY, result.state);
       }
 
       // Redirect to Xero
       if (result?.authUrl) {
+        storeXeroOauthReturnPath();
         window.location.href = result.authUrl;
       } else {
         throw new Error('No authorization URL received');
