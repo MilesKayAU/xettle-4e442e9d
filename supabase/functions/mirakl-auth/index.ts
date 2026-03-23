@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
       const body = await req.json();
       const {
         base_url, client_id, client_secret,
-        api_key, auth_mode,
+        api_key, auth_mode, auth_header_type,
         seller_company_id, marketplace_label,
       } = body;
 
