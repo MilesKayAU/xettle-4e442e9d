@@ -11,14 +11,8 @@ import { CheckCircle2, XCircle, Loader2, Unplug, RefreshCw, Link2, Info, Setting
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-const MIRAKL_MARKETPLACES = [
-  { label: 'Bunnings', baseUrl: 'https://marketplace.bunnings.com.au' },
-  { label: 'Catch', baseUrl: 'https://marketplace.catch.com.au' },
-  { label: 'MyDeal', baseUrl: 'https://marketplace.mydeal.com.au' },
-  { label: 'Kogan', baseUrl: 'https://marketplace.kogan.com' },
-  { label: 'Decathlon', baseUrl: 'https://marketplace.decathlon.com.au' },
-  { label: 'Other', baseUrl: '' },
-] as const;
+const BUNNINGS_BASE_URL = 'https://marketplace.bunnings.com.au';
+
 
 type AuthMode = 'oauth' | 'api_key' | 'both';
 type AuthHeaderType = 'auto' | 'bearer' | 'authorization' | 'x-api-key';
