@@ -67,9 +67,6 @@ interface ActionCentreProps {
   
 }
 
-// Pipeline stage helpers
-const PIPELINE_STAGES = ['S', 'X', 'B', 'R'] as const; // Settlement, Xero, Bank, Reconciled
-type PipelineStage = { settlement: boolean; xero: boolean; bank: boolean; reconciled: boolean };
 
 function getPipelineForRow(r: ValidationRow): PipelineStage {
   const hasSettlement = r.settlement_uploaded || r.overall_status === 'ready_to_push' || r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external' || r.overall_status === 'complete' || r.overall_status === 'bank_matched';
