@@ -126,6 +126,7 @@ export default function ValidationSweep({
   const [bulkPushing, setBulkPushing] = useState(false);
   const [drawerSettlementId, setDrawerSettlementId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [uploadSubTab, setUploadSubTab] = useState<'manual' | 'api'>('manual');
 
   const handleConfirmBankMatch = async (row: ValidationRow, transactionId: string) => {
     setConfirmingBank(row.id);
@@ -268,6 +269,14 @@ export default function ValidationSweep({
         return r.overall_status === filter;
       });
     }
+    // Apply manual/api sub-tab when settlement_needed filter is active
+    if (filter === 'settlement_needed') {
+      if (uploadSubTab === 'manual') {
+        result = result.filter(r => !apiSyncedCodes.has(r.marketplace_code));
+      } else if (uploadSubTab === 'api') {
+        result = result.filter(r => apiSyncedCodes.has(r.marketplace_code));
+      }
+    }
     if (marketplaceFilter !== 'all') {
       result = result.filter((r) => r.marketplace_code === marketplaceFilter);
     }
@@ -291,7 +300,7 @@ export default function ValidationSweep({
         : String(bVal).localeCompare(String(aVal));
     });
     return result;
-  }, [rows, filter, marketplaceFilter, dateFrom, dateTo, sortKey, sortDir, pausedCodes]);
+  }, [rows, filter, marketplaceFilter, dateFrom, dateTo, sortKey, sortDir, pausedCodes, uploadSubTab, apiSyncedCodes]);
 
   const uniqueMarketplaces = useMemo(() => [...new Set(rows.map((r) => r.marketplace_code))].sort(), [rows]);
 
@@ -349,7 +358,7 @@ export default function ValidationSweep({
   };
 
   // Reset selection and page when filters change
-  useEffect(() => { setSelectedIds(new Set()); setPage(1); }, [filter, marketplaceFilter, dateFrom, dateTo]);
+  useEffect(() => { setSelectedIds(new Set()); setPage(1); setUploadSubTab('manual'); }, [filter, marketplaceFilter, dateFrom, dateTo]);
 
   // Selectable rows (only ready_to_push)
   const selectableRows = useMemo(() => filteredRows.filter(r => r.overall_status === 'ready_to_push' && r.settlement_id), [filteredRows]);
@@ -439,30 +448,56 @@ export default function ValidationSweep({
         <SummaryCard label="Gaps" count={statusCounts.gap_detected} emoji="⚠️" active={filter === 'gap_detected'} onClick={() => { setFilter('gap_detected'); setDateFrom(''); setDateTo(''); setMarketplaceFilter('all'); }} bgClass="bg-red-50 dark:bg-red-900/20" borderClass="border-red-200 dark:border-red-800" />
       </div>
 
-      {/* Upload Needed guidance banner */}
-      {filter === 'settlement_needed' && filteredRows.length > 0 && (() => {
-        const apiRows = filteredRows.filter(r => apiSyncedCodes.has(r.marketplace_code));
-        const manualRows = filteredRows.filter(r => !apiSyncedCodes.has(r.marketplace_code));
-        return (
-          <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 space-y-2">
-            <p className="text-sm font-medium text-amber-800 dark:text-amber-300 mb-1">
-              📤 {filteredRows.length} period{filteredRows.length !== 1 ? 's' : ''} need a settlement file
-            </p>
-            {manualRows.length > 0 && (
+      {/* Upload Needed sub-tabs: Manual vs API */}
+      {filter === 'settlement_needed' && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/30 p-1 w-fit">
+            <button
+              onClick={() => setUploadSubTab('manual')}
+              className={cn(
+                'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                uploadSubTab === 'manual'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              📤 Manual Uploads ({statusCounts.settlement_needed_manual})
+            </button>
+            <button
+              onClick={() => setUploadSubTab('api')}
+              className={cn(
+                'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                uploadSubTab === 'api'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              🔄 API Syncs ({statusCounts.settlement_needed_api})
+            </button>
+          </div>
+          {uploadSubTab === 'manual' && filteredRows.length > 0 && (
+            <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
               <p className="text-xs text-amber-700 dark:text-amber-400">
                 Click <strong>Upload</strong> on any row to go straight to the upload page for that marketplace.
               </p>
-            )}
-            {apiRows.length > 0 && (
+            </div>
+          )}
+          {uploadSubTab === 'api' && filteredRows.length > 0 && (
+            <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-3">
               <p className="text-xs text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
                 <CheckCircle2 className="h-3 w-3" />
-                {apiRows.length} of these are API-connected channels — they'll sync automatically. No action needed.
+                These channels sync automatically via API. Click <strong>Sync</strong> to trigger a manual refresh if needed.
               </p>
-            )}
-          </div>
-        );
-      })()}
-      {filteredRows.length === 0 && filter !== 'all' && rows.length > 0 && (
+            </div>
+          )}
+          {uploadSubTab === 'api' && statusCounts.settlement_needed_api === 0 && (
+            <div className="rounded-lg border border-border bg-muted/30 px-4 py-3">
+              <p className="text-xs text-muted-foreground">No API-synced periods are pending — all caught up! 🎉</p>
+            </div>
+          )}
+        </div>
+      )}
+      {filteredRows.length === 0 && filter !== 'all' && filter !== 'settlement_needed' && rows.length > 0 && (
         <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
           <p className="text-sm font-medium text-amber-800 dark:text-amber-300">No results — your date or marketplace filter may be hiding them.</p>
           <Button variant="ghost" size="sm" className="mt-1 text-xs text-amber-700 dark:text-amber-400 h-7 px-2" onClick={() => { setFilter('all'); setDateFrom(''); setDateTo(''); setMarketplaceFilter('all'); }}>
