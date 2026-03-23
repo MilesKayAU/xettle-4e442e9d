@@ -225,6 +225,15 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
 
   useEffect(() => {
     loadHistory();
+    // Fetch user account code mappings for canonical line-item resolution
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase.from('app_settings').select('value').eq('user_id', user.id).eq('key', 'accounting_xero_account_codes').maybeSingle();
+      if (data?.value) {
+        try { setUserAccountCodes(JSON.parse(data.value)); } catch { /* ignore */ }
+      }
+    })();
   }, [loadHistory]);
 
   // ─── Duplicate / gap checks ─────────────────────────────────────────────────
