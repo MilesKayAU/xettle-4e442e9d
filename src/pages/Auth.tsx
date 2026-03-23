@@ -72,7 +72,7 @@ export default function Auth() {
           // After auth, auto-initiate Shopify OAuth
           initiateShopifyOAuth(session.user.id);
         } else {
-          navigate('/dashboard');
+          navigate('/dashboard', { replace: true });
         }
       }
     });
