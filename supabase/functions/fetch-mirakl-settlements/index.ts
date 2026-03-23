@@ -231,6 +231,7 @@ async function fetchSettlementsForConnection(
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(txn);
   }
+  console.log(`[fetch-mirakl-settlements] 📊 Grouped into ${groups.size} payout groups`);
 
   let imported = 0;
   let skipped = 0;
