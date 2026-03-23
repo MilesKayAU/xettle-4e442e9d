@@ -342,6 +342,8 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showHidden, setShowHidden] = useState(false);
   const [externalMatchIds, setExternalMatchIds] = useState<Set<string>>(new Set());
+  // Validation pipeline counts (from marketplace_validation — the true source of what needs pushing)
+  const [validationCounts, setValidationCounts] = useState<{ ready: number; readyTotal: number; uploadNeeded: number; gaps: number } | null>(null);
 
   const fetchAll = useCallback(async () => {
     try {
