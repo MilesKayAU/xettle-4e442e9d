@@ -1,99 +1,52 @@
 
 
-## Mirakl Safety Fixes — Verification Audit
+## Shipping Cost Deduction in Profit Ranking — Data Availability & Plan
 
-### Item 1: settlement_lines delete-before-insert — PASS
+### What Data We Have
 
-**Lines 459-481** of `fetch-mirakl-settlements/index.ts` contain the actual implementation:
+1. **`settlement_profit` table** — already has `orders_count` and `units_sold` per settlement per marketplace. This is populated by the profit engine when SKU cost data exists.
 
-```text
-// 1. Delete existing lines
-await adminClient
-  .from("settlement_lines")
-  .delete()
-  .eq("user_id", userId)
-  .eq("settlement_id", settlementId);
+2. **`settlement_lines` table** — has individual transaction rows with `order_id`. We can count distinct `order_id` values per marketplace to get order counts even when no SKU costs are entered.
 
-// 2. Batch insert in chunks of 500
-for (let i = 0; i < lineRows.length; i += 500) { ... }
-```
+3. **`app_settings`** — stores `postage_cost:{marketplace_code}` (the user's estimated shipping cost per order) and `fulfilment_method:{marketplace_code}`.
 
-This is a real `DELETE` call followed by `INSERT`, not insert-only. The delete filters on both `user_id` and `settlement_id`. Idempotency is correct — re-running the fetch will delete old lines and rewrite them. Each transaction produces one `settlement_lines` row with all required fields (lines 316-328): `settlement_id`, `user_id`, `order_id`, `amount`, `transaction_type`, `accounting_category`, `posted_date`, `marketplace_name`.
+### The Gap Today
 
-**One missing field**: The line rows do NOT include `source: "mirakl_api"`. The spec requires `source = mirakl_api` on each line row. This needs to be added.
+The Marketplace Profit Ranking chart (screenshot) has two paths:
 
----
+- **Path A (has `settlement_profit` rows)**: Uses profit data that already includes `orders_count` and `postage_deduction`. Shipping IS already factored in here.
+- **Path B (settlement-only, no SKU costs)**: Lines 204-235 of `MarketplaceProfitComparison.tsx`. This path explicitly says `// skip postage deduction here since we don't have order counts`. So for marketplaces without SKU cost data, shipping is NOT deducted even when the user has entered an estimated cost.
 
-### Item 4: Date logic for ungrouped settlement ID — PASS (with caveat)
+### The Fix
 
-**Lines 399-408**: The ungrouped ID uses `periodStart`, which is computed via string comparison `if (!periodStart || dateOnly < periodStart) periodStart = dateOnly;` (line 284). This is a correct `Math.min` equivalent for ISO date strings — lexicographic comparison of `YYYY-MM-DD` strings gives the earliest date.
+For Path B marketplaces, we CAN get order counts from `settlement_lines` by counting distinct `order_id` values grouped by marketplace. Then multiply by the user's `postage_cost` setting to produce an estimated shipping deduction.
 
-It does NOT use `new Date()`, does NOT use the first transaction encountered blindly, and does NOT use `dateFrom` (the fetch date) except as a fallback when `periodStart` is still empty (meaning zero transactions had valid dates — edge case).
+### Implementation
 
-**Correct behavior confirmed.**
+**File: `src/components/insights/MarketplaceProfitComparison.tsx`**
 
----
+1. After loading settlements, also query `settlement_lines` to get distinct order counts per marketplace:
+   ```sql
+   SELECT marketplace_name, COUNT(DISTINCT order_id) as order_count
+   FROM settlement_lines
+   WHERE user_id = ? AND order_id IS NOT NULL
+   GROUP BY marketplace_name
+   ```
+2. In Path B (lines 204-235), use the order count from `settlement_lines` + the user's `postage_cost` + `fulfilment_method` to calculate a shipping deduction via the existing `getPostageDeductionForOrder()` function.
+3. Subtract shipping deduction from `adjustedPayout` before calculating margin.
+4. Add a new field `shipping_deduction` to `AggregatedMarketplace` interface and display it as a tooltip or sub-line on the chart (e.g., "incl. est. shipping: -$X,XXX").
+5. Show an "Est. Shipping" badge next to marketplaces where shipping was deducted using estimates (similar to the existing "Estimated" badge for fees).
 
-### Item 5: marketplace_connections — upsert, not insert — PASS
+### What This Gives Users
 
-**Lines 81-92** of `mirakl-auth/index.ts`:
+- Bunnings at 73% margin might drop to ~60% once their $8/order shipping estimate is applied across their order count
+- Makes the ranking more realistic and actionable
+- No schema changes needed — all data already exists
 
-```text
-await adminClient
-  .from("marketplace_connections")
-  .upsert(
-    { ... },
-    { onConflict: "user_id,marketplace_code" },
-  );
-```
+### Technical Details
 
-This is an upsert with `onConflict`, not a bare insert. Reconnecting will update the existing row rather than failing silently.
-
----
-
-### Item 6: UI message for pre_boundary — FAIL
-
-The `StatusBadge` component in `RecentSettlements.tsx` (lines 118-200) has **no case for `pre_boundary` status**. It falls through to the generic "Pending" badge at line 194. The user sees a generic clock icon with "Pending" — no mention of accounting boundary, no "import only" message.
-
-The `SettlementDetailDrawer.tsx` also has **zero references** to `pre_boundary` or `is_pre_boundary`. The drawer does not surface the boundary message at all.
-
-The `categorize()` function (lines 98-115) also has no case for `pre_boundary` — it falls to `'other'`.
-
-The DB status is set correctly, but the UI does not render it.
-
----
-
-### Item 1 addendum: missing `source` field on settlement_lines
-
-Line rows (316-328) include `marketplace_name` but not `source`. The spec requires `source = mirakl_api`.
-
----
-
-## Fixes Required
-
-### Fix 1: Add `source` to settlement_lines rows
-In `fetch-mirakl-settlements/index.ts`, line 328, add `source: "mirakl_api"` to each line row object.
-
-### Fix 2: Add `pre_boundary` to StatusBadge
-In `RecentSettlements.tsx`, add a case in `StatusBadge` before the fallback:
-```
-if (status === 'pre_boundary') {
-  return <Badge>Import Only — Before Boundary</Badge>;
-}
-```
-With message: "Period is before your accounting boundary date — import only"
-
-### Fix 3: Add `pre_boundary` to categorize()
-Map `pre_boundary` to `'completed'` or a new `'boundary'` category so it doesn't show as actionable.
-
-### Fix 4: Add pre_boundary message to SettlementDetailDrawer
-Show an alert banner when `settlement.status === 'pre_boundary'` or `settlement.is_pre_boundary === true` with the text: "Period is before your accounting boundary date — import only".
-
-### Fix 5: Block push action for pre_boundary settlements
-In `RecentSettlements.tsx` line 817, add `&& row.status !== 'pre_boundary'` to prevent showing the "Send to Xero" menu item for boundary-blocked settlements.
-
-### No changes needed for
-- Items 2-3 (source priority) — correctly implemented
-- Item 4 (date logic) — correctly uses string comparison for earliest date
-- Item 5 (upsert) — correctly uses upsert with onConflict
+- Query `settlement_lines` with a single RPC or direct query, grouped by `marketplace_name`
+- Only count lines where `order_id IS NOT NULL` and `accounting_category = 'revenue'` (to avoid counting fee lines as orders)
+- For Path A marketplaces (with `settlement_profit`), shipping is already included — no change needed
+- The `getPostageDeductionForOrder()` function handles all fulfilment method logic (self-ship, 3PL, marketplace-fulfilled, mixed)
 
