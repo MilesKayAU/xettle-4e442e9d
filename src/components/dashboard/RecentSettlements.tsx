@@ -529,11 +529,11 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
     if (activeFilter === 'hidden') return allRows.filter(r => r.status === 'hidden');
     let visible = showHidden ? allRows : allRows.filter(r => r.status !== 'hidden');
     
-    // When actionableOnly, only show rows needing user action
+    // When actionableOnly, show the same queue states represented by the homepage cards
     if (actionableOnly) {
       visible = visible.filter(r => {
         const cat = categorize(r);
-        return cat === 'ready' || cat === 'attention';
+        return cat === 'ready' || cat === 'attention' || cat === 'other' || cat === 'completed';
       });
     }
     
