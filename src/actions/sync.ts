@@ -50,7 +50,7 @@ export async function runMarketplaceSync(rail?: string): Promise<SyncActionResul
 
   if (!result.ok) {
     if (result.rateLimited) {
-      return { success: false, error: 'Sync rate limited — try again shortly' };
+      return { success: false, error: 'This channel syncs automatically — please wait at least 1 hour between manual syncs.' };
     }
     return { success: false, error: result.error || 'Marketplace sync failed' };
   }
@@ -67,6 +67,7 @@ const DIRECT_FETCH_MAP: Record<string, string> = {
   ebay_au: 'fetch-ebay-settlements',
   ebay: 'fetch-ebay-settlements',
   shopify_payments: 'fetch-shopify-payouts',
+  bunnings: 'fetch-mirakl-settlements',
 };
 
 /**
@@ -103,7 +104,7 @@ export async function runDirectMarketplaceSync(code: string): Promise<SyncAction
 
   if (!fetchResult.ok) {
     if (fetchResult.rateLimited) {
-      return { success: false, error: 'Sync rate limited — try again shortly' };
+      return { success: false, error: 'This channel syncs automatically — please wait at least 1 hour between manual syncs.' };
     }
     return { success: false, error: fetchResult.error || `${edgeFn} failed` };
   }
