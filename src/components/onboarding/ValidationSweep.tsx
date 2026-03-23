@@ -120,7 +120,7 @@ export default function ValidationSweep({
   const { apiSyncedCodes } = useApiSyncedCodes();
   const [syncingRow, setSyncingRow] = useState<string | null>(null);
   const [pausedCodes, setPausedCodes] = useState<Set<string>>(new Set());
-  const [allConnections, setAllConnections] = useState<Array<{ marketplace_code: string; marketplace_name: string; connection_status: string }>>([]);
+  const [allConnections, setAllConnections] = useState<Array<{ marketplace_code: string; marketplace_name: string; connection_status: string; connection_type: string }>>([]);
   const [showPaused, setShowPaused] = useState(false);
   const [togglingPause, setTogglingPause] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -176,9 +176,9 @@ export default function ValidationSweep({
       // Load marketplace connections (paused codes + display names)
       const { data: connData } = await supabase
         .from('marketplace_connections')
-        .select('marketplace_code, marketplace_name, connection_status');
-      const allConns = (connData || []) as Array<{ marketplace_code: string; marketplace_name: string; connection_status: string }>;
-      setAllConnections(allConns.map(c => ({ marketplace_code: c.marketplace_code, marketplace_name: c.marketplace_name, connection_status: c.connection_status })));
+        .select('marketplace_code, marketplace_name, connection_status, connection_type');
+      const allConns = (connData || []) as Array<{ marketplace_code: string; marketplace_name: string; connection_status: string; connection_type: string }>;
+      setAllConnections(allConns);
       const paused = new Set<string>(
         allConns
           .filter((c) => c.connection_status === 'paused')
@@ -257,14 +257,30 @@ export default function ValidationSweep({
     }
   };
 
+  // Build set of marketplace codes with direct API connections (not sub-channels)
+  const directApiCodes = useMemo(() => {
+    return new Set(
+      allConnections
+        .filter(c => isApiConnectionType(c.connection_type) && c.connection_type !== 'shopify_sub_channel')
+        .map(c => c.marketplace_code)
+    );
+  }, [allConnections]);
+
+  /** A shopify_auto_ recon row is useful only if the marketplace has NO direct API and the row isn't resolved */
+  const isUsefulRecon = useCallback((r: ValidationRow) => {
+    return !!r.settlement_id?.startsWith('shopify_auto_')
+      && !directApiCodes.has(r.marketplace_code)
+      && !['already_recorded', 'duplicate_suppressed'].includes(r.overall_status);
+  }, [directApiCodes]);
+
   // Memoized filtering + sorting
   const filteredRows = useMemo(() => {
     // Filter out paused marketplace rows
     let result = rows.filter((r) => !pausedCodes.has(r.marketplace_code));
     if (filter !== 'all') {
       result = result.filter((r) => {
-        // Always keep recon rows available when settlement_needed filter is active
-        if (filter === 'settlement_needed' && r.settlement_id?.startsWith('shopify_auto_')) return true;
+        // Keep useful recon rows available when settlement_needed filter is active
+        if (filter === 'settlement_needed' && isUsefulRecon(r)) return true;
         if (filter === 'complete') return r.overall_status === 'complete' || r.overall_status === 'bank_matched'
           || r.overall_status === 'already_recorded' || r.overall_status === 'synced_external';
         if (filter === 'ready_to_push') return r.overall_status === 'ready_to_push';
@@ -279,10 +295,10 @@ export default function ValidationSweep({
       } else if (uploadSubTab === 'api') {
         result = result.filter(r => apiSyncedCodes.has(r.marketplace_code) && !r.settlement_id?.startsWith('shopify_auto_'));
       } else if (uploadSubTab === 'recon') {
-        result = result.filter(r => r.settlement_id?.startsWith('shopify_auto_'));
+        result = result.filter(r => isUsefulRecon(r));
       }
     } else {
-      // Outside the settlement_needed filter, hide recon rows from all other views
+      // Outside the settlement_needed filter, hide all recon rows
       result = result.filter(r => !r.settlement_id?.startsWith('shopify_auto_'));
     }
     if (marketplaceFilter !== 'all') {
@@ -308,7 +324,7 @@ export default function ValidationSweep({
         : String(bVal).localeCompare(String(aVal));
     });
     return result;
-  }, [rows, filter, marketplaceFilter, dateFrom, dateTo, sortKey, sortDir, pausedCodes, uploadSubTab, apiSyncedCodes]);
+  }, [rows, filter, marketplaceFilter, dateFrom, dateTo, sortKey, sortDir, pausedCodes, uploadSubTab, apiSyncedCodes, isUsefulRecon]);
 
   const uniqueMarketplaces = useMemo(() => [...new Set(rows.map((r) => r.marketplace_code))].sort(), [rows]);
 
@@ -322,9 +338,9 @@ export default function ValidationSweep({
     const counts = { all: 0, complete: 0, ready_to_push: 0, settlement_needed: 0, settlement_needed_manual: 0, settlement_needed_api: 0, settlement_needed_recon: 0, gap_detected: 0 };
     activeRows.forEach((r) => {
       const isRecon = r.settlement_id?.startsWith('shopify_auto_');
-      // Recon rows are always counted separately, regardless of their overall_status
+      // Only count recon rows that are actually useful (no direct API, not resolved)
       if (isRecon) {
-        counts.settlement_needed_recon++;
+        if (isUsefulRecon(r)) counts.settlement_needed_recon++;
         return;
       }
       counts.all++;
@@ -338,7 +354,7 @@ export default function ValidationSweep({
       else if (r.overall_status === 'gap_detected') counts.gap_detected++;
     });
     return counts;
-  }, [rows, pausedCodes, apiSyncedCodes]);
+  }, [rows, pausedCodes, apiSyncedCodes, isUsefulRecon]);
 
   const handleTogglePause = async (marketplaceCode: string, currentStatus: string) => {
     setTogglingPause(marketplaceCode);
