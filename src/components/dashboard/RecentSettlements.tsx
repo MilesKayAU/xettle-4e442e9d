@@ -325,6 +325,12 @@ function SettlementDrillDown({ row }: { row: SettlementRow }) {
 const PAGE_SIZE = 10;
 
 function getPrimaryAction(row: SettlementRow): { label: string } {
+  if (row.dashboard_origin === 'validation' && (row.status === 'settlement_needed' || row.status === 'missing')) {
+    return { label: 'Upload' };
+  }
+  if (row.dashboard_origin === 'validation' && row.status === 'awaiting_api_sync') {
+    return { label: 'View' };
+  }
   if (row.status === 'hidden') return { label: 'Unhide' };
   if (row.status === 'push_failed' || row.status === 'push_failed_permanent') return { label: 'Retry' };
   if (row.status === 'reconciled_in_xero' || row.status === 'bank_verified' || row.xero_status === 'PAID') return { label: 'View evidence' };
