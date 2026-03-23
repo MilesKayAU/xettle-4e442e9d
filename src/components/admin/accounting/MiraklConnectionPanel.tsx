@@ -378,6 +378,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                   Some older setups use a direct <strong>API Key</strong>. Choose "Both" if unsure — Xettle will try OAuth first and fall back to API key.
                 </span>
               </div>
+            </div>
             <Button
               size="sm"
               onClick={handleConnect}
