@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { CheckCircle2, XCircle, Loader2, Unplug, RefreshCw, Link2, Info } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { CheckCircle2, XCircle, Loader2, Unplug, RefreshCw, Link2, Info, Settings2 } from "lucide-react";
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -20,6 +21,7 @@ const MIRAKL_MARKETPLACES = [
 ] as const;
 
 type AuthMode = 'oauth' | 'api_key' | 'both';
+type AuthHeaderType = 'auto' | 'bearer' | 'authorization' | 'x-api-key';
 
 interface MiraklConnectionPanelProps {
   onSettlementsAutoFetched?: () => void;
@@ -42,6 +44,8 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
   const [clientSecret, setClientSecret] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [sellerCompanyId, setSellerCompanyId] = useState('');
+  const [authHeaderType, setAuthHeaderType] = useState<AuthHeaderType>('auto');
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const checkStatus = useCallback(async () => {
     setLoading(true);
@@ -96,6 +100,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
           client_secret: clientSecret || '',
           api_key: apiKey || null,
           auth_mode: authMode,
+          auth_header_type: authHeaderType === 'auto' ? null : authHeaderType,
           seller_company_id: sellerCompanyId,
           marketplace_label: selectedMarketplace,
         },
@@ -336,6 +341,35 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                     className="font-mono text-xs h-8"
                   />
                 </div>
+              )}
+              {(authMode === 'api_key' || authMode === 'both') && (
+                <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground h-6 px-1">
+                      <Settings2 className="h-3 w-3" />
+                      Advanced
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-2">
+                    <div>
+                      <Label className="text-xs">Header Format</Label>
+                      <Select value={authHeaderType} onValueChange={(v) => setAuthHeaderType(v as AuthHeaderType)}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="auto" className="text-xs">Auto (recommended)</SelectItem>
+                          <SelectItem value="bearer" className="text-xs">Authorization: Bearer</SelectItem>
+                          <SelectItem value="authorization" className="text-xs">Authorization: key</SelectItem>
+                          <SelectItem value="x-api-key" className="text-xs">X-API-KEY: key</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        Most marketplaces use the default. Only change if your marketplace requires a specific header format.
+                      </p>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
               )}
               <div className="flex items-start gap-1.5 text-[10px] text-muted-foreground bg-muted/20 rounded p-2">
                 <Info className="h-3 w-3 mt-0.5 shrink-0" />

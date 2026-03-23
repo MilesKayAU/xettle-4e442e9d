@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
       const body = await req.json();
       const {
         base_url, client_id, client_secret,
-        api_key, auth_mode,
+        api_key, auth_mode, auth_header_type,
         seller_company_id, marketplace_label,
       } = body;
 
@@ -61,6 +61,7 @@ Deno.serve(async (req) => {
             client_secret: client_secret || "",
             api_key: api_key || null,
             auth_mode: mode,
+            auth_header_type: auth_header_type || null,
             seller_company_id,
             marketplace_label: marketplace_label || "Bunnings",
             access_token: null,
@@ -100,7 +101,7 @@ Deno.serve(async (req) => {
     if (action === "status") {
       const { data: rows } = await adminClient
         .from("mirakl_tokens")
-        .select("id, marketplace_label, base_url, seller_company_id, auth_mode, updated_at, expires_at")
+        .select("id, marketplace_label, base_url, seller_company_id, auth_mode, auth_header_type, updated_at, expires_at")
         .eq("user_id", userId);
 
       const connections = (rows || []).map((r: any) => ({
@@ -109,6 +110,7 @@ Deno.serve(async (req) => {
         base_url: r.base_url,
         seller_company_id: r.seller_company_id,
         auth_mode: r.auth_mode || "oauth",
+        auth_header_type: r.auth_header_type || null,
         updated_at: r.updated_at,
         has_token: !!r.expires_at,
       }));

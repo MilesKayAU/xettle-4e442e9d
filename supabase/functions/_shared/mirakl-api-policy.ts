@@ -16,7 +16,7 @@
  *   - https://help.mirakl.net/bundle/connect_sellers/page/topics/Connect/integrating/api_integration_guide.htm
  *     (Seller integration guide for generating OAuth2 credentials)
  *
- * Auth model (TWO separate systems):
+ * Auth model (TWO separate systems, THREE header variants):
  *   1. Marketplace APIs (TL endpoints: /api/sellerpayment/transactions_logs)
  *      → Direct API key in Authorization header: `Authorization: YOUR_API_KEY`
  *      → API key is generated per-app in Mirakl Connect → Settings → API integrations
@@ -25,6 +25,12 @@
  *      → OAuth2 client_credentials via centralized endpoint: https://auth.mirakl.net/oauth/token
  *      → Returns Bearer token valid for ~3599 seconds
  *      → Header: `Authorization: Bearer <access_token>`
+ *
+ *   Header variants (varies by marketplace — stored as auth_header_type):
+ *     - 'bearer'        → Authorization: Bearer <token>   (default for OAuth)
+ *     - 'authorization'  → Authorization: <api_key>       (default for API key mode)
+ *     - 'x-api-key'      → X-API-KEY: <api_key>           (some legacy Mirakl instances)
+ *   When auth_header_type is NULL, the helper infers from auth_mode.
  */
 
 // ═══════════════════════════════════════════════════════════════

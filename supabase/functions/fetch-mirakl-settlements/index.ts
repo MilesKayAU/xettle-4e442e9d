@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyRequest } from "../_shared/auth-guard.ts";
-import { getMiraklAuthHeader } from "../_shared/mirakl-token.ts";
+import { getMiraklAuthHeader, type MiraklAuthResult } from "../_shared/mirakl-token.ts";
 
 // ═══════════════════════════════════════════════════════════════
 // MIRAKL TRANSACTION TYPE → STANDARD SETTLEMENT FIELD MAP
@@ -118,9 +118,9 @@ Deno.serve(async (req) => {
     for (const connection of connections) {
       try {
         // Resolve auth header based on connection's auth_mode (oauth, api_key, or both)
-        const authHeader = await getMiraklAuthHeader(adminClient, connection);
+        const authResult = await getMiraklAuthHeader(adminClient, connection);
         const result = await fetchSettlementsForConnection(
-          adminClient, targetUserId, connection, authHeader, body.sync_from,
+          adminClient, targetUserId, connection, authResult, body.sync_from,
         );
         allResults.push({
           marketplace_label: connection.marketplace_label,
@@ -167,7 +167,7 @@ async function fetchSettlementsForConnection(
   adminClient: any,
   userId: string,
   connection: any,
-  authHeader: string,
+  authResult: { headerName: string; headerValue: string },
   syncFrom?: string,
 ) {
   const baseUrl = connection.base_url.replace(/\/$/, "");
@@ -184,7 +184,7 @@ async function fetchSettlementsForConnection(
 
   const res = await fetch(apiUrl, {
     headers: {
-      Authorization: authHeader,
+      [authResult.headerName]: authResult.headerValue,
       Accept: "application/json",
     },
   });

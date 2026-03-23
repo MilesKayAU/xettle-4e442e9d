@@ -1401,6 +1401,7 @@ export type Database = {
         Row: {
           access_token: string | null
           api_key: string | null
+          auth_header_type: string | null
           auth_mode: string
           base_url: string
           client_id: string
@@ -1416,6 +1417,7 @@ export type Database = {
         Insert: {
           access_token?: string | null
           api_key?: string | null
+          auth_header_type?: string | null
           auth_mode?: string
           base_url: string
           client_id: string
@@ -1431,6 +1433,7 @@ export type Database = {
         Update: {
           access_token?: string | null
           api_key?: string | null
+          auth_header_type?: string | null
           auth_mode?: string
           base_url?: string
           client_id?: string
