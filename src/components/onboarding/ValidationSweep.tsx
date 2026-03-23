@@ -61,6 +61,8 @@ interface ValidationSweepProps {
   /** When set, limits visible rows and shows a "View all" link */
   maxRows?: number;
   onViewAll?: () => void;
+  /** Pre-select the status filter on mount */
+  initialFilter?: FilterStatus;
 }
 
 type FilterStatus = 'all' | 'complete' | 'ready_to_push' | 'settlement_needed' | 'gap_detected';
@@ -94,6 +96,7 @@ export default function ValidationSweep({
   showSweepAnimation = false,
   maxRows,
   onViewAll,
+  initialFilter,
 }: ValidationSweepProps) {
   const [rows, setRows] = useState<ValidationRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,7 +104,7 @@ export default function ValidationSweep({
   const [sweepStep, setSweepStep] = useState(0);
   const [sweepStartTime, setSweepStartTime] = useState<number | null>(null);
   const [sweepDuration, setSweepDuration] = useState<number | null>(null);
-  const [filter, setFilter] = useState<FilterStatus>('all');
+  const [filter, setFilter] = useState<FilterStatus>(initialFilter || 'all');
   const [marketplaceFilter, setMarketplaceFilter] = useState<string>('all');
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');

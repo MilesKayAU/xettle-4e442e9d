@@ -61,7 +61,7 @@ export interface MissingSettlement {
 
 interface ActionCentreProps {
   onSwitchToUpload: (missing?: MissingSettlement[]) => void;
-  onSwitchToSettlements: () => void;
+  onSwitchToSettlements: (filter?: string) => void;
   onSwitchToReconciliation?: () => void;
   userName?: string;
   
@@ -552,7 +552,7 @@ export default function ActionCentre({
                   </li>
                 )}
               </ul>
-              <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1" onClick={onSwitchToSettlements}>
+              <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1" onClick={() => onSwitchToSettlements('ready_to_push')}>
                 <Search className="h-3 w-3" /> Review & send individually
               </Button>
             </CardContent>
