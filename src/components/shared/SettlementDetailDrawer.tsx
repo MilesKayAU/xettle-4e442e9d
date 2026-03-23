@@ -63,6 +63,27 @@ interface AuditEvent {
   severity: string;
 }
 
+interface EditableFields {
+  sales_principal: number;
+  seller_fees: number;
+  refunds: number;
+  bank_deposit: number;
+  other_fees: number;
+  reimbursements: number;
+}
+
+const RECON_TOLERANCE = 1.00;
+
+function calculateReconGap(s: any): number {
+  const sales = (s.sales_principal || 0) + (s.sales_shipping || 0);
+  const fees = Math.abs(s.seller_fees || 0) + Math.abs(s.fba_fees || 0) + Math.abs(s.storage_fees || 0) + Math.abs(s.advertising_costs || 0) + Math.abs(s.other_fees || 0);
+  const refunds = s.refunds || 0;
+  const reimbursements = s.reimbursements || 0;
+  const expectedNet = sales - fees + refunds + reimbursements;
+  const bankDeposit = s.bank_deposit || 0;
+  return bankDeposit - expectedNet;
+}
+
 export default function SettlementDetailDrawer({ settlementId, open, onClose }: SettlementDetailDrawerProps) {
   const [settlement, setSettlement] = useState<any>(null);
   const [snapshot, setSnapshot] = useState<SnapshotDetails | null>(null);
@@ -75,6 +96,9 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
   const [mappingBlocked, setMappingBlocked] = useState(false);
   const [missingCategories, setMissingCategories] = useState<string[]>([]);
   const [readinessKey, setReadinessKey] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const [editFields, setEditFields] = useState<EditableFields | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useAiPageContext(() => ({
     routeId: 'settlement_detail',
