@@ -341,8 +341,8 @@ export default function ValidationSweep({
     return sortDir === 'asc' ? <ArrowUp className="h-3 w-3 ml-1" /> : <ArrowDown className="h-3 w-3 ml-1" />;
   };
 
-  // Reset selection when filters change
-  useEffect(() => { setSelectedIds(new Set()); }, [filter, marketplaceFilter, dateFrom, dateTo]);
+  // Reset selection and page when filters change
+  useEffect(() => { setSelectedIds(new Set()); setPage(1); }, [filter, marketplaceFilter, dateFrom, dateTo]);
 
   // Selectable rows (only ready_to_push)
   const selectableRows = useMemo(() => filteredRows.filter(r => r.overall_status === 'ready_to_push' && r.settlement_id), [filteredRows]);
