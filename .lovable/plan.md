@@ -1,46 +1,32 @@
 
 
-## Plan: Filter Duplicate Shopify-Derived Records from Reconciliation Tab
+## Plan: Relax Reconciliation Tab Filter to Show Externally-Posted Records
 
 ### Problem
-The Reconciliation tab shows `shopify_auto_ebay_au_*` records even though eBay has a direct API connection (`ebay_api`). These are pure duplicates of the real `ebay_payout_*` settlements and add no value. The tab should only show recon rows for marketplaces where Shopify order data is the **only** reference (sub-channels like Kogan, BigW).
+The Reconciliation tab currently hides `shopify_auto_*` rows with `already_recorded` status. These are legitimate records — they represent settlements posted to Xero by external tools like Link My Books. The user expects to see these larger-value Kogan periods ($5,354 across 7 rows) as confirmation that external posting was detected.
 
 ### Database Evidence
-- 5 `shopify_auto_ebay*` settlements exist, all `duplicate_suppressed` — confirming they're noise
-- Real eBay payouts (`ebay_payout_*`) exist from the direct eBay API — the authoritative source
-- Kogan/BigW `shopify_auto_*` records are legitimate recon aids (no direct API)
+- 7 Kogan rows with `already_recorded` totaling **$5,354.36** — hidden by filter
+- 3 eBay AU rows with `already_recorded` totaling $150.09 — correctly hidden (has direct API)
+- 3 Shopify Payments rows with `already_recorded` — correctly hidden (has direct API)
+- Only 2 rows currently visible: Kogan $1,098 and Everyday Market $241
 
-### Changes
+### Change
 
 **`src/components/onboarding/ValidationSweep.tsx`**
 
-1. When building the recon tab filter, cross-reference the marketplace against `marketplace_connections` to exclude marketplaces that have a direct API connection (`sp_api`, `ebay_api`, `mirakl_api`, `shopify_api`). Only `shopify_sub_channel` and `manual` types should show recon rows.
-
-2. Additionally exclude `shopify_auto_*` rows with `overall_status` of `already_recorded` or `duplicate_suppressed` — these have been resolved and clutter the view.
-
-The filtering logic changes in the `filteredRows` memo and `statusCounts` loop:
+Update `isUsefulRecon` to only exclude `duplicate_suppressed` (true duplicates), not `already_recorded` (externally posted). The `already_recorded` status is valuable — it confirms Link My Books or A2X already handled the period.
 
 ```typescript
-// Build set of marketplaces with direct API connections (not sub-channels)
-const directApiCodes = new Set(
-  connections.filter(c => isApiConnectionType(c.connection_type) && c.connection_type !== 'shopify_sub_channel')
-    .map(c => c.marketplace_code)
-);
+// Before:
+!['already_recorded', 'duplicate_suppressed'].includes(r.overall_status)
 
-// In recon tab filter:
-const isUsefulRecon = (r) =>
-  r.settlement_id?.startsWith('shopify_auto_') &&
-  !directApiCodes.has(r.marketplace_code) &&
-  !['already_recorded', 'duplicate_suppressed'].includes(r.overall_status);
+// After:
+r.overall_status !== 'duplicate_suppressed'
 ```
 
-3. Update the recon count in `statusCounts` to use the same `isUsefulRecon` check.
-
-### Result
-- eBay `shopify_auto_*` rows disappear from the Reconciliation tab (they have real API payouts)
-- Kogan/BigW recon summaries remain visible as intended
-- Resolved/suppressed records are hidden from the tab
+This will surface the 7 hidden Kogan reconciliation rows, bringing the Reconciliation tab count from 2 to 9 and showing the full picture of externally-managed periods.
 
 ### Files Modified
-1. **`src/components/onboarding/ValidationSweep.tsx`** — Add direct-API exclusion to recon filtering
+1. **`src/components/onboarding/ValidationSweep.tsx`** — Remove `already_recorded` from recon exclusion filter
 
