@@ -626,6 +626,15 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
       color: 'border-sky-200 bg-sky-50/80 dark:border-sky-800 dark:bg-sky-900/20',
       icon: <Send className="h-4 w-4 text-sky-600 dark:text-sky-400" />,
     },
+    // In actionableOnly mode, show Upload Needed instead of In Xero
+    ...(actionableOnly && displayUploadNeeded > 0 ? [{
+      key: 'other' as StatusCategory,
+      label: 'Upload Needed',
+      sublabel: `${displayUploadNeeded} period${displayUploadNeeded !== 1 ? 's' : ''} missing settlement files`,
+      count: displayUploadNeeded,
+      color: 'border-amber-200 bg-amber-50/80 dark:border-amber-800 dark:bg-amber-900/20',
+      icon: <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />,
+    }] : []),
     // Hide "In Xero — Processing" on homepage (actionableOnly mode)
     ...(!actionableOnly ? [{
       key: 'posted' as StatusCategory,
