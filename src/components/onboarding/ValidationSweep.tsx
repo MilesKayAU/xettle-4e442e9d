@@ -257,6 +257,22 @@ export default function ValidationSweep({
     }
   };
 
+  // Build set of marketplace codes with direct API connections (not sub-channels)
+  const directApiCodes = useMemo(() => {
+    return new Set(
+      allConnections
+        .filter(c => isApiConnectionType(c.connection_type) && c.connection_type !== 'shopify_sub_channel')
+        .map(c => c.marketplace_code)
+    );
+  }, [allConnections]);
+
+  /** A shopify_auto_ recon row is useful only if the marketplace has NO direct API and the row isn't resolved */
+  const isUsefulRecon = useCallback((r: ValidationRow) => {
+    return !!r.settlement_id?.startsWith('shopify_auto_')
+      && !directApiCodes.has(r.marketplace_code)
+      && !['already_recorded', 'duplicate_suppressed'].includes(r.overall_status);
+  }, [directApiCodes]);
+
   // Memoized filtering + sorting
   const filteredRows = useMemo(() => {
     // Filter out paused marketplace rows
@@ -316,22 +332,6 @@ export default function ValidationSweep({
     const pausedMarketplaceCodes = new Set(allConnections.filter(c => c.connection_status === 'paused').map(c => c.marketplace_code));
     return rows.filter(r => pausedMarketplaceCodes.has(r.marketplace_code)).length;
   }, [rows, allConnections]);
-
-  // Build set of marketplace codes with direct API connections (not sub-channels)
-  const directApiCodes = useMemo(() => {
-    return new Set(
-      allConnections
-        .filter(c => isApiConnectionType(c.connection_type) && c.connection_type !== 'shopify_sub_channel')
-        .map(c => c.marketplace_code)
-    );
-  }, [allConnections]);
-
-  /** A shopify_auto_ recon row is useful only if the marketplace has NO direct API and the row isn't resolved */
-  const isUsefulRecon = useCallback((r: ValidationRow) => {
-    return !!r.settlement_id?.startsWith('shopify_auto_')
-      && !directApiCodes.has(r.marketplace_code)
-      && !['already_recorded', 'duplicate_suppressed'].includes(r.overall_status);
-  }, [directApiCodes]);
 
   const statusCounts = useMemo(() => {
     const activeRows = rows.filter(r => !pausedCodes.has(r.marketplace_code));
