@@ -747,10 +747,10 @@ export default function ValidationSweep({
 }
 
 function SummaryCard({
-  label, count, emoji, active, onClick, bgClass, borderClass,
+  label, count, emoji, active, onClick, bgClass, borderClass, subtitle,
 }: {
   label: string; count: number; emoji: string; active: boolean;
-  onClick: () => void; bgClass: string; borderClass: string;
+  onClick: () => void; bgClass: string; borderClass: string; subtitle?: string;
 }) {
   return (
     <button
@@ -762,6 +762,7 @@ function SummaryCard({
     >
       <div className="text-2xl font-bold">{emoji} {count}</div>
       <div className="text-xs font-medium text-muted-foreground mt-1">{label}</div>
+      {subtitle && <div className="text-[10px] text-muted-foreground mt-0.5">{subtitle}</div>}
     </button>
   );
 }
