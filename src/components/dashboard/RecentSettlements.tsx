@@ -561,6 +561,31 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
     );
   }
 
+  // In actionableOnly mode, show "all clear" when nothing needs action
+  if (actionableOnly && counts.ready === 0 && counts.attention === 0) {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              Settlements — All Clear
+            </CardTitle>
+            {onViewAll && (
+              <Button variant="ghost" size="sm" onClick={onViewAll} className="text-xs text-muted-foreground hover:text-foreground">
+                Full ledger
+                <ArrowRight className="h-3 w-3 ml-1" />
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0 pb-4">
+          <p className="text-sm text-muted-foreground">No settlements waiting to be sent to Xero.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const summaryCards: { key: StatusCategory; label: string; sublabel: string; count: number; total?: number; color: string; icon: React.ReactNode }[] = [
     {
       key: 'ready',
