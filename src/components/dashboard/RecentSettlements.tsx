@@ -442,7 +442,29 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
     }
   }, []);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  // Fetch marketplace_validation counts (true source of what needs pushing)
+  const fetchValidationCounts = useCallback(async () => {
+    try {
+      const { data } = await supabase
+        .from('marketplace_validation')
+        .select('overall_status, settlement_net')
+        .in('overall_status', ['ready_to_push', 'pushed_to_xero', 'settlement_needed', 'missing', 'gap_detected']);
+      if (data) {
+        let ready = 0, readyTotal = 0, uploadNeeded = 0, gaps = 0;
+        for (const r of data) {
+          if (r.overall_status === 'ready_to_push' || r.overall_status === 'pushed_to_xero') {
+            ready++;
+            readyTotal += (r as any).settlement_net || 0;
+          }
+          if (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') uploadNeeded++;
+          if (r.overall_status === 'gap_detected') gaps++;
+        }
+        setValidationCounts({ ready, readyTotal, uploadNeeded, gaps });
+      }
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => { fetchAll(); fetchValidationCounts(); }, [fetchAll, fetchValidationCounts]);
 
   // Summary counts
   const counts = useMemo(() => {
