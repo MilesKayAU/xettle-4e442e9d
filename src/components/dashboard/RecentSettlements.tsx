@@ -610,6 +610,8 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
   const displayReadyCount = actionableOnly && validationCounts ? validationCounts.ready : counts.ready;
   const displayReadyTotal = actionableOnly && validationCounts ? validationCounts.readyTotal : counts.readyTotal;
   const displayUploadNeeded = actionableOnly && validationCounts ? validationCounts.uploadNeeded : 0;
+  const displayUploadManual = actionableOnly && validationCounts ? validationCounts.uploadNeededManual : 0;
+  const displayUploadApi = actionableOnly && validationCounts ? validationCounts.uploadNeededApi : 0;
   const displayGaps = actionableOnly && validationCounts ? validationCounts.gaps : 0;
 
   // In actionableOnly mode, show "all clear" when nothing needs action
