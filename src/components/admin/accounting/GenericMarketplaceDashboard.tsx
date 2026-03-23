@@ -3,6 +3,7 @@ import { useAiPageContext } from '@/ai/context/useAiPageContext';
 import { Card, CardContent } from '@/components/ui/card';
 import ReconciliationStatus from '@/components/shared/ReconciliationStatus';
 import FileReconciliationStatus from '@/components/shared/FileReconciliationStatus';
+import SettlementDetailDrawer from '@/components/shared/SettlementDetailDrawer';
 import MarketplaceProfitCard from '@/components/shared/MarketplaceProfitCard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -193,6 +194,8 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [bankAmountInput, setBankAmountInput] = useState('');
   const [bankVerifyConfirmed, setBankVerifyConfirmed] = useState(false);
+  const [drawerSettlementId, setDrawerSettlementId] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [hasShopify, setHasShopify] = useState(false);
   const [isApiConnected, setIsApiConnected] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -407,7 +410,10 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         ) : settlements.length > 0 ? (
           <FileReconciliationStatus
             settlements={settlements}
-            onSettlementClick={(sid) => loadLineItems(sid)}
+            onSettlementClick={(sid) => {
+              setDrawerSettlementId(sid);
+              setDrawerOpen(true);
+            }}
           />
         ) : null}
       </div>
@@ -903,6 +909,25 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                                   </Tooltip>
                                 </TooltipProvider>
                               )}
+                              {/* View detail drawer */}
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                                      onClick={() => {
+                                        setDrawerSettlementId(s.settlement_id);
+                                        setDrawerOpen(true);
+                                      }}
+                                    >
+                                      <Eye className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="text-xs">View settlement details</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                               {/* Delete */}
                               <Button
                                 variant="ghost"
@@ -1215,6 +1240,13 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         syncedCount={syncedSelectedCount}
         onConfirm={confirmBulkDelete}
         onCancel={cancelBulkDelete}
+      />
+
+      {/* Settlement Detail Drawer */}
+      <SettlementDetailDrawer
+        settlementId={drawerSettlementId}
+        open={drawerOpen}
+        onClose={() => { setDrawerOpen(false); setDrawerSettlementId(null); }}
       />
     </div>
   );

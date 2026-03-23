@@ -144,12 +144,14 @@ export function renderPageExplainers(routeId?: string | null): string {
     settlements: `
 PAGE-SPECIFIC KNOWLEDGE — Marketplace Settlements:
 - "File Reconciliation" is an internal consistency check on each settlement file. Green tick = the file's numbers add up correctly (Sales − Fees + Refunds ≈ Net Payout). Orange warning = the internal figures don't balance and the settlement needs review.
-- "check required" means the settlement failed this maths check. The user should review it before pushing to Xero.
+- "check required" means the settlement failed this maths check. The user should review it before pushing to Xero. Settlements with failed reconciliation are BLOCKED from being pushed — the Push button is replaced with a "Fix recon first" warning.
+- To investigate a flagged settlement: click the settlement row in the File Reconciliation card OR click the eye icon (👁) on the settlement table row. This opens a detail panel showing the full line-item breakdown, reconciliation gap, and audit trail.
+- If the data looks wrong, the user can delete the settlement and re-upload the corrected file.
 - Settlement ID formats: BUN-2301-YYYY-MM-DD = Bunnings PDF upload. shopify_auto_X = auto-generated from Shopify orders. AMZ-xxx = Amazon API sync. EBAY-xxx = eBay API sync.
 - Columns: Sales = gross revenue inc GST. Fees = marketplace commission deducted. Refunds = returned order amounts. Net = what lands in the bank account.
 - A negative Net means fees and refunds exceeded sales for that period — this is normal for low-volume or refund-heavy periods.
 - "Pushed to Xero" means a DRAFT invoice was created. "Bank Verified" means the bank deposit has been matched.
-- The user can click any settlement row to see the line-item breakdown.`,
+- The user can click any settlement row to see the line-item breakdown, or use the eye icon to open the full detail panel.`,
 
     outstanding: `
 PAGE-SPECIFIC KNOWLEDGE — Outstanding Invoices:
