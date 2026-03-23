@@ -153,11 +153,21 @@ export function getApiHealth(): ApiHealthEntry[] {
     notes: xeroDeprecations.map(d => `${d.feature}: ${d.note}`),
   });
 
+  // Mirakl
+  const miraklDeprecations = API_REGISTRY.mirakl.deprecations;
+  entries.push({
+    api: 'Mirakl Marketplace API',
+    version: MIRAKL_API_VERSION,
+    status: miraklDeprecations.length > 0 ? 'warning' : 'ok',
+    deprecationCount: miraklDeprecations.length,
+    notes: miraklDeprecations.map(d => `${d.feature}: ${d.note}`),
+  });
+
   return entries;
 }
 
 /**
- * Aggregates all deprecation warnings across all three APIs.
+ * Aggregates all deprecation warnings across all four APIs.
  * Used for weekly audit scans and warning logs.
  */
 export function getAllDeprecationWarnings(): Array<{ api: string; feature: string; status: string; note: string }> {
@@ -173,6 +183,10 @@ export function getAllDeprecationWarnings(): Array<{ api: string; feature: strin
 
   for (const dep of API_REGISTRY.xero.deprecations) {
     warnings.push({ api: 'Xero Accounting API', feature: dep.feature, status: dep.status, note: dep.note || '' });
+  }
+
+  for (const dep of API_REGISTRY.mirakl.deprecations) {
+    warnings.push({ api: 'Mirakl Marketplace API', feature: dep.feature, status: dep.status, note: dep.note || '' });
   }
 
   return warnings;
