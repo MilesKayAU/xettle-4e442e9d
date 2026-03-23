@@ -88,7 +88,7 @@ export default function ActionCentre({
   const [userCreatedAt, setUserCreatedAt] = useState<Date | null>(null);
   const [accountingBoundary, setAccountingBoundary] = useState<string | null>(null);
   const [connectedMarketplaces, setConnectedMarketplaces] = useState<string[]>([]);
-  const [trueApiChannels, setTrueApiChannels] = useState<Set<string>>(new Set());
+  const { apiSyncedCodes: connectedApiMarketplaces } = useApiSyncedCodes();
   const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
   const [xeroConnected, setXeroConnected] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
