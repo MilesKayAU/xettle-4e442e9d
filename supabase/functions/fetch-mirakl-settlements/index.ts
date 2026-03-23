@@ -408,7 +408,6 @@ async function fetchSettlementsForConnection(
       gst_on_expenses: round2(totals.gst_on_expenses),
       status: reconStatus === "recon_warning" ? "recon_warning" : "saved",
       source: "mirakl_api",
-      currency: "AUD",
     });
 
     if (insertErr) {
