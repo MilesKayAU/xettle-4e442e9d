@@ -616,7 +616,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                     const fees = s.seller_fees || 0;
                     const net = s.bank_deposit || 0;
                     const isSelected = selected.has(s.id);
-                     const isReconOnly = (s as any).source === 'api_sync' && (s.marketplace || '').startsWith('shopify_orders_');
+                     const isReconOnly = isReconciliationOnly((s as any).source, s.marketplace, s.settlement_id);
                      const reconStatus = (s as any).reconciliation_status || '';
                      const reconOk = !reconStatus || reconStatus === 'reconciled' || reconStatus === 'matched';
                      const isSyncable = !isReconOnly && reconOk && (s.status === 'ingested' || s.status === 'ready_to_push');
