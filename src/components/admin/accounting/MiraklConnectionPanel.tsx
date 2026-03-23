@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { CheckCircle2, XCircle, Loader2, Unplug, RefreshCw, Link2, Info } from "lucide-react";
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -281,17 +282,25 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                 />
               </div>
               <div>
-                <Label className="text-xs">Auth Method</Label>
-                <Select value={authMode} onValueChange={(v) => setAuthMode(v as AuthMode)}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="oauth" className="text-xs">OAuth (Client ID + Secret)</SelectItem>
-                    <SelectItem value="api_key" className="text-xs">API Key Only</SelectItem>
-                    <SelectItem value="both" className="text-xs">Both (OAuth + API Key fallback)</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label className="text-xs font-medium mb-2 block">Auth Method</Label>
+                <RadioGroup
+                  value={authMode}
+                  onValueChange={(v) => setAuthMode(v as AuthMode)}
+                  className="flex gap-4"
+                >
+                  <div className="flex items-center gap-2">
+                    <RadioGroupItem value="oauth" id="auth-oauth" />
+                    <Label htmlFor="auth-oauth" className="text-xs font-normal cursor-pointer">
+                      OAuth (Mirakl Connect)
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <RadioGroupItem value="api_key" id="auth-apikey" />
+                    <Label htmlFor="auth-apikey" className="text-xs font-normal cursor-pointer">
+                      API Key (Classic Mirakl)
+                    </Label>
+                  </div>
+                </RadioGroup>
               </div>
               {(authMode === 'oauth' || authMode === 'both') && (
                 <>
