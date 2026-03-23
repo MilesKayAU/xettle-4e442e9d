@@ -331,9 +331,11 @@ interface RecentSettlementsProps {
   /** External filter from pipeline click: { marketplace, month (YYYY-MM) } */
   pipelineFilter?: { marketplace: string; month: string } | null;
   onClearPipelineFilter?: () => void;
+  /** When true, only show settlements needing user action (ready_to_push, push_failed, ingested) */
+  actionableOnly?: boolean;
 }
 
-export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPipelineFilter }: RecentSettlementsProps) {
+export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPipelineFilter, actionableOnly }: RecentSettlementsProps) {
   const [allRows, setAllRows] = useState<SettlementRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
