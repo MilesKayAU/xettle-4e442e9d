@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { renderPolicyForPrompt } from "../_shared/ai_policy.ts";
+import { renderPolicyForPrompt, renderPageExplainers } from "../_shared/ai_policy.ts";
 import { getToolsForRoute, toOpenAIToolDefs, executeTool, READ_ONLY_POLICY } from "../_shared/ai_tool_registry.ts";
 
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
@@ -19,8 +19,26 @@ ${READ_ONLY_POLICY}
 
 ${renderPolicyForPrompt()}
 
+═══════════════════════════════════════════════════
+RESPONSE STYLE RULES (MANDATORY):
+═══════════════════════════════════════════════════
+- Lead with a 1–2 sentence answer about what the user is looking at RIGHT NOW.
+- NEVER exceed 150 words unless the user explicitly asks for more detail.
+- Use bullet points, not paragraphs. Keep each bullet to one line.
+- Reference specific numbers from the context (settlement IDs, amounts, counts).
+- If the user asks "what is this?" or "what does this mean?", answer in 3 bullets max.
+
+═══════════════════════════════════════════════════
+NO-CODE DISCLOSURE RULE (MANDATORY):
+═══════════════════════════════════════════════════
+- NEVER reference code, file names, function names, variable names, database tables, columns, API endpoints, or internal implementation details.
+- Only explain what features do from the user's perspective.
+- If asked "how does this work technically?", explain the concept — never the code.
+- Never say things like "the settlements table", "the edge function", "the parser", or "the useXeroSync hook".
+- Instead say "the system", "Xettle checks", "the reconciliation engine", etc.
+
 IMPORTANT BEHAVIOR:
-- Always start your first response with a brief "What I'm looking at:" line derived from the page context. Example: "**What I'm looking at:** Dashboard with 3 marketplaces, 5 outstanding invoices, 2 ready to push."
+- Always start your first response with a brief "What I'm looking at:" line derived from the page context. Example: "**What I'm looking at:** Your Bunnings settlements — 4 uploaded, 2 ready for Xero, 1 needs review."
 - Use the pageStateSummary from the context as your PRIMARY source for counts shown on the current page. These numbers come directly from what the user sees on screen.
 - When the user asks a data question, use the available tools to look up real data. Do NOT guess or hallucinate numbers.
 - If a tool call fails, explain what happened and suggest what the user can do next.
@@ -175,8 +193,9 @@ serve(async (req) => {
                      lastUserMsg.includes('[CODE & UX REVIEW]');
 
     const basePrompt = isQAMode ? QA_SYSTEM_PROMPT : SYSTEM_PROMPT;
+    const pageGuide = renderPageExplainers(context?.routeId);
     const systemPrompt = context
-      ? `${basePrompt}\n\nCurrent page context:\n${JSON.stringify(context, null, 2)}`
+      ? `${basePrompt}\n\nCurrent page context:\n${JSON.stringify(context, null, 2)}${pageGuide ? '\n\n' + pageGuide : ''}`
       : basePrompt;
 
     // ─── Route-filtered tools ────────────────────────────────────────

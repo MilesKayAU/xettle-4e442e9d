@@ -132,3 +132,45 @@ READ-ONLY ASSISTANT RULES:
 
 ═══════════════════════════════════════════════════`.trim();
 }
+
+/**
+ * Page-specific explainer blocks injected into the AI system prompt
+ * based on the routeId from AiPageContext.
+ */
+export function renderPageExplainers(routeId?: string | null): string {
+  if (!routeId) return '';
+
+  const explainers: Record<string, string> = {
+    settlements: `
+PAGE-SPECIFIC KNOWLEDGE — Marketplace Settlements:
+- "File Reconciliation" is an internal consistency check on each settlement file. Green tick = the file's numbers add up correctly (Sales − Fees + Refunds ≈ Net Payout). Orange warning = the internal figures don't balance and the settlement needs review.
+- "check required" means the settlement failed this maths check. The user should review it before pushing to Xero.
+- Settlement ID formats: BUN-2301-YYYY-MM-DD = Bunnings PDF upload. shopify_auto_X = auto-generated from Shopify orders. AMZ-xxx = Amazon API sync. EBAY-xxx = eBay API sync.
+- Columns: Sales = gross revenue inc GST. Fees = marketplace commission deducted. Refunds = returned order amounts. Net = what lands in the bank account.
+- A negative Net means fees and refunds exceeded sales for that period — this is normal for low-volume or refund-heavy periods.
+- "Pushed to Xero" means a DRAFT invoice was created. "Bank Verified" means the bank deposit has been matched.
+- The user can click any settlement row to see the line-item breakdown.`,
+
+    outstanding: `
+PAGE-SPECIFIC KNOWLEDGE — Outstanding Invoices:
+- This page shows Xero invoices that have been pushed but are still awaiting bank payment confirmation.
+- "Amount Due" is the remaining balance on the invoice in Xero.
+- Users can match bank deposits to invoices using the "Verify Payment" flow.
+- Outstanding invoices will move to "Complete" once a matching bank transaction is confirmed.`,
+
+    dashboard: `
+PAGE-SPECIFIC KNOWLEDGE — Dashboard:
+- The dashboard shows three key areas: Sync Status (API connection health), Recent Activity (latest uploads and pushes), and Action Items (settlements needing attention).
+- Settlement counts shown here are across ALL marketplaces combined.
+- The "Ready for Xero" count shows settlements that have passed all checks and can be pushed.`,
+
+    insights: `
+PAGE-SPECIFIC KNOWLEDGE — Insights:
+- This page shows financial trends, fee analysis, and marketplace comparisons over time.
+- All figures are derived from saved settlement data — not live API queries.
+- Fee percentages show what percentage of gross sales each marketplace takes in fees.
+- Margin % shows net payout as a percentage of gross sales.`,
+  };
+
+  return explainers[routeId] ?? '';
+}
