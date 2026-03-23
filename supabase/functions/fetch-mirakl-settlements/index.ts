@@ -143,6 +143,7 @@ Deno.serve(async (req) => {
     const totalImported = allResults.reduce((s, r) => s + (r.imported || 0), 0);
     const totalSkipped = allResults.reduce((s, r) => s + (r.skipped || 0), 0);
     const totalEmpty = allResults.reduce((s, r) => s + (r.empty_skipped || 0), 0);
+    console.log(`[fetch-mirakl-settlements] ✅ Done — imported: ${totalImported}, skipped: ${totalSkipped}, empty: ${totalEmpty}`);
 
     return new Response(
       JSON.stringify({
