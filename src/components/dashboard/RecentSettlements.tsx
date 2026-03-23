@@ -110,6 +110,7 @@ function categorize(row: SettlementRow): StatusCategory {
     return 'posted';
   }
   if (row.status === 'ready_to_push') return 'ready';
+  if (row.status === 'pre_boundary') return 'completed';
   if (row.status === 'ingested') return 'other';
   return 'other';
 }
