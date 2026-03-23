@@ -350,7 +350,7 @@ export default function ValidationSweep({
   };
 
   // Reset selection and page when filters change
-  useEffect(() => { setSelectedIds(new Set()); setPage(1); }, [filter, marketplaceFilter, dateFrom, dateTo]);
+  useEffect(() => { setSelectedIds(new Set()); setPage(1); setUploadSubTab('manual'); }, [filter, marketplaceFilter, dateFrom, dateTo]);
 
   // Selectable rows (only ready_to_push)
   const selectableRows = useMemo(() => filteredRows.filter(r => r.overall_status === 'ready_to_push' && r.settlement_id), [filteredRows]);
