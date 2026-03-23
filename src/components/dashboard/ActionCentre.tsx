@@ -86,6 +86,7 @@ export default function ActionCentre({
   const [apiSyncedMarketplaces, setApiSyncedMarketplaces] = useState<Set<string>>(new Set());
   const [accountingBoundary, setAccountingBoundary] = useState<string | null>(null);
   const [connectedMarketplaces, setConnectedMarketplaces] = useState<string[]>([]);
+  const [trueApiChannels, setTrueApiChannels] = useState<Set<string>>(new Set());
   const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
   const [drawerSettlementId, setDrawerSettlementId] = useState<string | null>(null);
