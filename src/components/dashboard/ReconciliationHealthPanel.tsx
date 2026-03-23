@@ -141,6 +141,7 @@ export default function ReconciliationHealthPanel() {
         actionSection: unmappedRails.length > 0 ? 'destination-accounts' : undefined,
       });
 
+      const connections = connectionsRes.data || [];
       // 4. Account mappings — use setupWarnings from useDashboardTaskCounts (source of truth)
       const coaWarning = setupWarnings.find(w => w.key === 'coa_mapping_incomplete' || w.key === 'coa_mapping_unconfirmed');
       if (coaWarning) {
