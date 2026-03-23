@@ -469,10 +469,7 @@ function buildWoolworthsSettlements(
   const taxRate = 0.10;
   const divisor = 1 + taxRate;
 
-  // Apply fee redistribution before building settlements
-  const adjustedGroups = redistributeAnomalousFees(groups);
-
-  return adjustedGroups.map(g => {
+  return groups.map(g => {
     // Sales and refunds are GST-inclusive in the CSV
     const grossSalesExGst = round2(g.grossSales / divisor);
     const gstOnSales = round2(g.grossSales - grossSalesExGst);
