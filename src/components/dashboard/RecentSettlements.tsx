@@ -619,15 +619,16 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
   }
 
   const summaryCards: { key: StatusCategory; label: string; sublabel: string; count: number; total?: number; color: string; icon: React.ReactNode }[] = [
-    {
-      key: 'ready',
-      label: 'Ready to Push to Xero',
+    // Hide "Ready for Xero" summary card on homepage — ActionCentre already shows it with more detail
+    ...(!actionableOnly ? [{
+      key: 'ready' as StatusCategory,
+      label: 'Ready for Xero',
       sublabel: `${displayReadyCount} period${displayReadyCount !== 1 ? 's' : ''} across all marketplaces`,
       count: displayReadyCount,
       total: displayReadyTotal,
       color: 'border-sky-200 bg-sky-50/80 dark:border-sky-800 dark:bg-sky-900/20',
       icon: <Send className="h-4 w-4 text-sky-600 dark:text-sky-400" />,
-    },
+    }] : []),
     // In actionableOnly mode, show Upload Needed instead of In Xero
     ...(actionableOnly && displayUploadNeeded > 0 ? [{
       key: 'other' as StatusCategory,
