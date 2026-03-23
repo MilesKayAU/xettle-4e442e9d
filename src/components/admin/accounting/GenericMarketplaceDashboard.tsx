@@ -194,6 +194,8 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [bankAmountInput, setBankAmountInput] = useState('');
   const [bankVerifyConfirmed, setBankVerifyConfirmed] = useState(false);
+  const [drawerSettlementId, setDrawerSettlementId] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [hasShopify, setHasShopify] = useState(false);
   const [isApiConnected, setIsApiConnected] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
