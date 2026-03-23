@@ -728,7 +728,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
         })()}
 
         {/* ── Status summary cards (clickable filters) ── */}
-        <div className={cn("grid gap-3", summaryCards.length === 3 ? "grid-cols-3" : "grid-cols-2")}>
+        <div className={cn("grid gap-3", summaryCards.length >= 3 ? "grid-cols-3" : summaryCards.length === 2 ? "grid-cols-2" : "grid-cols-1")}>
           {summaryCards.map(card => (
             <button
               key={card.key}
