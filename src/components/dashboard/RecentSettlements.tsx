@@ -981,26 +981,38 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem className="text-xs" onClick={() => handleView(row)}>
+                          <DropdownMenuItem className="text-xs" onClick={() => {
+                            if (row.dashboard_origin === 'validation') {
+                              onViewAll?.();
+                              return;
+                            }
+                            handleView(row);
+                          }}>
                             <Eye className="h-3.5 w-3.5 mr-2" />
-                            {expandedId === row.id ? 'Close breakdown' : 'View breakdown'}
+                            {row.dashboard_origin === 'validation'
+                              ? row.status === 'awaiting_api_sync' ? 'View in overview' : 'Go to upload flow'
+                              : expandedId === row.id ? 'Close breakdown' : 'View breakdown'}
                           </DropdownMenuItem>
 
-                          <DropdownMenuItem className="text-xs" onClick={() => handleDownloadCSV(row)}>
-                            <Download className="h-3.5 w-3.5 mr-2" />
-                            Download CSV
-                          </DropdownMenuItem>
+                          {row.dashboard_origin !== 'validation' && (
+                            <DropdownMenuItem className="text-xs" onClick={() => handleDownloadCSV(row)}>
+                              <Download className="h-3.5 w-3.5 mr-2" />
+                              Download CSV
+                            </DropdownMenuItem>
+                          )}
 
                           <DropdownMenuSeparator />
 
-                          <DropdownMenuItem className="text-xs" onClick={() => {
-                            toast.info('Recalculate: re-parse from the Settlements tab');
-                          }}>
-                            <RefreshCw className="h-3.5 w-3.5 mr-2" />
-                            Recalculate
-                          </DropdownMenuItem>
+                          {row.dashboard_origin !== 'validation' && (
+                            <DropdownMenuItem className="text-xs" onClick={() => {
+                              toast.info('Recalculate: re-parse from the Settlements tab');
+                            }}>
+                              <RefreshCw className="h-3.5 w-3.5 mr-2" />
+                              Recalculate
+                            </DropdownMenuItem>
+                          )}
 
-                          {['parsed', 'ready_to_push', 'saved'].includes(row.status) && row.status !== 'pre_boundary' && (
+                          {row.dashboard_origin !== 'validation' && ['parsed', 'ready_to_push', 'saved'].includes(row.status) && row.status !== 'pre_boundary' && (
                             <DropdownMenuItem className="text-xs" onClick={() => {
                               toast.info('Push to Xero from the Settlements tab');
                             }}>
@@ -1009,9 +1021,9 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
                             </DropdownMenuItem>
                           )}
 
-                          <DropdownMenuSeparator />
+                          {row.dashboard_origin !== 'validation' && <DropdownMenuSeparator />}
 
-                          {row.status === 'hidden' ? (
+                          {row.dashboard_origin !== 'validation' && (row.status === 'hidden' ? (
                             <DropdownMenuItem className="text-xs" onClick={() => handleUnhide(row)}>
                               <EyeIcon className="h-3.5 w-3.5 mr-2" />
                               Unhide
@@ -1021,7 +1033,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
                               <EyeOff className="h-3.5 w-3.5 mr-2" />
                               Hide
                             </DropdownMenuItem>
-                          )}
+                          ))}
                         </DropdownMenuContent>
                       </DropdownMenu>
                         );
