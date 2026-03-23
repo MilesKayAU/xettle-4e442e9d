@@ -300,9 +300,9 @@ export default function ActionCentre({
   const now = new Date();
 
   const uploadNeeded = normalisedRows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
-  // Filter out API-synced marketplaces, only show for closed months, AND only if no settlement exists
+  // Filter out true API channels (with dedicated tokens), only show manual-upload channels
   const uploadNeededManual = uploadNeeded.filter(r => {
-    if (apiSyncedMarketplaces.has(r.marketplace_code)) return false;
+    if (trueApiChannels.has(r.marketplace_code)) return false;
     if (r.settlement_uploaded || r.settlement_id) return false; // settlement already exists
     const periodEnd = new Date(r.period_end);
     return periodEnd < now; // only show if period already ended
