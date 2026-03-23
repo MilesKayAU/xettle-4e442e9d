@@ -295,7 +295,12 @@ export default function PostSetupBanner({
         }
       }
 
-      // ─── Phase 3: Validation sweep ───
+      // ─── Phase 3: One-shot Xero coverage refresh for new users ───
+      if (hasXero && caps.hasXero) {
+        await callEdgeFunctionSafe('sync-xero-status', caps.accessToken!);
+      }
+
+      // ─── Phase 4: Validation sweep ───
       await callEdgeFunctionSafe('run-validation-sweep', caps.accessToken!);
 
       setScanPhase('done');
