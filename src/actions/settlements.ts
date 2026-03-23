@@ -335,7 +335,7 @@ export async function applySourcePriority(
         .from('settlements')
         .select('id, settlement_id, xero_journal_id, xero_invoice_id, xero_status, posting_state')
         .eq('user_id', userId)
-        .eq('source', 'api_sync')
+        .in('source', ['api_sync', 'mirakl_api'])
         .eq('marketplace', marketplace)
         .neq('settlement_id', newSettlementId)
         .neq('status', 'duplicate_suppressed')
@@ -427,7 +427,7 @@ export async function applySourcePriority(
           },
         } as any);
       }
-    } else if (newSource === 'api_sync') {
+    } else if (newSource === 'api_sync' || newSource === 'mirakl_api') {
       // API sync → self-suppress if manual settlement already covers this period
       const { data: manualExists } = await supabase
         .from('settlements')
