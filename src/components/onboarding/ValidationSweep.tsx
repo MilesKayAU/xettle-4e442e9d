@@ -176,9 +176,9 @@ export default function ValidationSweep({
       // Load marketplace connections (paused codes + display names)
       const { data: connData } = await supabase
         .from('marketplace_connections')
-        .select('marketplace_code, marketplace_name, connection_status');
-      const allConns = (connData || []) as Array<{ marketplace_code: string; marketplace_name: string; connection_status: string }>;
-      setAllConnections(allConns.map(c => ({ marketplace_code: c.marketplace_code, marketplace_name: c.marketplace_name, connection_status: c.connection_status })));
+        .select('marketplace_code, marketplace_name, connection_status, connection_type');
+      const allConns = (connData || []) as Array<{ marketplace_code: string; marketplace_name: string; connection_status: string; connection_type: string }>;
+      setAllConnections(allConns);
       const paused = new Set<string>(
         allConns
           .filter((c) => c.connection_status === 'paused')
