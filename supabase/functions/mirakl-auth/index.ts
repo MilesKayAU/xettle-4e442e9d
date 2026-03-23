@@ -110,6 +110,7 @@ Deno.serve(async (req) => {
         base_url: r.base_url,
         seller_company_id: r.seller_company_id,
         auth_mode: r.auth_mode || "oauth",
+        auth_header_type: r.auth_header_type || null,
         updated_at: r.updated_at,
         has_token: !!r.expires_at,
       }));
