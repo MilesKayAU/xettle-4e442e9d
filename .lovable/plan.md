@@ -1,67 +1,81 @@
 
 
-## Audit: Xero Push COA Alignment Across All Marketplaces
+## Improve AI Assistant: Page-Aware, Concise, No-Code-Disclosure
 
-### Audit Scope
-Traced the full data pipeline from ingestion → DB storage → Xero push for every marketplace to verify that each financial category lands on the correct marketplace-specific COA account.
+### Problem
+1. **GenericMarketplaceDashboard has no AI context** — when the user opens the Bunnings tab and asks the AI, it only gets the generic Dashboard context (`routeId: 'dashboard'`). It has no idea the user is looking at File Reconciliation, what marketplace is selected, or what the settlements show.
+2. **The AI gives long, generic answers** instead of short, strategic responses about what's visible on screen.
+3. **No explicit rule against disclosing code** — the AI could reference internal implementation details to customers.
 
-### How the Xero Push Works (Current Architecture)
+### Changes
 
-The push pipeline has **two layers** — and they are already correctly structured:
+#### 1. Add `useAiPageContext` to `GenericMarketplaceDashboard` (File: `src/components/admin/accounting/GenericMarketplaceDashboard.tsx`)
 
-**Layer 1: Settlement Aggregates (what Xero sees)**
-Every settlement stores 10 canonical aggregate fields: `sales_principal`, `sales_shipping`, `seller_fees`, `refunds`, `reimbursements`, `fba_fees`, `storage_fees`, `advertising_costs`, `other_fees`, `promotional_discounts`.
+Register rich page context including:
+- `routeId: 'settlements'`
+- `pageTitle` with marketplace name (e.g. "Bunnings Settlements")
+- `primaryEntities.marketplace_codes` with the current code
+- `pageStateSummary` with: settlement count, how many reconciled vs flagged, how many pushed to Xero, CSV-only status, any active filters
+- `suggestedPrompts` tailored to what's on screen (e.g. "What does 'check required' mean?", "Why is this settlement negative?", "What do these columns mean?")
+- `visibleTables` with column names and a sample of settlement rows (settlement_id, sales, fees, refunds, net, reconciliation_status)
 
-**Layer 2: Server-Side Line Item Builder**
-The `sync-settlement-to-xero` edge function rebuilds line items server-side from these aggregates. For each non-zero field, it resolves the COA account via:
+Import `useAiPageContext` and `useAiActionTracker`, add the hook call after the existing hooks.
+
+#### 2. Enhance system prompt with page-specific guidance (File: `supabase/functions/ai-assistant/index.ts`)
+
+Add to `SYSTEM_PROMPT`:
+
+**Conciseness rules:**
+- Lead with a 1-2 sentence answer about what the user is looking at RIGHT NOW
+- Never exceed 150 words unless the user explicitly asks for detail
+- Use bullet points, not paragraphs
+- Reference specific numbers from the context (settlement IDs, amounts, counts)
+
+**Page-specific explainers** (injected when routeId matches):
+- For marketplace settlement pages: explain what File Reconciliation means (internal maths check — Sales - Fees + Refunds ≈ Net Payout), what "check required" vs green tick means, what each column represents
+- For outstanding: explain awaiting payment workflow
+- For dashboard home: explain the three sections
+
+**No-code disclosure rule:**
+- "NEVER reference code, file names, function names, variable names, database tables, or internal implementation details. Only explain what the feature does from the user's perspective. If asked 'how does this work technically', explain the concept, never the code."
+
+#### 3. Add a page-explainer knowledge block to the policy (File: `supabase/functions/_shared/ai_policy.ts`)
+
+Add a new exported function `renderPageExplainers(routeId: string)` that returns targeted guidance for each page:
+
 ```
-getCode(legacyKey, marketplace) → checks marketplace-specific override → global default → null (blocks push)
+settlements / marketplace dashboard:
+  - File Reconciliation = internal consistency check. Green tick = the file's numbers add up correctly. Orange warning = internal figures don't balance (Sales - Fees ≈ Net Payout).
+  - "check required" = the settlement failed this maths check and needs review before pushing to Xero.
+  - Settlement ID format: BUN-2301-YYYY-MM-DD = Bunnings PDF upload. shopify_auto_X = auto-generated from Shopify orders.
+  - Columns: Sales (gross revenue), Fees (marketplace commission), Refunds (returned orders), Net (what hits your bank).
+  - Negative Net = fees/refunds exceeded sales for that period.
+
+outstanding:
+  - Shows Xero invoices awaiting bank payment confirmation.
+  
+dashboard:
+  - Three sections: Sync Status, Manual Uploads Needed, Ready for Xero.
 ```
 
-### Audit Results By Marketplace
+#### 4. Use `renderPageExplainers` in the assistant (File: `supabase/functions/ai-assistant/index.ts`)
 
-| Marketplace | Ingestion Path | `seller_fees` Populated From | Marketplace Passed to `getCode` | COA Resolution | Status |
-|---|---|---|---|---|---|
-| Amazon AU | `fetch-amazon-settlements` | SP-API settlement data | `settlement.marketplace` | Per-marketplace override | Correct |
-| eBay AU | `fetch-ebay-settlements` | eBay API payout data | `settlement.marketplace` | Per-marketplace override | Correct |
-| Shopify Payments | `fetch-shopify-payouts` | Shopify payout API | `settlement.marketplace` | Per-marketplace override | Correct |
-| Woolworths (BigW/EM) | CSV parser + redistribution | Commission + redistributed tx fees | `settlement.marketplace` per group | Per-marketplace override | Correct |
-| Bunnings | PDF parser | Commission from PDF summary | `settlement.marketplace` | Per-marketplace override | Correct |
-| Kogan/Catch/etc | `auto-generate-shopify-settlements` | Shopify order aggregation | `settlement.marketplace` | Per-marketplace override | Correct |
-| Generic CSV | SmartUploadFlow | Parsed from CSV columns | `settlement.marketplace` | Per-marketplace override | Correct |
+After building the system prompt with context, append the page-specific explainer:
+```typescript
+const pageGuide = renderPageExplainers(context?.routeId);
+const systemPrompt = context
+  ? `${basePrompt}\n\nCurrent page context:\n${JSON.stringify(context, null, 2)}\n\n${pageGuide}`
+  : basePrompt;
+```
 
-### Transaction Fee Redistribution (Woolworths) — Verified Correct
+### Files Modified
+1. `src/components/admin/accounting/GenericMarketplaceDashboard.tsx` — add `useAiPageContext` with rich settlement data
+2. `supabase/functions/_shared/ai_policy.ts` — add `renderPageExplainers()` function
+3. `supabase/functions/ai-assistant/index.ts` — add conciseness rules, no-code-disclosure rule, integrate page explainers
 
-The recently added redistribution correctly flows through:
-1. Parser extracts tx fee rows → redistributes proportionally to BigW/Everyday Market groups
-2. Each group's `commission` total includes redistributed fees (line 329)
-3. Settlement builder converts `commission` → `fees_ex_gst` (line 471)
-4. Settlement engine stores `fees_ex_gst` → `seller_fees` column (line 611)
-5. Xero push reads `seller_fees` → resolves via `getCode('Seller Fees', 'bigw')` or `getCode('Seller Fees', 'everyday_market')`
-6. Each marketplace gets its own mapped COA account
-
-### Issues Found
-
-**1. Dead code: `buildWoolworthsInvoiceLines` (Medium — cleanup)**
-Lines 520-573 of `woolworths-marketplus-parser.ts` contain a legacy Xero line builder with hardcoded account codes (`'200'`, `'405'`, `'613'`). This function is exported but **never imported anywhere**. It bypasses the COA mapping system entirely. While it's not called, its presence is a maintenance risk — a future developer might use it by mistake.
-
-**Fix**: Delete `buildWoolworthsInvoiceLines` and the `WoolworthsXeroLineItem` interface. All Xero pushes already go through the canonical `buildServerLineItems` in the edge function.
-
-**2. Hardcoded fallback account codes in settlement metadata (Low — cosmetic)**
-The Woolworths settlement builder writes hardcoded codes into metadata (`salesAccountCode: '200'`, `feesAccountCode: '405'`, `clearingAccountCode: '613'`). These are never read by the Xero push (which uses the proper COA resolution), but they could mislead debugging.
-
-**Fix**: Remove `salesAccountCode`, `shippingAccountCode`, `clearingAccountCode`, `feesAccountCode` from the Woolworths metadata block. They serve no functional purpose.
-
-**3. `settlement_lines.accounting_category` not used by Xero push (Informational — no fix needed)**
-The `accounting_category` field on `settlement_lines` (where we set `'seller_fees'` for transaction fees) is only used for GST variance analysis and drill-down display. The actual Xero push reads from settlement-level aggregate columns. This is correct by design — `settlement_lines` are for audit trail, not for posting.
-
-### Summary
-The existing architecture is sound. Every marketplace push correctly resolves COA accounts via the per-marketplace override hierarchy. The two cleanup items above remove dead code that could cause confusion but do not affect any live push behavior.
-
-### Changes (1 file)
-
-**`src/utils/woolworths-marketplus-parser.ts`**
-1. Delete `WoolworthsXeroLineItem` interface (lines 511-518)
-2. Delete `buildWoolworthsInvoiceLines` function (lines 520-573)
-3. Remove hardcoded account code fields from settlement metadata (lines 499-502): `salesAccountCode`, `shippingAccountCode`, `clearingAccountCode`, `feesAccountCode`
+### Result
+- AI will know exactly which marketplace the user is viewing and what settlements are shown
+- Answers will be short, specific, and reference actual data on screen
+- "What does this table mean?" will get a 3-bullet answer about File Reconciliation, not a 500-word essay about the settlement workflow
+- No internal code or implementation details will ever be disclosed
 
