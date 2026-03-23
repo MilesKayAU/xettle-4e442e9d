@@ -242,10 +242,17 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="bg-muted/30 border border-border rounded-lg p-3 text-sm text-muted-foreground">
-              <p className="text-xs">
-                Enter your Bunnings Marketplace API credentials from your seller portal
-                (<strong>Settings → API Integrations</strong>).
+            <div className="bg-muted/30 border border-border rounded-lg p-3 text-sm text-muted-foreground space-y-2">
+              <p className="text-xs font-medium">How to find your API key:</p>
+              <ol className="text-xs list-decimal list-inside space-y-0.5">
+                <li>Log into your <strong>Bunnings Marketplace seller portal</strong></li>
+                <li>Click your <strong>profile initials</strong> (top right)</li>
+                <li>Select <strong>My Settings</strong></li>
+                <li>Click the <strong>API Key</strong> tab</li>
+                <li>Click <strong>Generate a new API key</strong></li>
+                <li>Copy and paste it below</li>
+              </ol>
+              <p className="text-[10px] text-muted-foreground/70">
                 Xettle requests <strong>read-only</strong> access to settlement and transaction data.
               </p>
             </div>
