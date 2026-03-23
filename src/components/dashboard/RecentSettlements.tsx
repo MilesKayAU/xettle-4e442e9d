@@ -23,7 +23,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-  FileText, ArrowRight, CheckCircle2, Clock, Send, AlertTriangle,
+  FileText, ArrowRight, CheckCircle2, Clock, Send, AlertTriangle, Info,
   MoreHorizontal, Eye, RefreshCw, EyeOff, Download, ChevronLeft, ChevronRight,
   EyeIcon, ChevronDown, ChevronUp, Loader2, ShieldAlert,
 } from 'lucide-react';
