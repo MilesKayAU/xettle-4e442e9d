@@ -121,6 +121,22 @@ function categorize(row: SettlementRow): StatusCategory {
 }
 
 function StatusBadge({ status, xeroStatus, syncOrigin, marketplace }: { status: string; xeroStatus: string | null; syncOrigin?: string; marketplace?: string | null }) {
+  if (status === 'settlement_needed' || status === 'missing') {
+    return (
+      <Badge variant="outline" className="text-xs text-muted-foreground">
+        <Clock className="h-3 w-3 mr-1" />
+        Upload Needed
+      </Badge>
+    );
+  }
+  if (status === 'awaiting_api_sync') {
+    return (
+      <Badge variant="outline" className="text-xs text-muted-foreground">
+        <RefreshCw className="h-3 w-3 mr-1" />
+        Awaiting API Sync
+      </Badge>
+    );
+  }
   // Fully reconciled (PAID in Xero)
   if (status === 'reconciled_in_xero' || status === 'bank_verified' || xeroStatus === 'PAID') {
     return (
@@ -141,7 +157,6 @@ function StatusBadge({ status, xeroStatus, syncOrigin, marketplace }: { status: 
       );
     }
     if (xeroStatus === 'AUTHORISED') {
-      // Rail payout mode: settlement-confirmed rails show "Posted ✓" not "Waiting"
       if (marketplace && !isBankMatchRequired(marketplace)) {
         return (
           <Badge variant="outline" className="text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-800 text-xs">
