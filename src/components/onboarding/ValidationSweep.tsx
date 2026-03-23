@@ -270,7 +270,7 @@ export default function ValidationSweep({
   const isUsefulRecon = useCallback((r: ValidationRow) => {
     return !!r.settlement_id?.startsWith('shopify_auto_')
       && !directApiCodes.has(r.marketplace_code)
-      && !['already_recorded', 'duplicate_suppressed'].includes(r.overall_status);
+      && r.overall_status !== 'duplicate_suppressed';
   }, [directApiCodes]);
 
   // Memoized filtering + sorting
