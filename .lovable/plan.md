@@ -1,26 +1,30 @@
 
 
-## Investigation Summary
+# Updated Plan: Add Rule 5 — Skip Empty Settlements
 
-The MCF order was **never actually created**. The `mcf_orders` table is completely empty. Two bugs found:
+## Change
 
-### Bug 1 — CORS failure in `create-mcf-order` (critical)
-The function calls `getCorsHeaders()` without passing the request origin (line 7). This returns empty headers `{}`, so the browser blocks every response as a CORS violation. The UI likely caught a network error but displayed a misleading "success" toast.
+In `supabase/functions/fetch-mirakl-settlements/index.ts`, after the accumulation loop and before saving each grouped settlement, add an `hasActivity` guard:
 
-In contrast, `poll-mcf-status` correctly passes origin: `getCorsHeaders(origin)`.
+```typescript
+const hasActivity =
+  Math.abs(totals.sales_principal) > 0.001 ||
+  Math.abs(totals.sales_shipping) > 0.001 ||
+  Math.abs(totals.seller_fees) > 0.001 ||
+  Math.abs(totals.refunds) > 0.001 ||
+  Math.abs(totals.reimbursements) > 0.001 ||
+  Math.abs(totals.other_fees) > 0.001 ||
+  Math.abs(totals.bank_deposit) > 0.001;
 
-**Fix**: Update `create-mcf-order/index.ts` to read `origin` from request headers and pass it to `getCorsHeaders()`, matching the pattern used in `poll-mcf-status`.
+if (!hasActivity) {
+  // Log skip as system_event info, then continue to next payout group
+  continue;
+}
+```
 
-### Bug 2 — Wrong environment variable names for Amazon OAuth (both functions)
-Both `create-mcf-order` and `poll-mcf-status` reference `AMAZON_CLIENT_ID` and `AMAZON_CLIENT_SECRET`, but the actual secrets are named `AMAZON_SP_CLIENT_ID` and `AMAZON_SP_CLIENT_SECRET`. If the token is expired, the refresh will silently fail.
+This sits alongside the existing 4 safety rules in the approved plan. No other files or logic change.
 
-**Fix**: Update both functions to use `AMAZON_SP_CLIENT_ID` and `AMAZON_SP_CLIENT_SECRET`.
+## Files affected
 
-### Files to modify
-1. `supabase/functions/create-mcf-order/index.ts` — fix CORS + env var names
-2. `supabase/functions/poll-mcf-status/index.ts` — fix env var names
-
-### Technical details
-- `getCorsHeaders(origin?)` returns `{}` when no origin is passed, per `_shared/cors.ts` line 48
-- Secret names confirmed: `AMAZON_SP_CLIENT_ID`, `AMAZON_SP_CLIENT_SECRET`
+- `supabase/functions/fetch-mirakl-settlements/index.ts` — add empty settlement guard after accumulation, before save
 
