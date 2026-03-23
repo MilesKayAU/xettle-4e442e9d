@@ -1,7 +1,7 @@
 /**
  * Master API Policy Registry
  * ═══════════════════════════
- * Wraps all three API policies (Amazon SP-API, Shopify, Xero) into a
+ * Wraps all four API policies (Amazon SP-API, Shopify, Xero, Mirakl) into a
  * single registry for health checks, deprecation audits, and version tracking.
  *
  * Usage:
@@ -32,6 +32,15 @@ import {
   XERO_REQUIRED_SCOPES,
   XERO_DEPRECATIONS,
 } from './xero-api-policy.ts';
+
+import {
+  MIRAKL_AUTH_URL,
+  MIRAKL_MARKETPLACE_ENDPOINTS,
+  MIRAKL_RATE_LIMITS,
+  MIRAKL_DEPRECATIONS,
+  MIRAKL_API_VERSION,
+  MIRAKL_POWERED_MARKETPLACES,
+} from './mirakl-api-policy.ts';
 
 // ═══════════════════════════════════════════════════════════════
 // Master Registry
