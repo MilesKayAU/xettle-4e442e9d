@@ -241,32 +241,6 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
             </div>
             <div className="space-y-3">
               <div>
-                <Label className="text-xs">Marketplace</Label>
-                <Select value={selectedMarketplace} onValueChange={handleMarketplaceChange}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MIRAKL_MARKETPLACES.map(m => (
-                      <SelectItem key={m.label} value={m.label} className="text-xs">
-                        {m.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {selectedMarketplace === 'Other' && (
-                <div>
-                  <Label className="text-xs">Base URL</Label>
-                  <Input
-                    placeholder="https://marketplace.example.com"
-                    value={baseUrl}
-                    onChange={(e) => setBaseUrl(e.target.value)}
-                    className="font-mono text-xs h-8"
-                  />
-                </div>
-              )}
-              <div>
                 <Label className="text-xs">Seller Company ID</Label>
                 <Input
                   placeholder="e.g. f2d2a8b4-896d-4451-a0f9-15c3bcaf1845"
