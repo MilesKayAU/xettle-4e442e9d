@@ -22,6 +22,7 @@ import SubChannelSetupModal from '@/components/shopify/SubChannelSetupModal';
 import DestinationAccountMapper from '@/components/settings/DestinationAccountMapper';
 import XettleLogo from '@/components/shared/XettleLogo';
 import type { DetectedSubChannel } from '@/utils/sub-channel-detection';
+import { isApiConnectionType } from '@/constants/connection-status';
 
 // ─── Types ──────────────────────────────────────────────────────────
 type StepStatus = 'idle' | 'running' | 'success' | 'error' | 'skipped' | 'pending' | 'rate_limited';
@@ -696,7 +697,7 @@ export default function Setup() {
           const detectedFrom = settings?.detected_from;
           const source = detectedFrom === 'xero_scan' ? 'Xero invoice history'
             : detectedFrom === 'xero_contact' ? 'Xero contacts'
-            : conn.connection_type === 'api' ? 'API connection'
+            : isApiConnectionType(conn.connection_type) ? 'API connection'
             : 'Auto-detected';
           marketplaces.push({
             name: conn.marketplace_name,

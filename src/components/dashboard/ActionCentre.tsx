@@ -20,6 +20,7 @@ import { triggerValidationSweep, formatAUD, MARKETPLACE_LABELS, GATEWAY_CODES, M
 import { isBankMatchRequired } from '@/constants/settlement-rails';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { isApiConnectionType } from '@/constants/connection-status';
 
 
 interface ValidationRow {
@@ -116,13 +117,13 @@ export default function ActionCentre({
 
   const loadData = useCallback(async () => {
     try {
-      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, readySettlementsRes, ingestedRes, autoPostRailsRes, autoPostFailedRes, amazonTokenRes, ebayTokenRes, shopifyTokenRes, miraklTokenRes] = await Promise.all([
+      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, readySettlementsRes, ingestedRes, autoPostRailsRes, autoPostFailedRes] = await Promise.all([
         supabase.from('marketplace_validation').select('*').order('marketplace_code').order('period_start', { ascending: false }),
         supabase.from('system_events').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.auth.getUser(),
         supabase.from('settlements').select('marketplace').in('source', ['api', 'api_sync', 'mirakl_api']),
         supabase.from('app_settings').select('value').eq('key', 'accounting_boundary_date').maybeSingle(),
-        supabase.from('marketplace_connections').select('marketplace_code').in('connection_status', ['active', 'connected']).order('created_at'),
+        supabase.from('marketplace_connections').select('marketplace_code, connection_type').in('connection_status', ['active', 'connected']).order('created_at'),
         supabase.from('sync_history').select('created_at').eq('event_type', 'scheduled_sync').order('created_at', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('settlements')
           .select('id, marketplace, settlement_id, period_start, period_end, bank_deposit, status, posting_state')
@@ -149,11 +150,6 @@ export default function ActionCentre({
           .eq('posting_state', 'failed')
           .eq('is_hidden', false)
           .order('period_start', { ascending: false }),
-        // Token presence checks — these determine true API channels
-        supabase.from('amazon_tokens').select('selling_partner_id').limit(1),
-        supabase.from('ebay_tokens').select('id').limit(1),
-        supabase.from('shopify_tokens').select('id').eq('is_active', true).limit(1),
-        supabase.from('mirakl_tokens').select('marketplace_label').order('updated_at', { ascending: false }),
       ]);
 
       if (validationRes.data) setRows(validationRes.data as ValidationRow[]);
@@ -168,22 +164,17 @@ export default function ActionCentre({
         setAccountingBoundary(userRes.data.user.created_at.substring(0, 10));
       }
       if (connectionsRes.data) {
-        setConnectedMarketplaces(connectionsRes.data.map((c: any) => c.marketplace_code));
-      }
+        const allConns = connectionsRes.data as Array<{ marketplace_code: string; connection_type: string }>;
+        setConnectedMarketplaces(allConns.map(c => c.marketplace_code));
 
-      // Build set of channels that have their own dedicated API token
-      // Sub-channels flowing through Shopify (Kogan, Big W, etc.) are NOT true API channels
-      const apiChannels = new Set<string>();
-      if (amazonTokenRes.data && amazonTokenRes.data.length > 0) apiChannels.add('amazon_au');
-      if (ebayTokenRes.data && ebayTokenRes.data.length > 0) apiChannels.add('ebay_au');
-      if (shopifyTokenRes.data && shopifyTokenRes.data.length > 0) apiChannels.add('shopify_payments');
-      if (miraklTokenRes.data) {
-        for (const mk of miraklTokenRes.data) {
-          const label = mk.marketplace_label?.toLowerCase().replace(/\s+/g, '_') || '';
-          if (label) apiChannels.add(label);
-        }
+        // Build set of channels with dedicated API connections (not sub-channels)
+        const apiChannels = new Set<string>(
+          allConns
+            .filter(c => isApiConnectionType(c.connection_type))
+            .map(c => c.marketplace_code)
+        );
+        setTrueApiChannels(apiChannels);
       }
-      setTrueApiChannels(apiChannels);
       if (lastSyncRes.data?.created_at) {
         setLastAutoSync(new Date(lastSyncRes.data.created_at));
       }

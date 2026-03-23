@@ -25,7 +25,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import PushSafetyPreview from '@/components/admin/accounting/PushSafetyPreview';
 import { runMarketplaceSync, runDirectMarketplaceSync } from '@/actions/sync';
-import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
+import { ACTIVE_CONNECTION_STATUSES, isApiConnectionType } from '@/constants/connection-status';
 
 interface ValidationRow {
   id: string;
@@ -176,7 +176,7 @@ export default function ValidationSweep({
       setAllConnections(allConns.map(c => ({ marketplace_code: c.marketplace_code, marketplace_name: c.marketplace_name, connection_status: c.connection_status })));
       const apiCodes = new Set<string>(
         allConns
-          .filter((c) => c.connection_type === 'api' && (ACTIVE_CONNECTION_STATUSES as readonly string[]).includes(c.connection_status))
+          .filter((c) => isApiConnectionType(c.connection_type) && (ACTIVE_CONNECTION_STATUSES as readonly string[]).includes(c.connection_status))
           .map((c) => c.marketplace_code)
       );
       setApiSyncedCodes(apiCodes);
@@ -433,14 +433,28 @@ export default function ValidationSweep({
       </div>
 
       {/* Upload Needed guidance banner */}
-      {filter === 'settlement_needed' && filteredRows.length > 0 && (
-        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
-          <p className="text-sm font-medium text-amber-800 dark:text-amber-300 mb-1">📤 {filteredRows.length} period{filteredRows.length !== 1 ? 's' : ''} need a settlement file</p>
-          <p className="text-xs text-amber-700 dark:text-amber-400">
-            Each row below shows the marketplace and month that's missing. Click <strong>Upload</strong> on any row to go straight to the upload page for that marketplace.
-          </p>
-        </div>
-      )}
+      {filter === 'settlement_needed' && filteredRows.length > 0 && (() => {
+        const apiRows = filteredRows.filter(r => apiSyncedCodes.has(r.marketplace_code));
+        const manualRows = filteredRows.filter(r => !apiSyncedCodes.has(r.marketplace_code));
+        return (
+          <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 space-y-2">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-300 mb-1">
+              📤 {filteredRows.length} period{filteredRows.length !== 1 ? 's' : ''} need a settlement file
+            </p>
+            {manualRows.length > 0 && (
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                Click <strong>Upload</strong> on any row to go straight to the upload page for that marketplace.
+              </p>
+            )}
+            {apiRows.length > 0 && (
+              <p className="text-xs text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+                <CheckCircle2 className="h-3 w-3" />
+                {apiRows.length} of these are API-connected channels — they'll sync automatically. No action needed.
+              </p>
+            )}
+          </div>
+        );
+      })()}
       {filteredRows.length === 0 && filter !== 'all' && rows.length > 0 && (
         <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
           <p className="text-sm font-medium text-amber-800 dark:text-amber-300">No results — your date or marketplace filter may be hiding them.</p>
