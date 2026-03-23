@@ -19,7 +19,7 @@
 
 import { getApiHealth, getAllDeprecationWarnings } from './api-policy-registry.ts';
 
-export type ApiName = 'amazon' | 'shopify' | 'xero';
+export type ApiName = 'amazon' | 'shopify' | 'xero' | 'mirakl';
 
 // ═══════════════════════════════════════════════════════════════
 // 1. Policy Assertion — call at function entry
