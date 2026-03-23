@@ -377,18 +377,6 @@ export default function ActionCentre({
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const currentMonth = new Date().toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-12 w-96" />
-        <div className="grid grid-cols-4 gap-4">
-          {[1,2,3,4].map(i => <Skeleton key={i} className="h-40" />)}
-        </div>
-        <Skeleton className="h-48" />
-      </div>
-    );
-  }
-
   // Build API sync status for Section 1
   const apiConnections = useMemo(() => {
     const apiRails = ['amazon_au', 'ebay_au', 'shopify_payments', 'bunnings'];
@@ -402,6 +390,17 @@ export default function ActionCentre({
   }, [connectedMarketplaces, apiSyncedMarketplaces]);
 
   const allApiSynced = apiConnections.length > 0 && apiConnections.every(c => c.synced);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-12 w-96" />
+        <div className="grid grid-cols-3 gap-4">
+          {[1,2,3].map(i => <Skeleton key={i} className="h-32" />)}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
