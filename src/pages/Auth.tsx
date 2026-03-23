@@ -108,7 +108,7 @@ export default function Auth() {
       toast({ title: "Welcome back!", description: "You have been signed in successfully." });
       // Navigation handled by onAuthStateChange
       if (!isShopifyInstall) {
-        navigate('/dashboard');
+        navigate('/dashboard', { replace: true });
       }
     } catch (err: any) {
       const msg = err?.message === 'timeout'
