@@ -270,13 +270,18 @@ export default function ValidationSweep({
         return r.overall_status === filter;
       });
     }
-    // Apply manual/api sub-tab when settlement_needed filter is active
+    // Apply manual/api/recon sub-tab when settlement_needed filter is active
     if (filter === 'settlement_needed') {
       if (uploadSubTab === 'manual') {
-        result = result.filter(r => !apiSyncedCodes.has(r.marketplace_code));
+        result = result.filter(r => !apiSyncedCodes.has(r.marketplace_code) && !r.settlement_id?.startsWith('shopify_auto_'));
       } else if (uploadSubTab === 'api') {
-        result = result.filter(r => apiSyncedCodes.has(r.marketplace_code));
+        result = result.filter(r => apiSyncedCodes.has(r.marketplace_code) && !r.settlement_id?.startsWith('shopify_auto_'));
+      } else if (uploadSubTab === 'recon') {
+        result = result.filter(r => r.settlement_id?.startsWith('shopify_auto_'));
       }
+    } else {
+      // Outside the settlement_needed filter, hide recon rows from all other views
+      result = result.filter(r => !r.settlement_id?.startsWith('shopify_auto_'));
     }
     if (marketplaceFilter !== 'all') {
       result = result.filter((r) => r.marketplace_code === marketplaceFilter);
