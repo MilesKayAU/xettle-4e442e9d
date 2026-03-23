@@ -282,13 +282,13 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                   <div className="flex items-center gap-2">
                     <RadioGroupItem value="oauth" id="auth-oauth" />
                     <Label htmlFor="auth-oauth" className="text-xs font-normal cursor-pointer">
-                      OAuth (recommended)
+                      OAuth
                     </Label>
                   </div>
                   <div className="flex items-center gap-2">
                     <RadioGroupItem value="api_key" id="auth-apikey" />
                     <Label htmlFor="auth-apikey" className="text-xs font-normal cursor-pointer">
-                      API Key
+                      API Key (recommended)
                     </Label>
                   </div>
                 </RadioGroup>
