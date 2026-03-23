@@ -487,6 +487,19 @@ export default function ValidationSweep({
             >
               🔄 API Syncs ({statusCounts.settlement_needed_api})
             </button>
+            {statusCounts.settlement_needed_recon > 0 && (
+              <button
+                onClick={() => setUploadSubTab('recon')}
+                className={cn(
+                  'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                  uploadSubTab === 'recon'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                🔍 Reconciliation ({statusCounts.settlement_needed_recon})
+              </button>
+            )}
           </div>
           {uploadSubTab === 'manual' && filteredRows.length > 0 && (
             <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
@@ -506,6 +519,17 @@ export default function ValidationSweep({
           {uploadSubTab === 'api' && statusCounts.settlement_needed_api === 0 && (
             <div className="rounded-lg border border-border bg-muted/30 px-4 py-3">
               <p className="text-xs text-muted-foreground">No API-synced periods are pending — all caught up! 🎉</p>
+            </div>
+          )}
+          {uploadSubTab === 'recon' && (
+            <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 px-4 py-3">
+              <p className="text-xs text-blue-700 dark:text-blue-400 flex items-center gap-1.5">
+                <Search className="h-3 w-3 flex-shrink-0" />
+                <span>
+                  <strong>These are reconciliation summaries only</strong> — auto-generated from Shopify order data to help you identify any missing transactions in your monthly accounts.
+                  They are <strong>not sent to Xero</strong>. Your authoritative accounting records come from the marketplace CSV uploads or direct API settlements.
+                </span>
+              </p>
             </div>
           )}
         </div>
