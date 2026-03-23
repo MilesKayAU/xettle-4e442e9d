@@ -116,13 +116,13 @@ export default function ActionCentre({
 
   const loadData = useCallback(async () => {
     try {
-      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, readySettlementsRes, ingestedRes, autoPostRailsRes, autoPostFailedRes, amazonTokenRes, ebayTokenRes, shopifyTokenRes, miraklTokenRes] = await Promise.all([
+      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, readySettlementsRes, ingestedRes, autoPostRailsRes, autoPostFailedRes] = await Promise.all([
         supabase.from('marketplace_validation').select('*').order('marketplace_code').order('period_start', { ascending: false }),
         supabase.from('system_events').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.auth.getUser(),
         supabase.from('settlements').select('marketplace').in('source', ['api', 'api_sync', 'mirakl_api']),
         supabase.from('app_settings').select('value').eq('key', 'accounting_boundary_date').maybeSingle(),
-        supabase.from('marketplace_connections').select('marketplace_code').in('connection_status', ['active', 'connected']).order('created_at'),
+        supabase.from('marketplace_connections').select('marketplace_code, connection_type').in('connection_status', ['active', 'connected']).order('created_at'),
         supabase.from('sync_history').select('created_at').eq('event_type', 'scheduled_sync').order('created_at', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('settlements')
           .select('id, marketplace, settlement_id, period_start, period_end, bank_deposit, status, posting_state')
@@ -149,11 +149,6 @@ export default function ActionCentre({
           .eq('posting_state', 'failed')
           .eq('is_hidden', false)
           .order('period_start', { ascending: false }),
-        // Token presence checks — these determine true API channels
-        supabase.from('amazon_tokens').select('selling_partner_id').limit(1),
-        supabase.from('ebay_tokens').select('id').limit(1),
-        supabase.from('shopify_tokens').select('id').eq('is_active', true).limit(1),
-        supabase.from('mirakl_tokens').select('marketplace_label').order('updated_at', { ascending: false }),
       ]);
 
       if (validationRes.data) setRows(validationRes.data as ValidationRow[]);
