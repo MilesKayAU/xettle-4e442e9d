@@ -258,13 +258,16 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
             </div>
             <div className="space-y-3">
               <div>
-                <Label className="text-xs">Seller Company ID</Label>
+                <Label className="text-xs">Shop ID <span className="text-muted-foreground font-normal">(optional)</span></Label>
                 <Input
-                  placeholder="e.g. f2d2a8b4-896d-4451-a0f9-15c3bcaf1845"
+                  placeholder="e.g. your Bunnings vendor number or Mirakl shop ID"
                   value={sellerCompanyId}
                   onChange={(e) => setSellerCompanyId(e.target.value)}
                   className="font-mono text-xs h-8"
                 />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Leave blank if you only have one store. You can find this in your seller portal under My Settings → Mirakl seller account.
+                </p>
               </div>
               <div>
                 <Label className="text-xs font-medium mb-2 block">Auth Method</Label>
