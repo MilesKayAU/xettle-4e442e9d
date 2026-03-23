@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { logger } from '@/utils/logger';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -12,10 +12,18 @@ const XeroCallback = () => {
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('Processing Xero authorization...');
   const [tenants, setTenants] = useState<Array<{ id: string; name: string }>>([]);
+  const processingRef = useRef(false);
 
   useEffect(() => {
+    const code = searchParams.get('code');
+
+    // Immediately strip code from URL to prevent back-button re-entry
+    if (code) {
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState(null, '', cleanUrl);
+    }
+
     const handleCallback = async () => {
-      const code = searchParams.get('code');
       const error = searchParams.get('error');
       const errorDescription = searchParams.get('error_description');
       const state = searchParams.get('state');
@@ -38,6 +46,18 @@ const XeroCallback = () => {
         setMessage('No authorization code received from Xero.');
         return;
       }
+
+      // Guard: prevent re-processing the same code
+      const consumedKey = `xero_code_consumed_${code}`;
+      if (sessionStorage.getItem(consumedKey)) {
+        navigate('/dashboard?connected=xero', { replace: true });
+        return;
+      }
+      if (processingRef.current) return;
+      processingRef.current = true;
+
+      // Mark code as consumed immediately
+      sessionStorage.setItem(consumedKey, '1');
 
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -82,7 +102,6 @@ const XeroCallback = () => {
           }
 
           // ─── CoA Intelligence: detect channels from Chart of Accounts ───
-          // Check if we already ran detection recently (24h cache)
           const { data: cachedResult } = await supabase
             .from('app_settings')
             .select('value')
@@ -107,7 +126,6 @@ const XeroCallback = () => {
 
               logger.debug(`[XeroCallback] CoA intelligence: ${highChannels.length} HIGH channels, ${signals.payment_providers.length} providers`);
 
-              // Insert suggested channels — never downgrade active to suggested
               const { upsertMarketplaceConnection } = await import('@/utils/marketplace-connections');
               for (const ch of highChannels) {
                 await upsertMarketplaceConnection({
@@ -124,7 +142,6 @@ const XeroCallback = () => {
                 });
               }
 
-              // Cache detection results
               await supabase.from('app_settings').upsert({
                 user_id: session.user.id,
                 key: 'coa_detection_results',
@@ -143,7 +160,7 @@ const XeroCallback = () => {
         
         // Auto-redirect after brief success display
         setTimeout(() => {
-          navigate('/dashboard?connected=xero');
+          navigate('/dashboard?connected=xero', { replace: true });
         }, 2000);
       } catch (err: any) {
         console.error('Xero callback error:', err);
@@ -153,7 +170,7 @@ const XeroCallback = () => {
     };
 
     handleCallback();
-  }, [searchParams]);
+  }, []);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -185,7 +202,7 @@ const XeroCallback = () => {
               </ul>
             </div>
           )}
-          <Button onClick={() => navigate('/dashboard?connected=xero')} className="w-full">
+          <Button onClick={() => navigate('/dashboard?connected=xero', { replace: true })} className="w-full">
             {status === 'success' ? 'Continue to Dashboard' : 'Back to Dashboard'}
           </Button>
         </CardContent>
