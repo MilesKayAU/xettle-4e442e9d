@@ -451,7 +451,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
       const [valRes, connRes] = await Promise.all([
         supabase
           .from('marketplace_validation')
-          .select('overall_status, settlement_net, marketplace_code')
+          .select('overall_status, settlement_net, marketplace_code, settlement_id')
           .in('overall_status', ['ready_to_push', 'pushed_to_xero', 'settlement_needed', 'missing', 'gap_detected']),
         supabase
           .from('marketplace_connections')
@@ -466,6 +466,8 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
         );
         let ready = 0, readyTotal = 0, uploadNeeded = 0, uploadNeededManual = 0, uploadNeededApi = 0, gaps = 0;
         for (const r of valRes.data) {
+          // Exclude reconciliation-only rows (shopify_auto_) — they're not actionable
+          if ((r as any).settlement_id?.startsWith('shopify_auto_')) continue;
           if (r.overall_status === 'ready_to_push') {
             ready++;
             readyTotal += (r as any).settlement_net || 0;
@@ -853,7 +855,20 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
               {pageRows.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground text-sm">
-                    No settlements match this filter
+                    {actionableOnly ? (
+                      <div className="space-y-1">
+                        <p>No settlements waiting in the queue right now.</p>
+                        {(displayUploadManual > 0 || displayUploadApi > 0) && (
+                          <p className="text-xs text-muted-foreground/70">
+                            Upload or sync settlements from the{' '}
+                            {onViewAll ? (
+                              <button onClick={onViewAll} className="underline hover:text-foreground">Settlements Overview</button>
+                            ) : 'Settlements Overview'}{' '}
+                            to populate this table.
+                          </p>
+                        )}
+                      </div>
+                    ) : 'No settlements match this filter'}
                   </td>
                 </tr>
               )}
