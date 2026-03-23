@@ -304,10 +304,14 @@ export function parseWoolworthsMarketPlusCSV(csvContent: string): WoolworthsResu
       groupMap.get(src)!.push(row);
     }
 
+    // ─── Transaction Fee Redistribution Pass ──────────────────────────────
+    redistributeTransactionFees(groupMap);
+
     const groups: WoolworthsMarketplaceGroup[] = [];
     for (const [source, rows] of groupMap) {
+      if (rows.length === 0) continue;
+
       const resolved = resolveOrderSource(source);
-      // Use Ordered Date values — parseDate now handles plausibility internally
       const dates = rows
         .map(r => r.orderedDate)
         .filter(d => d && d >= '2020-01-01')
@@ -335,7 +339,6 @@ export function parseWoolworthsMarketPlusCSV(csvContent: string): WoolworthsResu
 
     const totalNet = round2(groups.reduce((s, g) => s + g.netAmount, 0));
 
-    // Build settlements
     const settlements = buildWoolworthsSettlements(groups, bankPaymentRef, totalNet);
 
     return {
@@ -353,110 +356,81 @@ export function parseWoolworthsMarketPlusCSV(csvContent: string): WoolworthsResu
   }
 }
 
-// ─── Fee Redistribution Constants ───────────────────────────────────────────
+// ─── Transaction Fee Redistribution ─────────────────────────────────────────
 
-/**
- * Threshold for detecting anomalous fee-to-sales ratios in multi-marketplace CSVs.
- * If abs(commission) / grossSales > this threshold, excess fees are redistributed
- * to sibling marketplace groups in the same bank payment batch.
- * 
- * Set to 30% to avoid false positives on legitimate high-commission marketplaces:
- * - eBay AU runs at ~18% (can spike to 22-25% with promoted listings)
- * - Amazon FBA can hit 30-45% but is parsed from its own CSV, not Woolworths
- * - Any legitimate marketplace below 30% won't be flagged
- * 
- * Configurable as a constant so it can be adjusted without a code change.
- */
-export const ANOMALOUS_FEE_RATIO_THRESHOLD = 0.30;
+function redistributeTransactionFees(groupMap: Map<string, WoolworthsOrderRow[]>): void {
+  const txFeeRows: WoolworthsOrderRow[] = [];
+  for (const [source, rows] of groupMap) {
+    const kept: WoolworthsOrderRow[] = [];
+    for (const row of rows) {
+      if (isTransactionFee(row)) {
+        txFeeRows.push(row);
+      } else {
+        kept.push(row);
+      }
+    }
+    groupMap.set(source, kept);
+  }
 
-// ─── Fee Redistribution Logic ───────────────────────────────────────────────
+  if (txFeeRows.length === 0) return;
 
-/**
- * Detects fee-only or anomalous-fee groups and redistributes excess fees
- * to sibling marketplace groups proportionally by gross sales.
- * 
- * Conservation invariant: SUM(all group commissions before) === SUM(after)
- */
-function redistributeAnomalousFees(groups: WoolworthsMarketplaceGroup[]): WoolworthsMarketplaceGroup[] {
-  if (groups.length < 2) return groups; // Nothing to redistribute with single group
-
-  const result = groups.map(g => ({ ...g })); // shallow clone
-
-  // Identify anomalous groups and sibling groups
-  const anomalousIndices: number[] = [];
-  const siblingIndices: number[] = [];
-
-  for (let i = 0; i < result.length; i++) {
-    const g = result[i];
-    const absCommission = Math.abs(g.commission);
-    
-    if (g.grossSales <= 0 && absCommission > 0) {
-      // Fee-only group (zero sales, has fees) — all fees are excess
-      anomalousIndices.push(i);
-    } else if (g.grossSales > 0 && absCommission / g.grossSales > ANOMALOUS_FEE_RATIO_THRESHOLD) {
-      // Fees exceed threshold — partial excess
-      anomalousIndices.push(i);
-    } else {
-      siblingIndices.push(i);
+  const siblingEntries: Array<{ source: string; grossSales: number }> = [];
+  let totalSiblingSales = 0;
+  for (const [source, rows] of groupMap) {
+    const gross = rows.filter(r => r.totalSalePrice > 0).reduce((s, r) => s + r.totalSalePrice, 0);
+    if (gross > 0) {
+      siblingEntries.push({ source, grossSales: gross });
+      totalSiblingSales += gross;
     }
   }
 
-  if (anomalousIndices.length === 0 || siblingIndices.length === 0) return result;
+  if (siblingEntries.length === 0 || totalSiblingSales <= 0) {
+    console.warn('[woolworths-parser] Transaction fee rows found with no sales siblings — allocated to fallback channel');
+    let largestSource = '';
+    let largestCount = 0;
+    for (const [source, rows] of groupMap) {
+      if (rows.length > largestCount) {
+        largestCount = rows.length;
+        largestSource = source;
+      }
+    }
+    if (largestSource) {
+      const target = groupMap.get(largestSource)!;
+      for (const feeRow of txFeeRows) {
+        target.push({ ...feeRow, product: feeRow.product + ' (allocated from platform fees)' });
+      }
+    }
+    return;
+  }
 
-  // Calculate total sibling gross sales for proportional redistribution
-  const totalSiblingSales = siblingIndices.reduce((sum, i) => sum + result[i].grossSales, 0);
-  if (totalSiblingSales <= 0) return result; // Can't redistribute if no sibling sales
+  for (const feeRow of txFeeRows) {
+    let remainingCommission = feeRow.commissionFee;
+    let remainingNet = feeRow.netAmount;
+    let remainingGst = feeRow.gstOnNetAmount;
 
-  const totalCommissionBefore = round2(result.reduce((sum, g) => sum + g.commission, 0));
+    for (let i = 0; i < siblingEntries.length; i++) {
+      const sibling = siblingEntries[i];
+      const isLast = i === siblingEntries.length - 1;
+      const share = sibling.grossSales / totalSiblingSales;
 
-  for (const ai of anomalousIndices) {
-    const g = result[ai];
-    const absCommission = Math.abs(g.commission);
-    
-    // Calculate expected commission at threshold rate (or 0 if no sales)
-    const expectedCommission = g.grossSales > 0 
-      ? round2(g.grossSales * ANOMALOUS_FEE_RATIO_THRESHOLD)
-      : 0;
-    
-    // Excess = actual fees above expected (commission is negative, so work with abs)
-    const excessAmount = round2(absCommission - expectedCommission);
-    if (excessAmount <= 0) continue;
+      const commShare = isLast ? remainingCommission : round2(feeRow.commissionFee * share);
+      const netShare = isLast ? remainingNet : round2(feeRow.netAmount * share);
+      const gstShare = isLast ? remainingGst : round2(feeRow.gstOnNetAmount * share);
 
-    // Reduce anomalous group's commission to expected level
-    // commission is negative, so we're making it less negative
-    result[ai] = {
-      ...result[ai],
-      commission: g.grossSales > 0 ? round2(-expectedCommission) : 0,
-      netAmount: round2(g.netAmount + excessAmount), // net increases as fees decrease
-    };
+      remainingCommission = round2(remainingCommission - commShare);
+      remainingNet = round2(remainingNet - netShare);
+      remainingGst = round2(remainingGst - gstShare);
 
-    // Distribute excess to siblings proportionally by gross sales
-    for (const si of siblingIndices) {
-      const share = result[si].grossSales / totalSiblingSales;
-      const feeShare = round2(excessAmount * share);
-      result[si] = {
-        ...result[si],
-        commission: round2(result[si].commission - feeShare), // make more negative
-        netAmount: round2(result[si].netAmount - feeShare), // net decreases as fees increase
-      };
+      groupMap.get(sibling.source)!.push({
+        ...feeRow,
+        commissionFee: commShare,
+        netAmount: netShare,
+        gstOnNetAmount: gstShare,
+        totalSalePrice: 0,
+        product: feeRow.product + ' (allocated from platform fees)',
+      });
     }
   }
-
-  // Verify conservation invariant
-  const totalCommissionAfter = round2(result.reduce((sum, g) => sum + g.commission, 0));
-  const drift = Math.abs(totalCommissionAfter - totalCommissionBefore);
-  if (drift > 0.02) {
-    // Rounding drift — adjust largest sibling to compensate
-    const largestSibling = siblingIndices.reduce((best, i) => 
-      result[i].grossSales > result[best].grossSales ? i : best, siblingIndices[0]);
-    const correction = round2(totalCommissionBefore - totalCommissionAfter);
-    result[largestSibling] = {
-      ...result[largestSibling],
-      commission: round2(result[largestSibling].commission + correction),
-    };
-  }
-
-  return result;
 }
 
 // ─── Settlement Builder ─────────────────────────────────────────────────────
