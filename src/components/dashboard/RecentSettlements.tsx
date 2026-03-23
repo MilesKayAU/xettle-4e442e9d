@@ -448,21 +448,39 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
   // Fetch marketplace_validation counts (true source of what needs pushing)
   const fetchValidationCounts = useCallback(async () => {
     try {
-      const { data } = await supabase
-        .from('marketplace_validation')
-        .select('overall_status, settlement_net')
-        .in('overall_status', ['ready_to_push', 'pushed_to_xero', 'settlement_needed', 'missing', 'gap_detected']);
-      if (data) {
-        let ready = 0, readyTotal = 0, uploadNeeded = 0, gaps = 0;
-        for (const r of data) {
+      const [valRes, connRes] = await Promise.all([
+        supabase
+          .from('marketplace_validation')
+          .select('overall_status, settlement_net, marketplace_code')
+          .in('overall_status', ['ready_to_push', 'pushed_to_xero', 'settlement_needed', 'missing', 'gap_detected']),
+        supabase
+          .from('marketplace_connections')
+          .select('marketplace_code, connection_type, connection_status'),
+      ]);
+      if (valRes.data) {
+        // Build set of API-synced marketplace codes
+        const apiCodes = new Set<string>(
+          (connRes.data || [])
+            .filter((c: any) => isApiConnectionType(c.connection_type) && (ACTIVE_CONNECTION_STATUSES as readonly string[]).includes(c.connection_status))
+            .map((c: any) => c.marketplace_code)
+        );
+        let ready = 0, readyTotal = 0, uploadNeeded = 0, uploadNeededManual = 0, uploadNeededApi = 0, gaps = 0;
+        for (const r of valRes.data) {
           if (r.overall_status === 'ready_to_push') {
             ready++;
             readyTotal += (r as any).settlement_net || 0;
           }
-          if (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') uploadNeeded++;
+          if (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') {
+            uploadNeeded++;
+            if (apiCodes.has(r.marketplace_code)) {
+              uploadNeededApi++;
+            } else {
+              uploadNeededManual++;
+            }
+          }
           if (r.overall_status === 'gap_detected') gaps++;
         }
-        setValidationCounts({ ready, readyTotal, uploadNeeded, gaps });
+        setValidationCounts({ ready, readyTotal, uploadNeeded, uploadNeededManual, uploadNeededApi, gaps });
       }
     } catch { /* silent */ }
   }, []);
