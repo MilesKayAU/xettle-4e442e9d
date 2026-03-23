@@ -12,6 +12,10 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import bunningsBillingImg from '@/assets/bunnings-billing-cycles.png';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  buildPostingLineItems, createAccountCodeResolver,
+  type SettlementForPosting, type XeroPostingLineItem,
+} from '@/utils/xero-posting-line-items';
 import { parseBunningsSummaryPdf, type BunningsParseExtra } from '@/utils/bunnings-summary-parser';
 import {
   type StandardSettlement,
