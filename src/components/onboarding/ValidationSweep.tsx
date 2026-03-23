@@ -259,7 +259,6 @@ export default function ValidationSweep({
     if (filter !== 'all') {
       result = result.filter((r) => {
         if (filter === 'complete') return r.overall_status === 'complete' || r.overall_status === 'bank_matched';
-        if (filter === 'complete') return r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'already_recorded' || r.overall_status === 'synced_external';
         if (filter === 'ready_to_push') return r.overall_status === 'ready_to_push' || r.overall_status === 'pushed_to_xero';
         if (filter === 'settlement_needed') return r.overall_status === 'settlement_needed' || r.overall_status === 'missing';
         return r.overall_status === filter;
