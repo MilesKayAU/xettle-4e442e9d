@@ -126,6 +126,7 @@ export default function ValidationSweep({
   const [bulkPushing, setBulkPushing] = useState(false);
   const [drawerSettlementId, setDrawerSettlementId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [uploadSubTab, setUploadSubTab] = useState<'manual' | 'api'>('manual');
 
   const handleConfirmBankMatch = async (row: ValidationRow, transactionId: string) => {
     setConfirmingBank(row.id);
