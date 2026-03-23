@@ -110,6 +110,15 @@ export default function MarketplaceProfitComparison() {
       const profits = profitRes.data || [];
       const settlements = settlementsRes.data || [];
 
+      // Build order counts map from settlement_lines (fallback: query settlements directly)
+      const orderCountsByMp: Record<string, number> = {};
+      if (orderCountsRes.data && Array.isArray(orderCountsRes.data)) {
+        for (const row of orderCountsRes.data as any[]) {
+          const mp = normalizeMarketplace(row.marketplace_name || '');
+          if (mp) orderCountsByMp[mp] = (orderCountsByMp[mp] || 0) + (Number(row.order_count) || 0);
+        }
+      }
+
       // Build a set of active settlement IDs for cross-referencing profit rows
       const activeSettlementIds = new Set(settlements.map(s => (s as any).settlement_id));
 
