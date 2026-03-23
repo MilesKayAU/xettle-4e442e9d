@@ -1,52 +1,64 @@
 
 
-## Shipping Cost Deduction in Profit Ranking — Data Availability & Plan
+## Beta Marketplace Support for JB Hi-Fi & Baby Bunting
 
-### What Data We Have
+### Summary
+Add JB Hi-Fi and Baby Bunting as beta-selectable Mirakl marketplaces, with a structured issue reporting flow so beta users can help validate the generic rail.
 
-1. **`settlement_profit` table** — already has `orders_count` and `units_sold` per settlement per marketplace. This is populated by the profit engine when SKU cost data exists.
+### Changes
 
-2. **`settlement_lines` table** — has individual transaction rows with `order_id`. We can count distinct `order_id` values per marketplace to get order counts even when no SKU costs are entered.
+**1. Database migration — `mirakl_issue_reports` table**
+- Columns: `id` (uuid PK), `user_id` (uuid, references auth.users), `marketplace_label` (text), `base_url` (text), `error_message` (text), `event_log` (jsonb), `resolved` (boolean default false), `created_at` (timestamptz default now())
+- RLS: authenticated users can INSERT their own rows; admin (via `is_primary_admin()`) can SELECT all and UPDATE `resolved`
 
-3. **`app_settings`** — stores `postage_cost:{marketplace_code}` (the user's estimated shipping cost per order) and `fulfilment_method:{marketplace_code}`.
+**2. Edge function — `report-mirakl-issue/index.ts`**
+- Accepts POST with: `marketplace_label`, `base_url`, `error_message`
+- Server-side: redacts API key from base_url, fetches last 10 `system_events` for the user filtered by marketplace, inserts into `mirakl_issue_reports`
+- Uses shared auth-guard for JWT validation
 
-### The Gap Today
+**3. Update `MiraklConnectionPanel.tsx`**
+- Replace hardcoded Bunnings-only state with a marketplace selector dropdown:
+  - Bunnings (stable)
+  - JB Hi-Fi (beta badge)
+  - Baby Bunting (beta badge)
+  - Other Mirakl (manual entry)
+- Pre-fill `baseUrl` for Bunnings; show placeholder hints for JB Hi-Fi / Baby Bunting / Other
+- When a beta marketplace is selected, show info banner about beta testing
+- After any failed connect or fetch, show a "Report Issue" button that invokes `report-mirakl-issue`
+- Pass selected `marketplace_label` and resolved `marketplace_code` (e.g. `jbhifi`, `babybunting`) through to `mirakl-auth` connect call
 
-The Marketplace Profit Ranking chart (screenshot) has two paths:
+**4. Update `mirakl-auth/index.ts`**
+- Accept dynamic `marketplace_code` from the body (default to `bunnings` for backwards compat)
+- Use it when upserting `marketplace_connections` and `mirakl_tokens`
 
-- **Path A (has `settlement_profit` rows)**: Uses profit data that already includes `orders_count` and `postage_deduction`. Shipping IS already factored in here.
-- **Path B (settlement-only, no SKU costs)**: Lines 204-235 of `MarketplaceProfitComparison.tsx`. This path explicitly says `// skip postage deduction here since we don't have order counts`. So for marketplaces without SKU cost data, shipping is NOT deducted even when the user has entered an estimated cost.
+**5. Update `fetch-mirakl-settlements/index.ts`**
+- Already reads marketplace code from `mirakl_tokens` — no change needed as long as `mirakl-auth` stores the correct code
 
-### The Fix
+**6. Add marketplace labels**
+- Add `jbhifi: 'JB Hi-Fi'` and `babybunting: 'Baby Bunting'` to `marketplace-labels.ts`
+- Add registry entries for both in `marketplace-registry.ts`
 
-For Path B marketplaces, we CAN get order counts from `settlement_lines` by counting distinct `order_id` values grouped by marketplace. Then multiply by the user's `postage_cost` setting to produce an estimated shipping deduction.
+**7. Admin panel — `MiraklBetaFeedback` component**
+- New component shown in Admin page (gated by `is_primary_admin`)
+- Lists all `mirakl_issue_reports` rows: marketplace, error, timestamp, user email
+- "Mark Resolved" button toggles `resolved` column
+- Filter by resolved/unresolved
 
-### Implementation
+### What stays untouched
+- Existing Bunnings connection logic and settlement fetch
+- Settlement schema, Xero sync, Amazon/eBay connectors
+- Dual-auth logic, source enum values
 
-**File: `src/components/insights/MarketplaceProfitComparison.tsx`**
-
-1. After loading settlements, also query `settlement_lines` to get distinct order counts per marketplace:
-   ```sql
-   SELECT marketplace_name, COUNT(DISTINCT order_id) as order_count
-   FROM settlement_lines
-   WHERE user_id = ? AND order_id IS NOT NULL
-   GROUP BY marketplace_name
-   ```
-2. In Path B (lines 204-235), use the order count from `settlement_lines` + the user's `postage_cost` + `fulfilment_method` to calculate a shipping deduction via the existing `getPostageDeductionForOrder()` function.
-3. Subtract shipping deduction from `adjustedPayout` before calculating margin.
-4. Add a new field `shipping_deduction` to `AggregatedMarketplace` interface and display it as a tooltip or sub-line on the chart (e.g., "incl. est. shipping: -$X,XXX").
-5. Show an "Est. Shipping" badge next to marketplaces where shipping was deducted using estimates (similar to the existing "Estimated" badge for fees).
-
-### What This Gives Users
-
-- Bunnings at 73% margin might drop to ~60% once their $8/order shipping estimate is applied across their order count
-- Makes the ranking more realistic and actionable
-- No schema changes needed — all data already exists
-
-### Technical Details
-
-- Query `settlement_lines` with a single RPC or direct query, grouped by `marketplace_name`
-- Only count lines where `order_id IS NOT NULL` and `accounting_category = 'revenue'` (to avoid counting fee lines as orders)
-- For Path A marketplaces (with `settlement_profit`), shipping is already included — no change needed
-- The `getPostageDeductionForOrder()` function handles all fulfilment method logic (self-ship, 3PL, marketplace-fulfilled, mixed)
+### File list
+| File | Action |
+|------|--------|
+| `supabase/migrations/new` | Create `mirakl_issue_reports` table + RLS |
+| `supabase/functions/report-mirakl-issue/index.ts` | New edge function |
+| `supabase/functions/mirakl-auth/index.ts` | Accept dynamic marketplace_code |
+| `src/components/admin/accounting/MiraklConnectionPanel.tsx` | Marketplace selector, beta badges, report issue button |
+| `src/components/admin/MiraklBetaFeedback.tsx` | New admin panel |
+| `src/pages/Admin.tsx` | Mount MiraklBetaFeedback |
+| `src/utils/marketplace-labels.ts` | Add jbhifi, babybunting |
+| `src/utils/marketplace-registry.ts` | Add registry entries |
+| `supabase/config.toml` | Add report-mirakl-issue verify_jwt = false |
 
