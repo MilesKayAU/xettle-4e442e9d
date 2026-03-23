@@ -1,29 +1,74 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyRequest } from "../_shared/auth-guard.ts";
-import { getValidMiraklToken } from "../_shared/mirakl-token.ts";
+import { getMiraklApiKey } from "../_shared/mirakl-token.ts";
 
 // ═══════════════════════════════════════════════════════════════
 // MIRAKL TRANSACTION TYPE → STANDARD SETTLEMENT FIELD MAP
+// Official Mirakl enum from developer.mirakl.com TL05 docs.
 // All signs = 1 because Mirakl's `amount` field carries its own sign
 // (credits positive, debits negative).
 // ═══════════════════════════════════════════════════════════════
 
 const MIRAKL_TYPE_MAP: Record<string, { field: string; sign: 1 }> = {
-  ORDER_AMOUNT:                     { field: "sales_principal", sign: 1 },
-  ORDER_AMOUNT_TAX:                 { field: "gst_on_income", sign: 1 },
-  ORDER_SHIPPING_AMOUNT:            { field: "sales_shipping", sign: 1 },
-  ORDER_SHIPPING_AMOUNT_TAX:        { field: "gst_on_income", sign: 1 },
-  COMMISSION_FEE:                   { field: "seller_fees", sign: 1 },
-  COMMISSION_VAT:                   { field: "gst_on_expenses", sign: 1 },
-  ORDER_REFUND_AMOUNT:              { field: "refunds", sign: 1 },
-  ORDER_REFUND_AMOUNT_TAX:          { field: "gst_on_income", sign: 1 },
-  ORDER_REFUND_SHIPPING_AMOUNT:     { field: "refunds", sign: 1 },
-  ORDER_REFUND_SHIPPING_AMOUNT_TAX: { field: "gst_on_income", sign: 1 },
-  MANUAL_CREDIT:                    { field: "reimbursements", sign: 1 },
-  MANUAL_CREDIT_VAT:                { field: "gst_on_expenses", sign: 1 },
-  MANUAL_INVOICE:                   { field: "other_fees", sign: 1 },
-  MANUAL_INVOICE_VAT:               { field: "gst_on_expenses", sign: 1 },
+  // ── Sales ──
+  ORDER_AMOUNT:                                  { field: "sales_principal", sign: 1 },
+  ORDER_AMOUNT_TAX:                              { field: "gst_on_income", sign: 1 },
+  ORDER_SHIPPING_AMOUNT:                         { field: "sales_shipping", sign: 1 },
+  ORDER_SHIPPING_AMOUNT_TAX:                     { field: "gst_on_income", sign: 1 },
+  // ── Commissions / Fees ──
+  COMMISSION_FEE:                                { field: "seller_fees", sign: 1 },
+  COMMISSION_VAT:                                { field: "gst_on_expenses", sign: 1 },
+  // ── Refunds (official Mirakl names: REFUND_ORDER_*) ──
+  REFUND_ORDER_AMOUNT:                           { field: "refunds", sign: 1 },
+  REFUND_ORDER_AMOUNT_TAX:                       { field: "gst_on_income", sign: 1 },
+  REFUND_ORDER_SHIPPING_AMOUNT:                  { field: "refunds", sign: 1 },
+  REFUND_ORDER_SHIPPING_AMOUNT_TAX:              { field: "gst_on_income", sign: 1 },
+  REFUND_COMMISSION_FEE:                         { field: "seller_fees", sign: 1 },
+  REFUND_COMMISSION_VAT:                         { field: "gst_on_expenses", sign: 1 },
+  // ── Operator-remitted taxes (marketplace-collected GST) ──
+  OPERATOR_REMITTED_ORDER_AMOUNT_TAX:            { field: "gst_on_income", sign: 1 },
+  OPERATOR_REMITTED_ORDER_SHIPPING_AMOUNT_TAX:   { field: "gst_on_income", sign: 1 },
+  OPERATOR_REMITTED_REFUND_ORDER_AMOUNT_TAX:     { field: "gst_on_income", sign: 1 },
+  OPERATOR_REMITTED_REFUND_ORDER_SHIPPING_AMOUNT_TAX: { field: "gst_on_income", sign: 1 },
+  // ── Operator-paid shipping ──
+  OPERATOR_PAID_ORDER_SHIPPING_AMOUNT:           { field: "sales_shipping", sign: 1 },
+  OPERATOR_PAID_ORDER_SHIPPING_AMOUNT_TAX:       { field: "gst_on_income", sign: 1 },
+  OPERATOR_PAID_REFUND_ORDER_SHIPPING_AMOUNT:    { field: "refunds", sign: 1 },
+  OPERATOR_PAID_REFUND_ORDER_SHIPPING_AMOUNT_TAX:{ field: "gst_on_income", sign: 1 },
+  // ── Manual adjustments ──
+  MANUAL_CREDIT:                                 { field: "reimbursements", sign: 1 },
+  MANUAL_CREDIT_VAT:                             { field: "gst_on_expenses", sign: 1 },
+  MANUAL_INVOICE:                                { field: "other_fees", sign: 1 },
+  MANUAL_INVOICE_VAT:                            { field: "gst_on_expenses", sign: 1 },
+  // ── Subscription ──
+  SUBSCRIPTION_FEE:                              { field: "other_fees", sign: 1 },
+  SUBSCRIPTION_VAT:                              { field: "gst_on_expenses", sign: 1 },
+  // ── Seller fees ──
+  SELLER_FEE_ON_ORDER:                           { field: "other_fees", sign: 1 },
+  SELLER_FEE_ON_ORDER_TAX:                       { field: "gst_on_expenses", sign: 1 },
+  SELLER_PENALTY_FEE:                            { field: "other_fees", sign: 1 },
+  SELLER_PENALTY_FEE_TAX:                        { field: "gst_on_expenses", sign: 1 },
+  // ── Order fees ──
+  ORDER_FEE_AMOUNT:                              { field: "other_fees", sign: 1 },
+  REFUND_ORDER_FEE_AMOUNT:                       { field: "other_fees", sign: 1 },
+  OPERATOR_REMITTED_ORDER_FEE_AMOUNT:            { field: "other_fees", sign: 1 },
+  OPERATOR_REMITTED_REFUND_ORDER_FEE_AMOUNT:     { field: "other_fees", sign: 1 },
+  // ── Purchase commissions ──
+  PURCHASE_COMMISSION_FEE:                       { field: "seller_fees", sign: 1 },
+  PURCHASE_SHIPPING_COMMISSION_FEE:              { field: "seller_fees", sign: 1 },
+  REFUND_PURCHASE_COMMISSION_FEE:                { field: "seller_fees", sign: 1 },
+  REFUND_PURCHASE_SHIPPING_COMMISSION_FEE:       { field: "seller_fees", sign: 1 },
+  // ── Purchase taxes ──
+  PURCHASE_ORDER_AMOUNT_TAX:                     { field: "gst_on_income", sign: 1 },
+  PURCHASE_ORDER_SHIPPING_AMOUNT_TAX:            { field: "gst_on_income", sign: 1 },
+  REFUND_PURCHASE_ORDER_AMOUNT_TAX:              { field: "gst_on_income", sign: 1 },
+  REFUND_PURCHASE_ORDER_SHIPPING_AMOUNT_TAX:     { field: "gst_on_income", sign: 1 },
+  PURCHASE_FEE_COMMISSION_FEE:                   { field: "seller_fees", sign: 1 },
+  REFUND_PURCHASE_FEE_COMMISSION_FEE:            { field: "seller_fees", sign: 1 },
+  // ── Reserve ──
+  RESERVE_FUNDING:                               { field: "other_fees", sign: 1 },
+  RESERVE_SETTLEMENT:                            { field: "reimbursements", sign: 1 },
 };
 
 function round2(n: number): number {
