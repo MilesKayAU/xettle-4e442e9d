@@ -130,6 +130,9 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
     setHasSnapshot(true);
     setExternalCandidate(null);
 
+    setEditing(false);
+    setEditFields(null);
+
     (async () => {
       const [settRes, eventsRes, candidateRes] = await Promise.all([
         supabase
