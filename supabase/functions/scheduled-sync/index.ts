@@ -327,18 +327,20 @@ Deno.serve(async (req) => {
   // 4.7. Fetch Mirakl settlements (per-user)
   console.log("[scheduled-sync] Step 4.7: Mirakl fetch (per-user)...");
   const miraklUserIds = [...new Set((miraklTokens || []).map(t => t.user_id))];
-  if (miraklUserIds.length > 0 && Date.now() - startTime < MAX_ELAPSED_MS) {
-    results.mirakl = { users: miraklUserIds.length, results: [] };
-    for (const uid of miraklUserIds) {
+  // Filter out users who disabled auto-sync for mirakl
+  const eligibleMiraklUsers = miraklUserIds.filter(uid => isAutoSyncEnabled(uid, 'mirakl'));
+  if (eligibleMiraklUsers.length > 0 && Date.now() - startTime < MAX_ELAPSED_MS) {
+    results.mirakl = { users: eligibleMiraklUsers.length, results: [] };
+    for (const uid of eligibleMiraklUsers) {
       const syncFrom = userSyncFromMap[uid] || defaultSyncFrom;
       const miraklResult = await callFunction("fetch-mirakl-settlements", {}, { userId: uid, sync_from: syncFrom });
       (results.mirakl.results as any[]).push({ user_id: uid, ...miraklResult });
       if (miraklResult?.error) stepErrors.push('mirakl');
     }
-  } else if (miraklUserIds.length > 0) {
+  } else if (eligibleMiraklUsers.length > 0) {
     results.mirakl = { skipped: true, reason: 'elapsed_timeout' };
   } else {
-    results.mirakl = { skipped: true, reason: 'no_mirakl_users' };
+    results.mirakl = { skipped: true, reason: miraklUserIds.length > 0 ? 'all_users_disabled' : 'no_mirakl_users' };
   }
 
   // 5. Fetch Shopify payouts (with per-user Shopify mutex)
