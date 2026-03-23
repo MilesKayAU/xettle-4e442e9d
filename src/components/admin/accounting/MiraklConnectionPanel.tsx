@@ -234,7 +234,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
           <div className="space-y-3">
             <div className="bg-muted/30 border border-border rounded-lg p-3 text-sm text-muted-foreground">
               <p className="text-xs">
-                Enter your Mirakl API credentials from your seller portal
+                Enter your Bunnings Marketplace API credentials from your seller portal
                 (<strong>Settings → API Integrations</strong>).
                 Xettle requests <strong>read-only</strong> access to settlement and transaction data.
               </p>
