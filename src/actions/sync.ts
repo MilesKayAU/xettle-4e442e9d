@@ -50,7 +50,7 @@ export async function runMarketplaceSync(rail?: string): Promise<SyncActionResul
 
   if (!result.ok) {
     if (result.rateLimited) {
-      return { success: false, error: 'Sync rate limited — try again shortly' };
+      return { success: false, error: 'This channel syncs automatically — please wait at least 1 hour between manual syncs.' };
     }
     return { success: false, error: result.error || 'Marketplace sync failed' };
   }
