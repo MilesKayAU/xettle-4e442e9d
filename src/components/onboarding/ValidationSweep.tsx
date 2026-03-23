@@ -173,18 +173,12 @@ export default function ValidationSweep({
       if (valRes.error) throw valRes.error;
       const validationRows = (valRes.data || []) as ValidationRow[];
 
-      // Load marketplace connections (API-synced codes + paused codes)
+      // Load marketplace connections (paused codes + display names)
       const { data: connData } = await supabase
         .from('marketplace_connections')
-        .select('marketplace_code, marketplace_name, connection_type, connection_status');
-      const allConns = (connData || []) as Array<{ marketplace_code: string; marketplace_name: string; connection_type: string; connection_status: string }>;
+        .select('marketplace_code, marketplace_name, connection_status');
+      const allConns = (connData || []) as Array<{ marketplace_code: string; marketplace_name: string; connection_status: string }>;
       setAllConnections(allConns.map(c => ({ marketplace_code: c.marketplace_code, marketplace_name: c.marketplace_name, connection_status: c.connection_status })));
-      const apiCodes = new Set<string>(
-        allConns
-          .filter((c) => isApiConnectionType(c.connection_type) && (ACTIVE_CONNECTION_STATUSES as readonly string[]).includes(c.connection_status))
-          .map((c) => c.marketplace_code)
-      );
-      setApiSyncedCodes(apiCodes);
       const paused = new Set<string>(
         allConns
           .filter((c) => c.connection_status === 'paused')
