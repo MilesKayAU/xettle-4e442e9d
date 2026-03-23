@@ -68,20 +68,7 @@ interface ActionCentreProps {
 }
 
 
-const EVENT_ICONS: Record<string, { icon: React.ReactNode; color: string }> = {
-  settlement_saved: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: 'text-emerald-500' },
-  xero_push_success: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: 'text-emerald-500' },
-  reconciliation_run: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: 'text-emerald-500' },
-  validation_sweep_complete: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: 'text-emerald-500' },
-  bank_match_confirmed: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: 'text-emerald-500' },
-  bank_match_query: { icon: <Search className="h-3.5 w-3.5" />, color: 'text-blue-500' },
-  bank_match_failed: { icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-amber-500' },
-  reconciliation_mismatch: { icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-amber-500' },
-  xero_push_failed: { icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-red-500' },
-  validation_sweep_failed: { icon: <AlertTriangle className="h-3.5 w-3.5" />, color: 'text-red-500' },
-  shopify_payout_synced: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: 'text-emerald-500' },
-  scheduled_sync: { icon: <RefreshCw className="h-3.5 w-3.5" />, color: 'text-blue-500' },
-};
+
 
 export default function ActionCentre({
   onSwitchToUpload,
