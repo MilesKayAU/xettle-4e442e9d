@@ -27,12 +27,14 @@ Deno.serve(async (req) => {
         seller_company_id, marketplace_label,
       } = body;
 
-      if (!base_url || !seller_company_id) {
+      if (!base_url) {
         return new Response(
-          JSON.stringify({ error: "Missing required fields: base_url, seller_company_id" }),
+          JSON.stringify({ error: "Missing required field: base_url" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
+
+      const effectiveSellerCompanyId = seller_company_id || "default";
 
       const mode = auth_mode || "oauth";
 
@@ -62,7 +64,7 @@ Deno.serve(async (req) => {
             api_key: api_key || null,
             auth_mode: mode,
             auth_header_type: auth_header_type || null,
-            seller_company_id,
+            seller_company_id: effectiveSellerCompanyId,
             marketplace_label: marketplace_label || "Bunnings",
             access_token: null,
             expires_at: null,
@@ -79,7 +81,7 @@ Deno.serve(async (req) => {
         .select("*")
         .eq("user_id", userId)
         .eq("base_url", base_url.replace(/\/$/, ""))
-        .eq("seller_company_id", seller_company_id)
+        .eq("seller_company_id", effectiveSellerCompanyId)
         .single();
 
       if (row) {

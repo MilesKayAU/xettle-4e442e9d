@@ -64,7 +64,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
 
 
   const isFormValid = () => {
-    if (!baseUrl || !sellerCompanyId) return false;
+    if (!baseUrl) return false;
     if (authMode === 'oauth' || authMode === 'both') {
       if (!clientId || !clientSecret) return false;
     }
@@ -90,7 +90,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
           api_key: apiKey || null,
           auth_mode: authMode,
           auth_header_type: authHeaderType === 'auto' ? null : authHeaderType,
-          seller_company_id: sellerCompanyId,
+          seller_company_id: sellerCompanyId || 'default',
           marketplace_label: selectedMarketplace,
         },
       });
@@ -200,10 +200,12 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                 <span className="text-muted-foreground">Marketplace:</span>
                 <span className="font-medium">{connection.marketplace_label}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Seller ID:</span>
-                <span className="font-mono text-xs">{connection.seller_company_id}</span>
-              </div>
+              {connection.seller_company_id && connection.seller_company_id !== 'default' && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Shop ID:</span>
+                  <span className="font-mono text-xs">{connection.seller_company_id}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Auth mode:</span>
                 <Badge variant="outline" className="text-[10px] h-5">
@@ -258,13 +260,16 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
             </div>
             <div className="space-y-3">
               <div>
-                <Label className="text-xs">Seller Company ID</Label>
+                <Label className="text-xs">Shop ID <span className="text-muted-foreground font-normal">(optional)</span></Label>
                 <Input
-                  placeholder="e.g. f2d2a8b4-896d-4451-a0f9-15c3bcaf1845"
+                  placeholder="e.g. your Bunnings vendor number or Mirakl shop ID"
                   value={sellerCompanyId}
                   onChange={(e) => setSellerCompanyId(e.target.value)}
                   className="font-mono text-xs h-8"
                 />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Leave blank if you only have one store. You can find this in your seller portal under My Settings → Mirakl seller account.
+                </p>
               </div>
               <div>
                 <Label className="text-xs font-medium mb-2 block">Auth Method</Label>
