@@ -1069,17 +1069,24 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                 </CardHeader>
                 <CardContent>
                   {(() => {
-                    // Synchronous preview — actual push uses async buildSimpleInvoiceLines with user overrides
-                    const previewLines: Array<{Description: string; AccountCode: string; TaxType: string; UnitAmount: number; Quantity: number}> = [
-                      { Description: 'Marketplace Sales', AccountCode: '200', TaxType: 'OUTPUT', UnitAmount: Math.round(parsed.sales_ex_gst * 100) / 100, Quantity: 1 },
-                      { Description: 'Marketplace Commission', AccountCode: '407', TaxType: 'INPUT', UnitAmount: -Math.abs(Math.round(parsed.fees_ex_gst * 100) / 100), Quantity: 1 },
-                    ].filter(l => Math.round(l.UnitAmount * 100) !== 0);
+                    // Build preview using the canonical posting builder + user account mappings
                     const meta = parsed.metadata || {};
-                    if (meta.refundsExGst && meta.refundsExGst !== 0) previewLines.push({ Description: 'Customer Refunds', AccountCode: '205', TaxType: 'OUTPUT', UnitAmount: Math.round((meta.refundsExGst < 0 ? meta.refundsExGst : -meta.refundsExGst) * 100) / 100, Quantity: 1 });
-                    if (meta.refundCommissionExGst && meta.refundCommissionExGst !== 0) previewLines.push({ Description: 'Commission Refund', AccountCode: '407', TaxType: 'INPUT', UnitAmount: Math.round(Math.abs(meta.refundCommissionExGst) * 100) / 100, Quantity: 1 });
-                    if (meta.shippingExGst && meta.shippingExGst !== 0) previewLines.push({ Description: 'Shipping Revenue', AccountCode: '206', TaxType: 'OUTPUT', UnitAmount: Math.round(meta.shippingExGst * 100) / 100, Quantity: 1 });
-                    if (meta.subscriptionAmount && meta.subscriptionAmount !== 0) previewLines.push({ Description: 'Marketplace Subscription', AccountCode: '407', TaxType: 'INPUT', UnitAmount: Math.round(meta.subscriptionAmount * 100) / 100, Quantity: 1 });
-                    const invoiceLines = previewLines.filter(l => Math.round(l.UnitAmount * 100) !== 0);
+                    const settlementForPosting: SettlementForPosting = {
+                      settlement_id: parsed.settlement_id,
+                      marketplace: 'bunnings',
+                      period_start: parsed.period_start,
+                      period_end: parsed.period_end,
+                      sales_principal: parsed.sales_ex_gst,
+                      sales_shipping: meta.shippingExGst || 0,
+                      refunds: meta.refundsExGst ? (meta.refundsExGst < 0 ? meta.refundsExGst : -meta.refundsExGst) : 0,
+                      seller_fees: -Math.abs(parsed.fees_ex_gst),
+                      other_fees: ((meta.subscriptionAmount || 0) + (meta.refundCommissionExGst ? Math.abs(meta.refundCommissionExGst) : 0)) * -1 || undefined,
+                      bank_deposit: parsed.bank_deposit,
+                      gst_on_income: parsed.gst_on_income,
+                      gst_on_expenses: parsed.gst_on_expenses,
+                    };
+                    const resolver = createAccountCodeResolver(userAccountCodes);
+                    const invoiceLines = buildPostingLineItems(settlementForPosting, resolver, 'Bunnings');
                     const invoiceTotal = invoiceLines.reduce((sum, l) => sum + l.UnitAmount * l.Quantity, 0);
                     const gstTotal = invoiceLines.reduce((sum, l) => {
                       const gst = l.TaxType === 'OUTPUT' || l.TaxType === 'INPUT' ? l.UnitAmount / 10 : 0;
