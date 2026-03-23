@@ -347,6 +347,7 @@ export default function Dashboard() {
   const [showBankMappingNudge, setShowBankMappingNudge] = useState(false);
   const [showBankMapper, setShowBankMapper] = useState(false);
   const [pipelineFilter, setPipelineFilter] = useState<{ marketplace: string; month: string } | null>(null);
+  const [settlementStatusFilter, setSettlementStatusFilter] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -720,6 +721,7 @@ export default function Dashboard() {
     setActiveView(view);
     trackAction('switched_tab', view);
     try { localStorage.setItem('xettle_dashboard_view', view); } catch { /* storage unavailable */ }
+    if (view !== 'settlements') setSettlementStatusFilter(null);
   }
 
   // Listen for open-settings-tab events from other components (e.g. CoaBlockerCta)
@@ -997,7 +999,8 @@ export default function Dashboard() {
                   if (missing) setMissingSettlements(missing);
                   setShowUploadSheet(true);
                 }}
-                onSwitchToSettlements={() => {
+                onSwitchToSettlements={(filter) => {
+                  if (filter) setSettlementStatusFilter(filter);
                   switchView('settlements');
                   switchSettlementsSubTab('overview');
                 }}
@@ -1147,6 +1150,7 @@ export default function Dashboard() {
                   }
                   setShowUploadSheet(true);
                 }}
+                initialFilter={settlementStatusFilter as any}
               />
             </div>
           </ErrorBoundary>
