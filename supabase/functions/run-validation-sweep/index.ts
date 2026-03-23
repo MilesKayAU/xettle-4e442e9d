@@ -453,6 +453,22 @@ async function sweepUser(adminSupabase: any, userId: string) {
     } catch (e) { console.error('Xero invoice scan error:', e) }
   }
 
+  // ── Load xero_accounting_matches for external invoice detection (LMB, A2X, manual) ──
+  const xamBySettlement = new Map<string, { xero_invoice_id: string; xero_status: string }>()
+  try {
+    const { data: xamRows } = await adminSupabase
+      .from('xero_accounting_matches')
+      .select('settlement_id, xero_invoice_id, xero_status')
+      .eq('user_id', userId)
+      .in('xero_status', ['PAID', 'AUTHORISED', 'DRAFT'])
+    for (const row of (xamRows || [])) {
+      if (row.settlement_id && row.xero_invoice_id) {
+        xamBySettlement.set(row.settlement_id, { xero_invoice_id: row.xero_invoice_id, xero_status: row.xero_status })
+      }
+    }
+    console.log(`[validation-sweep] Loaded ${xamBySettlement.size} xero_accounting_matches for external invoice fallback`)
+  } catch (e) { console.error('[validation-sweep] XAM load error:', e) }
+
   // ── Read bank transactions from LOCAL CACHE only (never call Xero BankTransactions API) ──
   // The sole caller for Xero BankTransactions is fetch-xero-bank-transactions.
   const xeroBankTxns: any[] = []
@@ -626,6 +642,25 @@ async function sweepUser(adminSupabase: any, userId: string) {
           // Treat pushed_to_xero as already in Xero
           record.xero_pushed = true
           record.xero_pushed_at = settlement.created_at || new Date().toISOString()
+        }
+
+        // Fallback: check xero_accounting_matches (covers LMB, A2X, manual external pushes)
+        if (!record.xero_pushed && settlement && xamBySettlement.has(settlement.settlement_id)) {
+          const xam = xamBySettlement.get(settlement.settlement_id)!
+          if (['PAID', 'AUTHORISED'].includes(xam.xero_status)) {
+            record.xero_pushed = true
+            record.xero_invoice_id = xam.xero_invoice_id
+            record.xero_pushed_at = new Date().toISOString()
+
+            // For PAID matches, also mark the settlement itself as already_recorded
+            if (xam.xero_status === 'PAID') {
+              await adminSupabase.from('settlements')
+                .update({ status: 'already_recorded', sync_origin: 'external' })
+                .eq('settlement_id', settlement.settlement_id)
+                .eq('user_id', userId)
+              record.overall_status = 'already_recorded'
+            }
+          }
         }
 
         // Step 5: Bank matching
