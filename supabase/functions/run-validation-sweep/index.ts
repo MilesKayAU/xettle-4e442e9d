@@ -453,6 +453,22 @@ async function sweepUser(adminSupabase: any, userId: string) {
     } catch (e) { console.error('Xero invoice scan error:', e) }
   }
 
+  // ── Load xero_accounting_matches for external invoice detection (LMB, A2X, manual) ──
+  const xamBySettlement = new Map<string, { xero_invoice_id: string; xero_status: string }>()
+  try {
+    const { data: xamRows } = await adminSupabase
+      .from('xero_accounting_matches')
+      .select('settlement_id, xero_invoice_id, xero_status')
+      .eq('user_id', userId)
+      .in('xero_status', ['PAID', 'AUTHORISED', 'DRAFT'])
+    for (const row of (xamRows || [])) {
+      if (row.settlement_id && row.xero_invoice_id) {
+        xamBySettlement.set(row.settlement_id, { xero_invoice_id: row.xero_invoice_id, xero_status: row.xero_status })
+      }
+    }
+    console.log(`[validation-sweep] Loaded ${xamBySettlement.size} xero_accounting_matches for external invoice fallback`)
+  } catch (e) { console.error('[validation-sweep] XAM load error:', e) }
+
   // ── Read bank transactions from LOCAL CACHE only (never call Xero BankTransactions API) ──
   // The sole caller for Xero BankTransactions is fetch-xero-bank-transactions.
   const xeroBankTxns: any[] = []
