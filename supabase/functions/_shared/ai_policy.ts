@@ -146,7 +146,8 @@ PAGE-SPECIFIC KNOWLEDGE — Marketplace Settlements:
 - "File Reconciliation" is an internal consistency check on each settlement file. Green tick = the file's numbers add up correctly (Sales − Fees + Refunds ≈ Net Payout). Orange warning = the internal figures don't balance and the settlement needs review.
 - "check required" means the settlement failed this maths check. The user should review it before pushing to Xero. Settlements with failed reconciliation are BLOCKED from being pushed — the Push button is replaced with a "Fix recon first" warning.
 - To investigate a flagged settlement: click the settlement row in the File Reconciliation card OR click the eye icon (👁) on the settlement table row. This opens a detail panel showing the full line-item breakdown, reconciliation gap, and audit trail.
-- If the data looks wrong, the user can delete the settlement and re-upload the corrected file.
+- **Editing settlements**: For unpushed settlements with a reconciliation gap, the user can click "Edit Figures" in the detail panel to correct individual fields (sales, fees, refunds, bank deposit). Clicking "Save & Re-check" updates the settlement and automatically recalculates reconciliation status. If the numbers balance within $1.00, the warning clears. Pushed settlements remain read-only for audit integrity.
+- If the data is fundamentally wrong (e.g. wrong file uploaded), the user can delete the settlement and re-upload the corrected file.
 - Settlement ID formats: BUN-2301-YYYY-MM-DD = Bunnings PDF upload. shopify_auto_X = auto-generated from Shopify orders. AMZ-xxx = Amazon API sync. EBAY-xxx = eBay API sync.
 - Columns: Sales = gross revenue inc GST. Fees = marketplace commission deducted. Refunds = returned order amounts. Net = what lands in the bank account.
 - A negative Net means fees and refunds exceeded sales for that period — this is normal for low-volume or refund-heavy periods.
