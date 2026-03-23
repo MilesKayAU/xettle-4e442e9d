@@ -464,7 +464,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
     if (actionableOnly) {
       visible = visible.filter(r => {
         const cat = categorize(r);
-        return cat === 'ready' || cat === 'attention' || cat === 'other';
+        return cat === 'ready' || cat === 'attention';
       });
     }
     
