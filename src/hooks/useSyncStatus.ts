@@ -142,10 +142,10 @@ async function fetchSyncStatus(): Promise<Omit<SyncStatusResult, 'loading'>> {
 
   const connectedSet = new Set<string>();
   if (xeroRes.data?.length) connectedSet.add('xero');
-  if (amazonRes.data?.length) connectedSet.add('amazon_au');
-  if (shopifyRes.data?.length) connectedSet.add('shopify');
-  if (ebayRes.data?.length) connectedSet.add('ebay_au');
-  if (miraklRes.data?.length) connectedSet.add('bunnings');
+  if (amazonRes.data?.length) { connectedSet.add('amazon'); connectedSet.add('amazon_au'); }
+  if (shopifyRes.data?.length) { connectedSet.add('shopify'); }
+  if (ebayRes.data?.length) { connectedSet.add('ebay_au'); }
+  if (miraklRes.data?.length) { connectedSet.add('bunnings'); }
 
   function deriveStatus(
     historyRows: SyncHistoryRow[],
