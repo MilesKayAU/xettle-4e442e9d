@@ -27,12 +27,14 @@ Deno.serve(async (req) => {
         seller_company_id, marketplace_label,
       } = body;
 
-      if (!base_url || !seller_company_id) {
+      if (!base_url) {
         return new Response(
-          JSON.stringify({ error: "Missing required fields: base_url, seller_company_id" }),
+          JSON.stringify({ error: "Missing required field: base_url" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
+
+      const effectiveSellerCompanyId = seller_company_id || "default";
 
       const mode = auth_mode || "oauth";
 
