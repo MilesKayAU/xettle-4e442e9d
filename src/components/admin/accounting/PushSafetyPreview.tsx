@@ -250,7 +250,7 @@ export default function PushSafetyPreview({
         if (!s) continue;
 
         // Source Push Gate — reconciliation-only settlements cannot be pushed
-        if (s.source === 'api_sync' && (s.marketplace || '').startsWith('shopify_orders_')) {
+        if (isReconciliationOnly(s.source, s.marketplace, s.settlement_id)) {
           // Inject a red-tier block and skip normal preview
           results.push({
             settlement: {

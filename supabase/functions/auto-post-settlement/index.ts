@@ -385,7 +385,7 @@ async function processSettlement(
     return { settlement_id: sid, result: 'skipped', error: `Already ${settlement.posting_state}` };
   }
   // ─── Source Push Gate: reconciliation-only ─────────────────────
-  if (settlement.source === 'api_sync' && (settlement.marketplace || '').startsWith('shopify_orders_')) {
+  if (settlement.source === 'api_sync' && ((settlement.marketplace || '').startsWith('shopify_orders_') || (settlement.settlement_id || '').startsWith('shopify_auto_'))) {
     return { settlement_id: sid, result: 'skipped', error: 'Reconciliation-only settlement (Shopify-derived)' };
   }
   // ─── Safety check 2: No existing Xero invoice ─────────────────
