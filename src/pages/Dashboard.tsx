@@ -721,6 +721,7 @@ export default function Dashboard() {
     setActiveView(view);
     trackAction('switched_tab', view);
     try { localStorage.setItem('xettle_dashboard_view', view); } catch { /* storage unavailable */ }
+    if (view !== 'settlements') setSettlementStatusFilter(null);
   }
 
   // Listen for open-settings-tab events from other components (e.g. CoaBlockerCta)
