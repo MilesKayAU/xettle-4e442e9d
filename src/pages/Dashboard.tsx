@@ -494,7 +494,25 @@ export default function Dashboard() {
   const [settlementCounts, setSettlementCounts] = useState<Record<string, number>>({});
   const [readyToPushCount, setReadyToPushCount] = useState(0);
 
-  useEffect(() => {
+  // Derive API-connected marketplace codes dynamically from marketplace_connections + legacy token flags
+  const apiConnectedCodes = useMemo(() => {
+    const codes = new Set<string>();
+    for (const um of userMarketplaces) {
+      if (
+        isApiConnectionType(um.connection_type) &&
+        (ACTIVE_CONNECTION_STATUSES as readonly string[]).includes(um.connection_status)
+      ) {
+        codes.add(um.marketplace_code);
+      }
+    }
+    // Backward compat: include token-derived APIs that may not have explicit connection_type set
+    if (hasAmazon) codes.add(amazonXettleCode);
+    if (hasShopify) { codes.add('shopify_payments'); codes.add('shopify_orders'); }
+    if (hasEbay) codes.add('ebay_au');
+    return codes;
+  }, [userMarketplaces, hasAmazon, amazonXettleCode, hasShopify, hasEbay]);
+
+
     if (!isLoading && !isAuthenticated) {
       navigate('/auth', { replace: true });
     }
