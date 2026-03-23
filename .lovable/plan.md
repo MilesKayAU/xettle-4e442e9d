@@ -1,61 +1,114 @@
 
 
-# Fix: Homepage Settlements Cards — Conflicting Counts and Redundant Navigation
+# Fix: External Xero Invoices (Link My Books) Not Recognized as "Already in Xero"
 
 ## Problem
 
-The homepage has two separate components both showing "ready for Xero" data with conflicting numbers:
+Link My Books has already pushed all Amazon settlements to Xero (status: "Posted"/PAID). But Xettle still shows 16 Amazon settlements as "Ready to Push". This affects **all marketplaces**, not just Amazon — any settlement posted by an external tool (LMB, A2X, manual) is invisible to the validation system.
 
-1. **ActionCentre card** ("Ready for Xero" — badge 15): queries `marketplace_validation` filtering `overall_status === 'ready_to_push'` only
-2. **RecentSettlements card** ("Ready to Push to Xero" — shows 19): queries `marketplace_validation` filtering `overall_status === 'ready_to_push' OR 'pushed_to_xero'` — incorrectly including already-pushed items in the "ready" count
+## Root Cause (3 gaps in the pipeline)
 
-Both cards navigate to the same Settlements Overview page. The labels sound identical yet show different numbers, which is confusing.
+### Gap 1: Validation sweep ignores `xero_accounting_matches`
 
-## Root Cause
+The `run-validation-sweep` function (Step 4, line 617) only checks for Xero status via:
+- Direct Xero API call filtered to `Reference.StartsWith("Xettle-")` — completely misses LMB/A2X/manual invoices
+- `settlement.xero_journal_id` — only set when Xettle pushes
+- `settlement.status === 'pushed_to_xero'` — only set when Xettle pushes
 
-In `RecentSettlements.tsx` line 457:
-```typescript
-if (r.overall_status === 'ready_to_push' || r.overall_status === 'pushed_to_xero') {
-  ready++;  // BUG: pushed_to_xero items are NOT "ready to push"
+It **never reads `xero_accounting_matches`**, where `sync-xero-status` correctly stores external invoices as `external_candidate` entries.
+
+### Gap 2: Auto-resolve only triggers for `PAID` status
+
+In `sync-xero-status` (line 1100), the auto-resolve logic that marks settlements as `already_recorded` only fires when `xero_status === 'PAID'`. If LMB invoices are `AUTHORISED` (posted but not yet bank-reconciled in Xero), they're ignored.
+
+### Gap 3: External candidates require manual review that doesn't exist
+
+External invoices are stored with `confidence: 0` and `match_method: 'external_candidate'`, requiring "user review before linking" — but there's no UI for this review. The data sits in the cache unused.
+
+## Fix Plan
+
+### 1. Validation sweep: Read `xero_accounting_matches` for external coverage
+
+**File: `supabase/functions/run-validation-sweep/index.ts`**
+
+After building the Xettle-only `xeroInvoiceMap`, also query `xero_accounting_matches` for all settlements belonging to this user. In Step 4, after checking the Xettle invoice map, add a fallback:
+
+```
+If settlement_id exists in xero_accounting_matches
+  AND xero_status is PAID or AUTHORISED:
+    → set xero_pushed = true
+    → set xero_invoice_id from the match
 ```
 
-This inflates the count by including settlements already sent to Xero.
+This ensures externally-posted settlements (LMB, A2X, manual) are recognized.
 
-## Fix (3 changes)
+### 2. Auto-resolve: Expand to include `AUTHORISED` status
 
-### 1. Fix the count in RecentSettlements (`src/components/dashboard/RecentSettlements.tsx`)
+**File: `supabase/functions/sync-xero-status/index.ts`**
 
-In `fetchValidationCounts`, change the ready count to only include `ready_to_push` — not `pushed_to_xero`:
+Change the auto-resolve query (line 1100) from:
+```sql
+.eq('xero_status', 'PAID')
+```
+To:
+```sql
+.in('xero_status', ['PAID', 'AUTHORISED'])
+```
+
+And update the settlement status to `already_recorded` with `sync_origin: 'external'` for both statuses.
+
+### 3. Settlements table: Mark externally-covered settlements
+
+**File: `supabase/functions/sync-xero-status/index.ts`**
+
+After the auto-resolve step, also update `marketplace_validation` rows for these resolved settlements to set `xero_pushed = true` so the dashboard trigger correctly computes `overall_status`.
+
+### 4. Add `external_candidate` entries to validation sweep's xero check
+
+**File: `supabase/functions/run-validation-sweep/index.ts`**
+
+Before the per-period loop, load all `xero_accounting_matches` for the user:
 
 ```typescript
-if (r.overall_status === 'ready_to_push') {
-  ready++;
-  readyTotal += r.settlement_net || 0;
+const { data: xamRows } = await adminSupabase
+  .from('xero_accounting_matches')
+  .select('settlement_id, xero_invoice_id, xero_status')
+  .eq('user_id', userId)
+  .in('xero_status', ['PAID', 'AUTHORISED', 'DRAFT'])
+
+const xamBySettlement = new Map()
+for (const row of (xamRows || [])) {
+  xamBySettlement.set(row.settlement_id, row)
 }
 ```
 
-This makes both cards show the same number (15).
+Then in Step 4, after the existing checks:
 
-### 2. Rename the bottom card to avoid confusion
+```typescript
+// Fallback: check xero_accounting_matches (covers LMB, A2X, manual)
+if (!record.xero_pushed && settlement && xamBySettlement.has(settlement.settlement_id)) {
+  const xam = xamBySettlement.get(settlement.settlement_id)
+  if (['PAID', 'AUTHORISED'].includes(xam.xero_status)) {
+    record.xero_pushed = true
+    record.xero_invoice_id = xam.xero_invoice_id
+    record.xero_pushed_at = new Date().toISOString()
+  }
+}
+```
 
-Change the `summaryCards` label from "Ready to Push to Xero" to "Ready for Xero" to match the ActionCentre card exactly — reinforcing that they show the same data. Both cards already navigate to the same place, so consistent naming removes ambiguity.
-
-### 3. Remove the redundant "Ready for Xero" card from ActionCentre OR the summary card from RecentSettlements
-
-Since both cards show the same data and navigate to the same place, the bottom "Ready to Push to Xero" summary card in RecentSettlements is redundant when `actionableOnly` mode is active (homepage). Remove the "ready" summary card from RecentSettlements in `actionableOnly` mode, since ActionCentre already handles it with better detail (shows individual settlement rows, duplicate risk, manual vs auto-post breakdown).
-
-The RecentSettlements table below should still show the actionable rows — just without the duplicate summary card above it.
+For `PAID` matches, also force `overall_status = 'already_recorded'` on the settlement row itself.
 
 ## Files to modify
 
 | File | Change |
 |------|--------|
-| `src/components/dashboard/RecentSettlements.tsx` | Fix `fetchValidationCounts` to exclude `pushed_to_xero` from ready count; hide the "Ready to Push" summary card when `actionableOnly` is true |
+| `supabase/functions/run-validation-sweep/index.ts` | Load `xero_accounting_matches`, use as fallback in Step 4 for external invoice detection |
+| `supabase/functions/sync-xero-status/index.ts` | Expand auto-resolve from PAID-only to PAID+AUTHORISED; update marketplace_validation after resolve |
 
 ## Expected outcome
 
-- Both components agree on the same "ready" count
-- No duplicate "Ready for Xero" / "Ready to Push to Xero" cards on the homepage
-- The RecentSettlements table still shows actionable rows with their actions
-- Clicking "Review all ready items" in ActionCentre navigates to Settlements Overview with the correct filter
+- Amazon (and all other marketplaces) settlements that LMB/A2X have already posted to Xero will be recognized as "already recorded"
+- The "Ready to Push" count will drop from 16 to only truly unposted settlements
+- Homepage and Settlements Overview will agree on counts
+- No manual review step needed for high-confidence external matches (PAID/AUTHORISED status is definitive)
 
