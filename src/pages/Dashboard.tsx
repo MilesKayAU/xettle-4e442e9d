@@ -1022,6 +1022,11 @@ export default function Dashboard() {
                   pipelineFilter={pipelineFilter}
                   onClearPipelineFilter={() => setPipelineFilter(null)}
                   actionableOnly
+                  onNavigateToFilter={(filter) => {
+                    setSettlementStatusFilter(filter);
+                    switchView('settlements');
+                    switchSettlementsSubTab('overview');
+                  }}
                 />
               </div>
             </div>

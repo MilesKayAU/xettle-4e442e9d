@@ -332,9 +332,11 @@ interface RecentSettlementsProps {
   onClearPipelineFilter?: () => void;
   /** When true, only show settlements needing user action (ready_to_push, push_failed, ingested) */
   actionableOnly?: boolean;
+  /** Navigate to the Settlements Overview tab with a pre-set filter */
+  onNavigateToFilter?: (filter: string) => void;
 }
 
-export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPipelineFilter, actionableOnly }: RecentSettlementsProps) {
+export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPipelineFilter, actionableOnly, onNavigateToFilter }: RecentSettlementsProps) {
   const [allRows, setAllRows] = useState<SettlementRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -732,7 +734,19 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
           {summaryCards.map(card => (
             <button
               key={card.key}
-              onClick={() => setActiveFilter(prev => prev === card.key ? null : card.key)}
+              onClick={() => {
+                // "Upload Needed" and "Ready to Push" cards navigate to Overview tab with correct filter
+                // because "Upload Needed" has no settlement rows to display inline
+                if (card.key === 'other' && card.label === 'Upload Needed' && onNavigateToFilter) {
+                  onNavigateToFilter('settlement_needed');
+                  return;
+                }
+                if (card.key === 'ready' && onNavigateToFilter) {
+                  onNavigateToFilter('ready_to_push');
+                  return;
+                }
+                setActiveFilter(prev => prev === card.key ? null : card.key);
+              }}
               className={cn(
                 'rounded-lg border p-3 text-left transition-all hover:shadow-sm',
                 card.color,
