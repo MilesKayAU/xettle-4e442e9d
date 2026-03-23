@@ -478,6 +478,18 @@ export default function ValidationSweep({
             ))}
           </SelectContent>
         </Select>
+        <Select value={filter} onValueChange={(v) => setFilter(v as FilterStatus)}>
+          <SelectTrigger className="w-[170px] h-8 text-xs">
+            <SelectValue placeholder="All Statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="complete">✅ Complete</SelectItem>
+            <SelectItem value="ready_to_push">🚀 Ready to Push</SelectItem>
+            <SelectItem value="settlement_needed">📤 Upload Needed</SelectItem>
+            <SelectItem value="gap_detected">⚠️ Gaps</SelectItem>
+          </SelectContent>
+        </Select>
         <div className="flex items-center gap-1">
           <CalendarDays className="h-3 w-3 text-muted-foreground" />
           <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-8 w-[130px] text-xs" placeholder="From" />
