@@ -15,7 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { BarChart3, Lock, ArrowRight, TrendingUp, TrendingDown, AlertTriangle, Truck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
-import { loadFulfilmentMethods, loadPostageCosts, getEffectiveMethod } from '@/utils/fulfilment-settings';
+import { loadFulfilmentMethods, loadPostageCosts, getEffectiveMethod, getPostageDeductionForOrder } from '@/utils/fulfilment-settings';
 import type { FulfilmentMethod } from '@/utils/fulfilment-settings';
 import {
   normalizeMarketplace,
