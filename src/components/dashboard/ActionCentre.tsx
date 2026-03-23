@@ -372,12 +372,6 @@ export default function ActionCentre({
     ? new Date(rows[0].last_checked_at) : null;
 
 
-  const formatMonthLabel = (key: string): string => {
-    const [, m] = key.split('-').map(Number);
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return `${months[(m || 1) - 1]} ${key.substring(0, 4)}`;
-  };
-
   // Greeting
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
