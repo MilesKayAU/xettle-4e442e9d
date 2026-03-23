@@ -1,26 +1,25 @@
 
+## Mirakl Settlement Rail — IMPLEMENTED
 
-## Investigation Summary
+### What was built
 
-The MCF order was **never actually created**. The `mcf_orders` table is completely empty. Two bugs found:
+1. **Database**: `mirakl_tokens` table with RLS policies for per-user credential storage
+2. **Edge Functions**:
+   - `mirakl-auth` — connect/status/disconnect actions
+   - `fetch-mirakl-settlements` — fetches Mirakl transaction logs, maps to standard settlement format
+   - `scheduled-sync` — updated to include Mirakl users in sync pipeline (Step 4.7)
+3. **Shared helper**: `_shared/mirakl-token.ts` — OAuth token refresh with API-key fallback
+4. **UI**: `MiraklConnectionPanel.tsx` — connection form with marketplace dropdown (Bunnings, Catch, MyDeal, Kogan, Decathlon, Other)
+5. **Integration points**:
+   - Added to `BunningsDashboard.tsx` (rendered above PDF upload as primary option)
+   - Added to `ApiConnectionsPanel.tsx` (settings page)
+   - Added `mirakl_marketplace` to `settlement-rails.ts` with alias `mirakl`
+   - Updated `MarketplaceSwitcher.tsx` — Bunnings now shows `mirakl_api` + `manual_csv`, phase `live`
 
-### Bug 1 — CORS failure in `create-mcf-order` (critical)
-The function calls `getCorsHeaders()` without passing the request origin (line 7). This returns empty headers `{}`, so the browser blocks every response as a CORS violation. The UI likely caught a network error but displayed a misleading "success" toast.
+### Safety rules implemented in fetch-mirakl-settlements
 
-In contrast, `poll-mcf-status` correctly passes origin: `getCorsHeaders(origin)`.
-
-**Fix**: Update `create-mcf-order/index.ts` to read `origin` from request headers and pass it to `getCorsHeaders()`, matching the pattern used in `poll-mcf-status`.
-
-### Bug 2 — Wrong environment variable names for Amazon OAuth (both functions)
-Both `create-mcf-order` and `poll-mcf-status` reference `AMAZON_CLIENT_ID` and `AMAZON_CLIENT_SECRET`, but the actual secrets are named `AMAZON_SP_CLIENT_ID` and `AMAZON_SP_CLIENT_SECRET`. If the token is expired, the refresh will silently fail.
-
-**Fix**: Update both functions to use `AMAZON_SP_CLIENT_ID` and `AMAZON_SP_CLIENT_SECRET`.
-
-### Files to modify
-1. `supabase/functions/create-mcf-order/index.ts` — fix CORS + env var names
-2. `supabase/functions/poll-mcf-status/index.ts` — fix env var names
-
-### Technical details
-- `getCorsHeaders(origin?)` returns `{}` when no origin is passed, per `_shared/cors.ts` line 48
-- Secret names confirmed: `AMAZON_SP_CLIENT_ID`, `AMAZON_SP_CLIENT_SECRET`
-
+1. **Numeric coercion**: `Number(txn.amount) || 0` before accumulation
+2. **Flexible payout detection**: `type.includes('PAYMENT') || type.includes('PAYOUT') || type.includes('TRANSFER')`
+3. **Tolerant reconciliation**: <$0.05 exact, <$1 warning-only, >$1 blocks auto-push
+4. **Unknown type logger**: `mirakl_unknown_transaction_type` system_event with full metadata
+5. **Empty settlement guard**: `hasActivity` check skips settlements with no meaningful values
