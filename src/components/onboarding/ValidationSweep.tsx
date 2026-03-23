@@ -361,7 +361,7 @@ export default function ValidationSweep({
       else if (r.overall_status === 'gap_detected') counts.gap_detected++;
     });
     return counts;
-  }, [rows, pausedCodes, apiSyncedCodes, isUsefulRecon]);
+  }, [rows, pausedCodes, activeCodes, apiSyncedCodes, isUsefulRecon]);
 
   const handleTogglePause = async (marketplaceCode: string, currentStatus: string) => {
     setTogglingPause(marketplaceCode);
