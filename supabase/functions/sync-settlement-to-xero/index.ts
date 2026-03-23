@@ -18,6 +18,7 @@ import { getCorsHeaders } from '../_shared/cors.ts';
 import { safeUpsertXam } from '../_shared/xam-safe-upsert.ts';
 import { logger } from '../_shared/logger.ts';
 import { XERO_TOKEN_URL, XERO_API_BASE, getXeroHeaders } from '../_shared/xero-api-policy.ts';
+import { isReconciliationOnly } from '../_shared/settlementPolicy.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
