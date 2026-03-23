@@ -240,6 +240,15 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
           </div>
         ) : settlement ? (
           <div className="space-y-5 mt-4">
+            {/* Pre-boundary warning */}
+            {(settlement.status === 'pre_boundary' || settlement.is_pre_boundary) && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/30 p-3 flex items-start gap-2">
+                <Info className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  Period is before your accounting boundary date — import only. This settlement is saved but cannot be pushed to Xero.
+                </p>
+              </div>
+            )}
             {/* External Xero match banner — STRONG duplicate warning */}
             {externalCandidate && !settlement.xero_invoice_id && (
               <div className="rounded-lg border-2 border-destructive bg-destructive/10 overflow-hidden">

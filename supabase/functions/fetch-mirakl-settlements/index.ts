@@ -325,6 +325,7 @@ async function fetchSettlementsForConnection(
         accounting_category: accountingCategory,
         marketplace_name: connection.marketplace_label || "Mirakl",
         posted_date: dateOnly || null,
+        source: "mirakl_api",
       });
     }
 

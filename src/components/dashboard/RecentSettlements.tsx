@@ -23,7 +23,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-  FileText, ArrowRight, CheckCircle2, Clock, Send, AlertTriangle,
+  FileText, ArrowRight, CheckCircle2, Clock, Send, AlertTriangle, Info,
   MoreHorizontal, Eye, RefreshCw, EyeOff, Download, ChevronLeft, ChevronRight,
   EyeIcon, ChevronDown, ChevronUp, Loader2, ShieldAlert,
 } from 'lucide-react';
@@ -110,6 +110,7 @@ function categorize(row: SettlementRow): StatusCategory {
     return 'posted';
   }
   if (row.status === 'ready_to_push') return 'ready';
+  if (row.status === 'pre_boundary') return 'completed';
   if (row.status === 'ingested') return 'other';
   return 'other';
 }
@@ -188,6 +189,14 @@ function StatusBadge({ status, xeroStatus, syncOrigin, marketplace }: { status: 
       <Badge variant="outline" className="text-red-700 bg-red-50 border-red-200 dark:text-red-400 dark:bg-red-900/30 dark:border-red-800 text-xs">
         <AlertTriangle className="h-3 w-3 mr-1" />
         Failed
+      </Badge>
+    );
+  }
+  if (status === 'pre_boundary') {
+    return (
+      <Badge variant="outline" className="text-amber-600 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-900/30 dark:border-amber-800 text-xs">
+        <Info className="h-3 w-3 mr-1" />
+        Import Only — Before Boundary
       </Badge>
     );
   }
@@ -814,7 +823,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
                             Recalculate
                           </DropdownMenuItem>
 
-                          {(row.status === 'parsed' || row.status === 'ready_to_push' || row.status === 'saved') && (
+                          {['parsed', 'ready_to_push', 'saved'].includes(row.status) && row.status !== 'pre_boundary' && (
                             <DropdownMenuItem className="text-xs" onClick={() => {
                               toast.info('Push to Xero from the Settlements tab');
                             }}>
