@@ -32,6 +32,30 @@ Deno.serve(async (req) => {
   for (const t of ebayTokens || []) allUserIds.add(t.user_id);
   for (const t of miraklTokens || []) allUserIds.add(t.user_id);
 
+  // ─── Load per-user auto-sync preferences (opt-out model: default=true) ─────
+  const autoSyncKeys = [
+    'auto_sync_enabled:amazon', 'auto_sync_enabled:shopify',
+    'auto_sync_enabled:ebay', 'auto_sync_enabled:mirakl', 'auto_sync_enabled:xero',
+  ];
+  const { data: autoSyncSettings } = await adminClient
+    .from('app_settings')
+    .select('user_id, key, value')
+    .in('key', autoSyncKeys);
+
+  const autoSyncDisabled = new Map<string, Set<string>>(); // user_id -> Set of disabled rails
+  for (const s of autoSyncSettings || []) {
+    if (s.value === 'false') {
+      if (!autoSyncDisabled.has(s.user_id)) autoSyncDisabled.set(s.user_id, new Set());
+      const rail = s.key.replace('auto_sync_enabled:', '');
+      autoSyncDisabled.get(s.user_id)!.add(rail);
+    }
+  }
+
+  /** Check if a user has auto-sync enabled for a given rail (default: true) */
+  function isAutoSyncEnabled(userId: string, rail: string): boolean {
+    return !(autoSyncDisabled.get(userId)?.has(rail));
+  }
+
   // ─── Write interim "running" sync_history per user ─────────────
   const interimIds: Record<string, string> = {};
   for (const userId of allUserIds) {
