@@ -407,6 +407,7 @@ async function sweepUser(adminSupabase: any, userId: string) {
   const settlementArrayMap = new Map<string, any[]>()
   for (const s of (settlements || [])) {
     if (s.status === 'duplicate_suppressed') continue // skip suppressed duplicates
+    if (isReconciliationOnly(s.source, s.marketplace, s.settlement_id)) continue // skip reconciliation-only
     const pl = `${s.period_start} → ${s.period_end}`
     const key = `${s.marketplace}|${pl}`
     if (!settlementArrayMap.has(key)) settlementArrayMap.set(key, [])
