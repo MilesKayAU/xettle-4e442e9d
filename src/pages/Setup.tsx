@@ -22,6 +22,7 @@ import SubChannelSetupModal from '@/components/shopify/SubChannelSetupModal';
 import DestinationAccountMapper from '@/components/settings/DestinationAccountMapper';
 import XettleLogo from '@/components/shared/XettleLogo';
 import type { DetectedSubChannel } from '@/utils/sub-channel-detection';
+import { isApiConnectionType } from '@/constants/connection-status';
 
 // ─── Types ──────────────────────────────────────────────────────────
 type StepStatus = 'idle' | 'running' | 'success' | 'error' | 'skipped' | 'pending' | 'rate_limited';
