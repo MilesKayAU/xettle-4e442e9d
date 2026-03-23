@@ -267,6 +267,13 @@ export default function ValidationSweep({
   }, [allConnections]);
 
   /** A shopify_auto_ recon row is useful only if the marketplace has NO direct API and the row isn't resolved */
+  // Build set of active marketplace codes — only show rows for marketplaces with an active connection
+  const activeCodes = useMemo(() => new Set(
+    allConnections
+      .filter(c => ['active', 'connected'].includes(c.connection_status))
+      .map(c => c.marketplace_code)
+  ), [allConnections]);
+
   const isUsefulRecon = useCallback((r: ValidationRow) => {
     return !!r.settlement_id?.startsWith('shopify_auto_')
       && !directApiCodes.has(r.marketplace_code)
@@ -275,8 +282,8 @@ export default function ValidationSweep({
 
   // Memoized filtering + sorting
   const filteredRows = useMemo(() => {
-    // Filter out paused marketplace rows
-    let result = rows.filter((r) => !pausedCodes.has(r.marketplace_code));
+    // Filter out paused & orphaned (no active connection) marketplace rows
+    let result = rows.filter((r) => activeCodes.has(r.marketplace_code) && !pausedCodes.has(r.marketplace_code));
     if (filter !== 'all') {
       result = result.filter((r) => {
         // Keep useful recon rows available when settlement_needed filter is active
