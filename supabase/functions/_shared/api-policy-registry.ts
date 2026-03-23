@@ -89,6 +89,16 @@ export const API_REGISTRY = {
     scopes: [...XERO_REQUIRED_SCOPES],
     deprecations: [...XERO_DEPRECATIONS],
   },
+
+  mirakl: {
+    name: 'Mirakl Marketplace API',
+    authUrl: MIRAKL_AUTH_URL,
+    version: MIRAKL_API_VERSION,
+    endpoints: MIRAKL_MARKETPLACE_ENDPOINTS,
+    rateLimits: MIRAKL_RATE_LIMITS,
+    poweredMarketplaces: [...MIRAKL_POWERED_MARKETPLACES],
+    deprecations: [...MIRAKL_DEPRECATIONS],
+  },
 } as const;
 
 // ═══════════════════════════════════════════════════════════════
