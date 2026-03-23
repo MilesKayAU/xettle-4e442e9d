@@ -317,14 +317,30 @@ export default function ValidationSweep({
     return rows.filter(r => pausedMarketplaceCodes.has(r.marketplace_code)).length;
   }, [rows, allConnections]);
 
+  // Build set of marketplace codes with direct API connections (not sub-channels)
+  const directApiCodes = useMemo(() => {
+    return new Set(
+      allConnections
+        .filter(c => isApiConnectionType(c.connection_type) && c.connection_type !== 'shopify_sub_channel')
+        .map(c => c.marketplace_code)
+    );
+  }, [allConnections]);
+
+  /** A shopify_auto_ recon row is useful only if the marketplace has NO direct API and the row isn't resolved */
+  const isUsefulRecon = useCallback((r: ValidationRow) => {
+    return !!r.settlement_id?.startsWith('shopify_auto_')
+      && !directApiCodes.has(r.marketplace_code)
+      && !['already_recorded', 'duplicate_suppressed'].includes(r.overall_status);
+  }, [directApiCodes]);
+
   const statusCounts = useMemo(() => {
     const activeRows = rows.filter(r => !pausedCodes.has(r.marketplace_code));
     const counts = { all: 0, complete: 0, ready_to_push: 0, settlement_needed: 0, settlement_needed_manual: 0, settlement_needed_api: 0, settlement_needed_recon: 0, gap_detected: 0 };
     activeRows.forEach((r) => {
       const isRecon = r.settlement_id?.startsWith('shopify_auto_');
-      // Recon rows are always counted separately, regardless of their overall_status
+      // Only count recon rows that are actually useful (no direct API, not resolved)
       if (isRecon) {
-        counts.settlement_needed_recon++;
+        if (isUsefulRecon(r)) counts.settlement_needed_recon++;
         return;
       }
       counts.all++;
@@ -338,7 +354,7 @@ export default function ValidationSweep({
       else if (r.overall_status === 'gap_detected') counts.gap_detected++;
     });
     return counts;
-  }, [rows, pausedCodes, apiSyncedCodes]);
+  }, [rows, pausedCodes, apiSyncedCodes, isUsefulRecon]);
 
   const handleTogglePause = async (marketplaceCode: string, currentStatus: string) => {
     setTogglingPause(marketplaceCode);
