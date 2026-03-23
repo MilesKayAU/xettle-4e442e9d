@@ -1,81 +1,63 @@
 
 
-## Improve AI Assistant: Page-Aware, Concise, No-Code-Disclosure
+## Fix: File Reconciliation — Block Push for Failed Checks + Add Drill-Down
 
-### Problem
-1. **GenericMarketplaceDashboard has no AI context** — when the user opens the Bunnings tab and asks the AI, it only gets the generic Dashboard context (`routeId: 'dashboard'`). It has no idea the user is looking at File Reconciliation, what marketplace is selected, or what the settlements show.
-2. **The AI gives long, generic answers** instead of short, strategic responses about what's visible on screen.
-3. **No explicit rule against disclosing code** — the AI could reference internal implementation details to customers.
+### Problems Identified
+
+1. **"Check required" settlements can still be pushed to Xero.** The `isSyncable` check on line 610 only looks at `status` (`ingested` / `ready_to_push`) — it never checks `reconciliation_status`. A settlement that fails internal maths can be pushed without any gate.
+
+2. **No way to click into a File Reconciliation row.** The `FileReconciliationStatus` component renders static rows with no interactivity — users can't expand or drill down to see what went wrong.
+
+3. **SettlementsOverview batch push also ignores reconciliation_status.** The "Push All" button on the overview page queries `status = 'ready_to_push'` without filtering out reconciliation failures.
+
+---
 
 ### Changes
 
-#### 1. Add `useAiPageContext` to `GenericMarketplaceDashboard` (File: `src/components/admin/accounting/GenericMarketplaceDashboard.tsx`)
+#### 1. Block Xero push for unreconciled settlements (`GenericMarketplaceDashboard.tsx`)
 
-Register rich page context including:
-- `routeId: 'settlements'`
-- `pageTitle` with marketplace name (e.g. "Bunnings Settlements")
-- `primaryEntities.marketplace_codes` with the current code
-- `pageStateSummary` with: settlement count, how many reconciled vs flagged, how many pushed to Xero, CSV-only status, any active filters
-- `suggestedPrompts` tailored to what's on screen (e.g. "What does 'check required' mean?", "Why is this settlement negative?", "What do these columns mean?")
-- `visibleTables` with column names and a sample of settlement rows (settlement_id, sales, fees, refunds, net, reconciliation_status)
-
-Import `useAiPageContext` and `useAiActionTracker`, add the hook call after the existing hooks.
-
-#### 2. Enhance system prompt with page-specific guidance (File: `supabase/functions/ai-assistant/index.ts`)
-
-Add to `SYSTEM_PROMPT`:
-
-**Conciseness rules:**
-- Lead with a 1-2 sentence answer about what the user is looking at RIGHT NOW
-- Never exceed 150 words unless the user explicitly asks for detail
-- Use bullet points, not paragraphs
-- Reference specific numbers from the context (settlement IDs, amounts, counts)
-
-**Page-specific explainers** (injected when routeId matches):
-- For marketplace settlement pages: explain what File Reconciliation means (internal maths check — Sales - Fees + Refunds ≈ Net Payout), what "check required" vs green tick means, what each column represents
-- For outstanding: explain awaiting payment workflow
-- For dashboard home: explain the three sections
-
-**No-code disclosure rule:**
-- "NEVER reference code, file names, function names, variable names, database tables, or internal implementation details. Only explain what the feature does from the user's perspective. If asked 'how does this work technically', explain the concept, never the code."
-
-#### 3. Add a page-explainer knowledge block to the policy (File: `supabase/functions/_shared/ai_policy.ts`)
-
-Add a new exported function `renderPageExplainers(routeId: string)` that returns targeted guidance for each page:
+Update the `isSyncable` logic (line 610) to also require that `reconciliation_status` is either `'reconciled'`, `'matched'`, or `null` (null = no check performed, e.g. API-synced settlements without file-level reconciliation):
 
 ```
-settlements / marketplace dashboard:
-  - File Reconciliation = internal consistency check. Green tick = the file's numbers add up correctly. Orange warning = internal figures don't balance (Sales - Fees ≈ Net Payout).
-  - "check required" = the settlement failed this maths check and needs review before pushing to Xero.
-  - Settlement ID format: BUN-2301-YYYY-MM-DD = Bunnings PDF upload. shopify_auto_X = auto-generated from Shopify orders.
-  - Columns: Sales (gross revenue), Fees (marketplace commission), Refunds (returned orders), Net (what hits your bank).
-  - Negative Net = fees/refunds exceeded sales for that period.
-
-outstanding:
-  - Shows Xero invoices awaiting bank payment confirmation.
-  
-dashboard:
-  - Three sections: Sync Status, Manual Uploads Needed, Ready for Xero.
+const reconOk = !s.reconciliation_status || s.reconciliation_status === 'reconciled' || s.reconciliation_status === 'matched';
+const isSyncable = !isReconOnly && reconOk && (s.status === 'ingested' || s.status === 'ready_to_push');
 ```
 
-#### 4. Use `renderPageExplainers` in the assistant (File: `supabase/functions/ai-assistant/index.ts`)
+For settlements that fail recon, show a warning badge instead of the Push button — e.g. "Fix reconciliation first".
 
-After building the system prompt with context, append the page-specific explainer:
-```typescript
-const pageGuide = renderPageExplainers(context?.routeId);
-const systemPrompt = context
-  ? `${basePrompt}\n\nCurrent page context:\n${JSON.stringify(context, null, 2)}\n\n${pageGuide}`
-  : basePrompt;
+#### 2. Make File Reconciliation rows clickable (`FileReconciliationStatus.tsx`)
+
+- Accept an `onSettlementClick?: (settlementId: string) => void` prop
+- Wrap each row in a clickable button/div that calls `onSettlementClick(settlement_id)`
+- Add a visual cue (chevron icon or "View details" text) so users know they can click
+- In `GenericMarketplaceDashboard`, wire this to the existing `loadLineItems` function (which expands the transaction drilldown) or open the `SettlementDetailDrawer`
+
+#### 3. Filter reconciliation failures from batch push (`SettlementsOverview.tsx`)
+
+In `handlePushAll` (line 168), add a filter to exclude settlements with failed reconciliation:
+
+```sql
+.in('reconciliation_status', ['reconciled', 'matched'])
+-- or use .or('reconciliation_status.is.null,reconciliation_status.in.(reconciled,matched)')
 ```
+
+This prevents batch pushes from including settlements that need review.
+
+#### 4. Add a recon-failure explanation to the row
+
+When a settlement has `reconciliation_status = 'warning'` or `'alert'`, show a small inline message like: "Sales − Fees ≠ Net — review line items before pushing" instead of just "check required".
+
+---
 
 ### Files Modified
-1. `src/components/admin/accounting/GenericMarketplaceDashboard.tsx` — add `useAiPageContext` with rich settlement data
-2. `supabase/functions/_shared/ai_policy.ts` — add `renderPageExplainers()` function
-3. `supabase/functions/ai-assistant/index.ts` — add conciseness rules, no-code-disclosure rule, integrate page explainers
+
+1. **`src/components/admin/accounting/GenericMarketplaceDashboard.tsx`** — add recon gate to `isSyncable`, show warning on failed-recon rows
+2. **`src/components/shared/FileReconciliationStatus.tsx`** — add `onSettlementClick` prop, make rows interactive
+3. **`src/components/admin/accounting/SettlementsOverview.tsx`** — filter recon failures from batch push query
 
 ### Result
-- AI will know exactly which marketplace the user is viewing and what settlements are shown
-- Answers will be short, specific, and reference actual data on screen
-- "What does this table mean?" will get a 3-bullet answer about File Reconciliation, not a 500-word essay about the settlement workflow
-- No internal code or implementation details will ever be disclosed
+- Settlements with "check required" will no longer show a Push button — they must be reviewed first
+- Users can click any File Reconciliation row to drill into line items and investigate
+- Batch "Push All" on the overview page skips reconciliation failures automatically
+- Clear messaging tells users why a settlement is blocked and what to do
 
