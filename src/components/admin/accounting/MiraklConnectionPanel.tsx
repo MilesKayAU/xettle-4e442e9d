@@ -290,7 +290,13 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                 <Label className="text-xs font-medium mb-2 block">Auth Method</Label>
                 <RadioGroup
                   value={authMode}
-                  onValueChange={(v) => setAuthMode(v as AuthMode)}
+                  onValueChange={(v) => {
+                    setAuthMode(v as AuthMode);
+                    if (v === 'oauth') {
+                      setAuthHeaderType('auto');
+                      setAdvancedOpen(false);
+                    }
+                  }}
                   className="flex gap-4"
                 >
                   <div className="flex items-center gap-2">
