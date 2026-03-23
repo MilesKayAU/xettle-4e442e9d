@@ -200,10 +200,12 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                 <span className="text-muted-foreground">Marketplace:</span>
                 <span className="font-medium">{connection.marketplace_label}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Seller ID:</span>
-                <span className="font-mono text-xs">{connection.seller_company_id}</span>
-              </div>
+              {connection.seller_company_id && connection.seller_company_id !== 'default' && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Shop ID:</span>
+                  <span className="font-mono text-xs">{connection.seller_company_id}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Auth mode:</span>
                 <Badge variant="outline" className="text-[10px] h-5">

@@ -81,8 +81,7 @@ Deno.serve(async (req) => {
         .select("*")
         .eq("user_id", userId)
         .eq("base_url", base_url.replace(/\/$/, ""))
-        .eq("seller_company_id", seller_company_id)
-        .single();
+        .eq("seller_company_id", effectiveSellerCompanyId)
 
       if (row) {
         try {

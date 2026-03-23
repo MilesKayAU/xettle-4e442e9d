@@ -199,8 +199,8 @@ async function fetchSettlementsForConnection(
   // Fetch transaction logs from Mirakl Marketplace API (TL endpoints)
   let apiUrl = `${baseUrl}/api/sellerpayment/transactions_logs?start_date=${dateFrom}T00:00:00Z&paginate=false`;
 
-  // Include seller_company_id as shop param if available
-  if (connection.seller_company_id) {
+  // Include seller_company_id as shop param if available and not the default fallback
+  if (connection.seller_company_id && connection.seller_company_id !== "default") {
     apiUrl += `&shop=${connection.seller_company_id}`;
   }
 
