@@ -3,6 +3,7 @@ import { useAiPageContext } from '@/ai/context/useAiPageContext';
 import { Card, CardContent } from '@/components/ui/card';
 import ReconciliationStatus from '@/components/shared/ReconciliationStatus';
 import FileReconciliationStatus from '@/components/shared/FileReconciliationStatus';
+import SettlementDetailDrawer from '@/components/shared/SettlementDetailDrawer';
 import MarketplaceProfitCard from '@/components/shared/MarketplaceProfitCard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
