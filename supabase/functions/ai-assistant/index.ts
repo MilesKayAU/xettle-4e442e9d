@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { renderPolicyForPrompt } from "../_shared/ai_policy.ts";
+import { renderPolicyForPrompt, renderPageExplainers } from "../_shared/ai_policy.ts";
 import { getToolsForRoute, toOpenAIToolDefs, executeTool, READ_ONLY_POLICY } from "../_shared/ai_tool_registry.ts";
 
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
