@@ -175,6 +175,7 @@ export default function ApiConnectionsPanel({
               { key: 'amazon', label: 'Amazon' },
               { key: 'shopify', label: 'Shopify' },
               { key: 'ebay', label: 'eBay' },
+              { key: 'mirakl', label: 'Mirakl' },
             ] as const).map(({ key, label }) => (
               <div key={key} className="flex items-center gap-1 text-xs">
                 {summary[key] ? (
