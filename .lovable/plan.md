@@ -1,33 +1,59 @@
 
 
-## Add Inline Preview (Eye Icon) to Settlement Tables
+## Fix: MarketPlus Transaction Fee Redistribution
 
 ### Problem
-Settlement rows in ValidationSweep and SettlementsOverview tables have no way for bookkeepers to quickly inspect the data summary before pushing. They must either push blind or navigate away. The `SettlementDetailDrawer` component already exists and shows a full audit view — it just needs to be wired into these tables.
-
-### Approach
-Add an "eye" icon button on each row that has a `settlement_id`. Clicking it opens the existing `SettlementDetailDrawer` as a slide-over panel showing the line-item breakdown, account codes, GST treatment, and audit trail — without leaving the page.
+Daily "Transaction fee for DD/MM/YYYY" rows in the Woolworths MarketPlus CSV have `Order Source = MyDeal` set by Woolworths. These are platform-level fees, not order commissions. Since MyDeal has no sales, they create negative-balance settlements that can't push to Xero.
 
 ### Changes
 
-**1. `src/components/onboarding/ValidationSweep.tsx`**
-- Import `SettlementDetailDrawer` and the `Eye` icon from lucide-react
-- Add state: `drawerSettlementId` / `drawerOpen`
-- Add an eye icon button in each table row (next to the Action column or as a new column) — only visible when `row.settlement_id` exists
-- Clicking opens `SettlementDetailDrawer` with that settlement ID
-- Render `<SettlementDetailDrawer>` once at the bottom of the component
+#### File 1: `src/utils/woolworths-marketplus-parser.ts`
 
-**2. `src/components/admin/accounting/SettlementsOverview.tsx`**
-- Same pattern: import `SettlementDetailDrawer`, add drawer state
-- Add an eye icon on each marketplace card row that has settlements
-- Wire it to open the drawer for the latest settlement of that marketplace
+**1. Add transaction fee detection helper (~line 76)**
+```typescript
+const isTransactionFee = (row: WoolworthsOrderRow): boolean =>
+  /transaction fee for/i.test(row.product);
+```
 
-### What bookkeepers see
-- A small 👁 (Eye) icon appears on every row with data
-- Clicking it slides open a panel showing: line items with account codes, net amount, GST treatment, contact name, posting status, and full audit trail
-- They can review and close without losing their place in the table
-- The existing "Push →" button still routes through PushSafetyPreview for the confirm step
+**2. After grouping rows by Order Source (after line 297), add redistribution pass:**
+- Extract all rows matching `isTransactionFee` from every group
+- Remove them from their original groups (MyDeal)
+- Find sibling groups with `grossSales > 0`
+- For each fee row, clone it into each sibling group proportionally by sales share, scaling `commissionFee`, `netAmount`, and `gstOnNetAmount`
+- Append `" (allocated from platform fees)"` to the cloned row's `product` field for audit trail
+- Edge case: if no siblings have sales, keep fees on the largest group and log a console warning
 
-### No other files change
-The `SettlementDetailDrawer` component is fully built and tested. This is purely wiring it into the two tables that lack it.
+**3. Prune empty groups**
+- After redistribution, remove any group with zero rows — no settlement created for that channel
+
+**4. Recalculate group aggregates**
+- After row redistribution, recompute `grossSales`, `commission`, `netAmount`, `gst`, `orderCount` for all affected groups
+
+**5. Delete `redistributeAnomalousFees` (lines 348–452)**
+- Remove the function, the `ANOMALOUS_FEE_RATIO_THRESHOLD` constant, and its export
+- In `buildWoolworthsSettlements` (line 465), replace `const adjustedGroups = redistributeAnomalousFees(groups)` with using `groups` directly
+
+#### File 2: `src/components/admin/accounting/SmartUploadFlow.tsx`
+
+**Update line 873-876** — the settlement_lines writer for Woolworths. Add a check for redistributed transaction fee rows so they get the correct `accounting_category` and `transaction_type`:
+
+```typescript
+transaction_type: row.totalSalePrice < 0 ? 'Refund' 
+  : isTransactionFee(row) ? 'TRANSACTION_FEE'
+  : (row.commissionFee !== 0 && row.totalSalePrice === 0 ? 'Fee' : 'Order'),
+accounting_category: row.totalSalePrice < 0 ? 'refund' 
+  : isTransactionFee(row) ? 'seller_fees'
+  : (row.totalSalePrice === 0 ? 'marketplace_fee' : 'revenue'),
+```
+
+Import `isTransactionFee` from the parser (it operates on the same `WoolworthsOrderRow` type).
+
+### Type safety note
+No mutation of `WoolworthsOrderRow` type needed. The `isTransactionFee` helper is a pure function that reads the existing `product` field. No `__txFeeAllocated` flag. The cloned rows are standard `WoolworthsOrderRow` objects with scaled numeric values and an amended `product` string — fully compatible with all existing spread/map operations.
+
+### Result
+- No more negative MyDeal settlements when MyDeal has zero sales
+- Transaction fees land on BigW/Everyday Market proportionally by revenue
+- Fees post to the user's mapped `seller_fees` Xero account
+- Total bank deposit amount is conserved (invariant maintained)
 
