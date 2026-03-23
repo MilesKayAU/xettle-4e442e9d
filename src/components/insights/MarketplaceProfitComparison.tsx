@@ -12,10 +12,10 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
-import { BarChart3, Lock, ArrowRight, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
+import { BarChart3, Lock, ArrowRight, TrendingUp, TrendingDown, AlertTriangle, Truck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
-import { loadFulfilmentMethods, loadPostageCosts, getEffectiveMethod } from '@/utils/fulfilment-settings';
+import { loadFulfilmentMethods, loadPostageCosts, getEffectiveMethod, getPostageDeductionForOrder } from '@/utils/fulfilment-settings';
 import type { FulfilmentMethod } from '@/utils/fulfilment-settings';
 import {
   normalizeMarketplace,
@@ -35,6 +35,8 @@ interface AggregatedMarketplace {
   has_cost_data: boolean;
   has_estimated_fees: boolean;
   implied_commission_rate: number | null;
+  shipping_deduction: number;
+  order_count: number;
 }
 
 function formatAUD(amount: number): string {
@@ -85,7 +87,7 @@ export default function MarketplaceProfitComparison() {
       }
 
       // Load profit data + all marketplaces from settlements + fulfilment/postage settings
-      const [profitRes, settlementsRes, fulfilmentMethods, postageCosts] = await Promise.all([
+      const [profitRes, settlementsRes, fulfilmentMethods, postageCosts, orderCountsRes] = await Promise.all([
         supabase
           .from('settlement_profit')
           .select('marketplace_code, settlement_id, gross_revenue, gross_profit, margin_percent')
@@ -99,6 +101,12 @@ export default function MarketplaceProfitComparison() {
           .not('status', 'in', '("push_failed_permanent","duplicate_suppressed")'),
         loadFulfilmentMethods(user.id),
         loadPostageCosts(user.id),
+        supabase
+          .from('settlement_lines')
+          .select('marketplace_name, order_id')
+          .eq('user_id', user.id)
+          .eq('accounting_category', 'revenue')
+          .not('order_id', 'is', null),
       ]);
 
       if (profitRes.error) throw profitRes.error;
@@ -106,6 +114,21 @@ export default function MarketplaceProfitComparison() {
 
       const profits = profitRes.data || [];
       const settlements = settlementsRes.data || [];
+
+      // Build order counts map by counting distinct order_ids per marketplace
+      const orderCountsByMp: Record<string, number> = {};
+      if (orderCountsRes.data && Array.isArray(orderCountsRes.data)) {
+        const seen: Record<string, Set<string>> = {};
+        for (const row of orderCountsRes.data as any[]) {
+          const mp = normalizeMarketplace(row.marketplace_name || '');
+          if (!mp || !row.order_id) continue;
+          if (!seen[mp]) seen[mp] = new Set();
+          seen[mp].add(row.order_id);
+        }
+        for (const [mp, ids] of Object.entries(seen)) {
+          orderCountsByMp[mp] = ids.size;
+        }
+      }
 
       // Build a set of active settlement IDs for cross-referencing profit rows
       const activeSettlementIds = new Set(settlements.map(s => (s as any).settlement_id));
@@ -198,6 +221,8 @@ export default function MarketplaceProfitComparison() {
           has_cost_data: true,
           has_estimated_fees: hasEstimated || redistUsedFallback,
           implied_commission_rate: null, // No fabricated rates
+          shipping_deduction: 0, // Already included in profit data
+          order_count: 0,
         });
       }
 
@@ -211,14 +236,17 @@ export default function MarketplaceProfitComparison() {
 
         const fulfilmentMethod = getEffectiveMethod(mp, fulfilmentMethods[mp]);
         const postageCost = postageCosts[mp] || 0;
-        const shouldDeductShipping = fulfilmentMethod === 'self_ship' || fulfilmentMethod === 'third_party_logistics';
         
-        // Use canonical fee attribution — do NOT use rows.length as order count
+        // Use canonical fee attribution
         const attribution = attributeFees(mp, rows, redistFees[mp] || 0);
 
-        // Only deduct shipping if we have real order count data (not fabricated)
-        // For now, skip postage deduction here since we don't have order counts
-        const adjustedPayout = attribution.effectiveNetPayout;
+        // Get order count from settlement_lines and apply shipping deduction
+        const mpOrderCount = orderCountsByMp[mp] || 0;
+        const shippingDeduction = mpOrderCount > 0
+          ? getPostageDeductionForOrder(fulfilmentMethod, null, postageCost, mpOrderCount)
+          : 0;
+
+        const adjustedPayout = attribution.effectiveNetPayout - shippingDeduction;
         const margin = totalSales > 0 ? Math.min((adjustedPayout / totalSales) * 100, 100) : 0;
 
         results.push({
@@ -230,7 +258,9 @@ export default function MarketplaceProfitComparison() {
           periods: rows.length,
           has_cost_data: false,
           has_estimated_fees: attribution.hasEstimatedFees,
-          implied_commission_rate: null, // No fabricated rates — show "payout margin" badge instead
+          implied_commission_rate: null,
+          shipping_deduction: Math.round(shippingDeduction),
+          order_count: mpOrderCount,
         });
       }
 
@@ -341,6 +371,19 @@ export default function MarketplaceProfitComparison() {
                           </TooltipTrigger>
                           <TooltipContent className="text-xs max-w-xs">
                             Fee data includes estimates from platform fee redistribution. Upload CSV settlements for actual fees.
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                      {mp.shipping_deduction > 0 && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 border-primary/30 text-primary cursor-help">
+                              <Truck className="h-2 w-2 mr-0.5" />
+                              Est. Shipping
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent className="text-xs max-w-xs">
+                            Incl. est. shipping: -{formatAUD(mp.shipping_deduction)} ({mp.order_count} orders)
                           </TooltipContent>
                         </Tooltip>
                       )}
