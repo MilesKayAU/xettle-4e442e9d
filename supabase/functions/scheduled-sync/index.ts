@@ -23,12 +23,14 @@ Deno.serve(async (req) => {
   const { data: shopifyTokens } = await adminClient.from('shopify_tokens').select('user_id').eq('is_active', true);
   const { data: xeroTokens } = await adminClient.from('xero_tokens').select('user_id');
   const { data: ebayTokens } = await adminClient.from('ebay_tokens').select('user_id');
+  const { data: miraklTokens } = await adminClient.from('mirakl_tokens').select('user_id');
 
   const allUserIds = new Set<string>();
   for (const t of amazonTokens || []) allUserIds.add(t.user_id);
   for (const t of shopifyTokens || []) allUserIds.add(t.user_id);
   for (const t of xeroTokens || []) allUserIds.add(t.user_id);
   for (const t of ebayTokens || []) allUserIds.add(t.user_id);
+  for (const t of miraklTokens || []) allUserIds.add(t.user_id);
 
   // ─── Write interim "running" sync_history per user ─────────────
   const interimIds: Record<string, string> = {};
