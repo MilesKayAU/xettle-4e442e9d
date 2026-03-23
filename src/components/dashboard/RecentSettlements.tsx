@@ -54,6 +54,8 @@ interface SettlementRow {
   storage_fees: number | null;
   advertising_costs: number | null;
   is_pre_boundary: boolean;
+  dashboard_origin?: 'settlement' | 'validation';
+  queue_type?: 'manual_upload' | 'api_sync';
 }
 
 const MARKETPLACE_DISPLAY: Record<string, string> = {
@@ -99,6 +101,8 @@ type StatusCategory = 'ready' | 'posted' | 'attention' | 'hidden' | 'completed' 
 function categorize(row: SettlementRow): StatusCategory {
   if ((row as any).is_hidden) return 'hidden';
   if (row.status === 'push_failed' || row.status === 'push_failed_permanent') return 'attention';
+  if (row.status === 'settlement_needed' || row.status === 'missing') return 'other';
+  if (row.status === 'awaiting_api_sync') return 'completed';
   // Settlement-confirmed rails that are posted are considered complete, not "waiting"
   if (['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(row.status)) {
     if (row.marketplace && !isBankMatchRequired(row.marketplace)) return 'completed';
@@ -114,7 +118,7 @@ function categorize(row: SettlementRow): StatusCategory {
   if (row.status === 'pre_boundary') return 'completed';
   if (row.status === 'ingested') return 'other';
   return 'other';
-  }
+}
 
 function StatusBadge({ status, xeroStatus, syncOrigin, marketplace }: { status: string; xeroStatus: string | null; syncOrigin?: string; marketplace?: string | null }) {
   // Fully reconciled (PAID in Xero)
