@@ -742,7 +742,7 @@ export default function ValidationSweep({
                               </Tooltip>
                             </TooltipProvider>
                           )}
-                          {!isReconRow && (
+                          {!row.settlement_id?.startsWith('shopify_auto_') && (
                             <RowAction
                               row={row}
                               pushing={pushing === row.id}
