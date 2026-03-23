@@ -405,7 +405,10 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         {hasShopify && !isCsvOnly && currentUserId ? (
           <ReconciliationStatus marketplaceCode={code} userId={currentUserId} />
         ) : settlements.length > 0 ? (
-          <FileReconciliationStatus settlements={settlements} />
+          <FileReconciliationStatus
+            settlements={settlements}
+            onSettlementClick={(sid) => loadLineItems(sid)}
+          />
         ) : null}
       </div>
 
@@ -607,7 +610,10 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                     const net = s.bank_deposit || 0;
                     const isSelected = selected.has(s.id);
                      const isReconOnly = (s as any).source === 'api_sync' && (s.marketplace || '').startsWith('shopify_orders_');
-                     const isSyncable = !isReconOnly && (s.status === 'ingested' || s.status === 'ready_to_push');
+                     const reconStatus = (s as any).reconciliation_status || '';
+                     const reconOk = !reconStatus || reconStatus === 'reconciled' || reconStatus === 'matched';
+                     const isSyncable = !isReconOnly && reconOk && (s.status === 'ingested' || s.status === 'ready_to_push');
+                     const isReconBlocked = !isReconOnly && !reconOk && (s.status === 'ingested' || s.status === 'ready_to_push');
                     const isPushFailed = s.status === 'push_failed';
                     const isSynced = ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(s.status || '');
                     const isPreBoundary = !!(s as any).is_pre_boundary;
@@ -789,6 +795,21 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                             {/* Actions */}
                             <div className="flex items-center gap-1 justify-end">
                               {/* Push to Xero */}
+                              {isReconBlocked && !isPreBoundary && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger>
+                                      <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-[10px] cursor-default">
+                                        <AlertTriangle className="h-3 w-3 mr-1" />
+                                        Fix recon first
+                                      </Badge>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="text-xs max-w-[200px]">
+                                      Sales − Fees ≠ Net — review line items before pushing to Xero
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
                               {isSyncable && !isPreBoundary && (
                                 <>
                                   <TooltipProvider>

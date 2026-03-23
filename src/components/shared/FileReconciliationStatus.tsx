@@ -10,7 +10,7 @@
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CheckCircle2, AlertTriangle, FileCheck } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, FileCheck, ChevronRight } from 'lucide-react';
 
 interface SettlementSummary {
   settlement_id: string;
@@ -27,6 +27,7 @@ interface SettlementSummary {
 
 interface FileReconciliationStatusProps {
   settlements: SettlementSummary[];
+  onSettlementClick?: (settlementId: string) => void;
 }
 
 const fmt = (n: number): string => {
@@ -35,7 +36,7 @@ const fmt = (n: number): string => {
   return n < 0 ? `-$${formatted}` : `$${formatted}`;
 };
 
-export default function FileReconciliationStatus({ settlements }: FileReconciliationStatusProps) {
+export default function FileReconciliationStatus({ settlements, onSettlementClick }: FileReconciliationStatusProps) {
   if (settlements.length === 0) return null;
 
   const results = settlements.map(s => {
@@ -46,9 +47,6 @@ export default function FileReconciliationStatus({ settlements }: FileReconcilia
     const gstIncome = Number(s.gst_on_income) || 0;
     const gstExpenses = Number(s.gst_on_expenses) || 0;
 
-    // Use the reconciliation_status from the DB — set by the parser which has
-    // access to the raw CSV values before GST decomposition.
-    // 'reconciled' or 'matched' = ✅, anything else = ⚠️
     const dbStatus = (s.reconciliation_status || '').toLowerCase();
     const reconciles = dbStatus === 'reconciled' || dbStatus === 'matched';
 
@@ -89,13 +87,15 @@ export default function FileReconciliationStatus({ settlements }: FileReconcilia
       </CardHeader>
       <CardContent className="space-y-2 pt-0">
         {results.map(r => (
-          <div
+          <button
             key={r.settlement_id}
-            className={`rounded-md px-3 py-2 text-xs flex flex-wrap items-center gap-x-3 gap-y-1 ${
+            type="button"
+            onClick={() => onSettlementClick?.(r.settlement_id)}
+            className={`w-full rounded-md px-3 py-2 text-xs flex flex-wrap items-center gap-x-3 gap-y-1 text-left transition-colors ${
               r.reconciles
-                ? 'bg-emerald-50 dark:bg-emerald-900/20'
-                : 'bg-amber-50 dark:bg-amber-900/20'
-            }`}
+                ? 'bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
+                : 'bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/30'
+            } ${onSettlementClick ? 'cursor-pointer' : 'cursor-default'}`}
           >
             <span className="font-medium text-foreground">{r.settlement_id}</span>
             <span className="text-muted-foreground">Sales: {fmt(r.sales)}</span>
@@ -105,12 +105,15 @@ export default function FileReconciliationStatus({ settlements }: FileReconcilia
             <span className="text-muted-foreground">Fees: -{fmt(r.fees)}</span>
             <span className="text-muted-foreground">Net: {fmt(r.bankDeposit)}</span>
             <span className={r.reconciles ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>
-              {r.reconciles ? '✅' : '⚠️ check required'}
+              {r.reconciles ? '✅' : '⚠️ Sales − Fees ≠ Net — review line items'}
             </span>
-          </div>
+            {onSettlementClick && (
+              <ChevronRight className="h-3.5 w-3.5 ml-auto text-muted-foreground flex-shrink-0" />
+            )}
+          </button>
         ))}
         <p className="text-[10px] text-muted-foreground pt-1">
-          File reconciliation verified at upload — the bank deposit matches the settlement file's net payout.
+          Click a settlement to view line items. File reconciliation verified at upload.
         </p>
       </CardContent>
     </Card>

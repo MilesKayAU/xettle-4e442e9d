@@ -167,13 +167,14 @@ export default function SettlementsOverview({
       // Exclude shopify_auto_* analytics records
       const { data: unsent, error } = await supabase
         .from('settlements')
-        .select('settlement_id, marketplace')
+        .select('settlement_id, marketplace, reconciliation_status')
         .eq('marketplace', code)
         .eq('status', 'ready_to_push')
         .eq('is_hidden', false)
         .eq('is_pre_boundary', false)
         .neq('source', 'api_sync')
         .is('duplicate_of_settlement_id', null)
+        .or('reconciliation_status.is.null,reconciliation_status.in.(reconciled,matched)')
         .order('period_end');
 
       if (error) throw error;
