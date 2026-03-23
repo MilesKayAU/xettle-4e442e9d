@@ -1,64 +1,46 @@
 
 
-## Beta Marketplace Support for JB Hi-Fi & Baby Bunting
+## Fix Xero Connection Popup on Back Navigation
 
-### Summary
-Add JB Hi-Fi and Baby Bunting as beta-selectable Mirakl marketplaces, with a structured issue reporting flow so beta users can help validate the generic rail.
+### Problem
 
-### Changes
+When you reconnect Xero and then navigate around the dashboard, pressing the browser back button can land you back on `/xero/callback?code=...`. The `useEffect` fires again, attempts to re-use the already-consumed OAuth authorization code, and Xero returns `invalid_grant` — showing an error popup ("Connection Failed").
 
-**1. Database migration — `mirakl_issue_reports` table**
-- Columns: `id` (uuid PK), `user_id` (uuid, references auth.users), `marketplace_label` (text), `base_url` (text), `error_message` (text), `event_log` (jsonb), `resolved` (boolean default false), `created_at` (timestamptz default now())
-- RLS: authenticated users can INSERT their own rows; admin (via `is_primary_admin()`) can SELECT all and UPDATE `resolved`
+The edge function logs confirm this: two `invalid_grant` errors from `xero-auth` at 06:00:51 and 06:01:38, both attempting code exchange.
 
-**2. Edge function — `report-mirakl-issue/index.ts`**
-- Accepts POST with: `marketplace_label`, `base_url`, `error_message`
-- Server-side: redacts API key from base_url, fetches last 10 `system_events` for the user filtered by marketplace, inserts into `mirakl_issue_reports`
-- Uses shared auth-guard for JWT validation
+### Root Cause
 
-**3. Update `MiraklConnectionPanel.tsx`**
-- Replace hardcoded Bunnings-only state with a marketplace selector dropdown:
-  - Bunnings (stable)
-  - JB Hi-Fi (beta badge)
-  - Baby Bunting (beta badge)
-  - Other Mirakl (manual entry)
-- Pre-fill `baseUrl` for Bunnings; show placeholder hints for JB Hi-Fi / Baby Bunting / Other
-- When a beta marketplace is selected, show info banner about beta testing
-- After any failed connect or fetch, show a "Report Issue" button that invokes `report-mirakl-issue`
-- Pass selected `marketplace_label` and resolved `marketplace_code` (e.g. `jbhifi`, `babybunting`) through to `mirakl-auth` connect call
+`XeroCallback.tsx` has no guard against re-processing a consumed code. It fires the edge function on every mount/re-render when search params contain `code=`.
 
-**4. Update `mirakl-auth/index.ts`**
-- Accept dynamic `marketplace_code` from the body (default to `bunnings` for backwards compat)
-- Use it when upserting `marketplace_connections` and `mirakl_tokens`
+### Fix
 
-**5. Update `fetch-mirakl-settlements/index.ts`**
-- Already reads marketplace code from `mirakl_tokens` — no change needed as long as `mirakl-auth` stores the correct code
+**1. XeroCallback.tsx — Prevent re-processing consumed codes**
 
-**6. Add marketplace labels**
-- Add `jbhifi: 'JB Hi-Fi'` and `babybunting: 'Baby Bunting'` to `marketplace-labels.ts`
-- Add registry entries for both in `marketplace-registry.ts`
+- Add a `useRef` processing guard so the callback only fires once per mount
+- After successful processing, use `navigate('/dashboard?connected=xero', { replace: true })` to **replace** the callback URL in browser history (already partially done for the auto-redirect, but the manual button also needs it)
+- Store the consumed code in `sessionStorage` and skip re-processing if the same code is seen again
+- On the error fallback "Back to Dashboard" button, also use `{ replace: true }` so back-arrow doesn't loop
 
-**7. Admin panel — `MiraklBetaFeedback` component**
-- New component shown in Admin page (gated by `is_primary_admin`)
-- Lists all `mirakl_issue_reports` rows: marketplace, error, timestamp, user email
-- "Mark Resolved" button toggles `resolved` column
-- Filter by resolved/unresolved
+**2. XeroCallback.tsx — Replace history entry on mount**
 
-### What stays untouched
-- Existing Bunnings connection logic and settlement fetch
-- Settlement schema, Xero sync, Amazon/eBay connectors
-- Dual-auth logic, source enum values
+- Immediately call `window.history.replaceState` to strip the `code` param from the URL on first load, preventing back-button re-entry with stale params
 
-### File list
-| File | Action |
-|------|--------|
-| `supabase/migrations/new` | Create `mirakl_issue_reports` table + RLS |
-| `supabase/functions/report-mirakl-issue/index.ts` | New edge function |
-| `supabase/functions/mirakl-auth/index.ts` | Accept dynamic marketplace_code |
-| `src/components/admin/accounting/MiraklConnectionPanel.tsx` | Marketplace selector, beta badges, report issue button |
-| `src/components/admin/MiraklBetaFeedback.tsx` | New admin panel |
-| `src/pages/Admin.tsx` | Mount MiraklBetaFeedback |
-| `src/utils/marketplace-labels.ts` | Add jbhifi, babybunting |
-| `src/utils/marketplace-registry.ts` | Add registry entries |
-| `supabase/config.toml` | Add report-mirakl-issue verify_jwt = false |
+### Technical Details
+
+```text
+Current flow:
+  /dashboard → Xero OAuth → /xero/callback?code=ABC → /dashboard?connected=xero
+  Back button → /xero/callback?code=ABC → tries code ABC again → invalid_grant error popup
+
+Fixed flow:
+  /dashboard → Xero OAuth → /xero/callback?code=ABC (replaced in history) → /dashboard?connected=xero
+  Back button → /dashboard (skips callback entirely)
+```
+
+Changes:
+- `src/pages/XeroCallback.tsx`: Add processing ref guard, store consumed code in sessionStorage, use `replace: true` on all navigations, replace history state after processing
+
+### Scope
+
+Single file change: `src/pages/XeroCallback.tsx`. No database changes needed.
 
