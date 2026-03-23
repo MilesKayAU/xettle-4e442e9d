@@ -1,42 +1,58 @@
 
 
-## Fix: Hide Reconciliation-Only Settlements from File Reconciliation Table
+## Add Settlement Editing to Fix Reconciliation Issues
 
 ### Problem
-The `shopify_auto_bunnings_*` settlements are Shopify-derived summary aggregations that are correctly blocked from Xero push via `isReconciliationOnly()`. However:
+When a settlement has `recon_warning`, users can open the detail drawer but everything is read-only. There's no way to:
+1. See exactly what the reconciliation gap is (the maths mismatch)
+2. Edit the settlement's breakdown fields (sales, fees, refunds, bank deposit) to correct errors
+3. Re-run the reconciliation check after editing
 
-1. **They still appear in the File Reconciliation card**, creating false "check required" warnings that confuse users
-2. **The `isReconOnly` check in the table** (line 618) only checks `marketplace.startsWith('shopify_orders_')` — it misses the `settlementId.startsWith('shopify_auto_')` rule from `settlement-policy.ts`
+Users are told "delete and re-upload" which is heavy-handed for a rounding issue or a single wrong figure.
 
 ### Changes
 
-#### 1. Filter recon-only settlements out of FileReconciliationStatus (`GenericMarketplaceDashboard.tsx`)
+#### 1. Show Reconciliation Gap in the Detail Drawer (`SettlementDetailDrawer.tsx`)
 
-Before passing `settlements` to `<FileReconciliationStatus>`, filter out any that match `isReconciliationOnly()`:
+When the settlement has a `reconciliation_status` that isn't `reconciled`/`matched`, display a prominent "Reconciliation Gap" card showing:
+- Expected net (Sales - Fees + Refunds)
+- Actual bank deposit
+- The delta between them
+- A clear message: "The file's figures don't add up — edit below to correct"
 
-```typescript
-import { isReconciliationOnly } from '@/utils/settlement-policy';
+#### 2. Add Inline Edit Mode for Settlement Figures (`SettlementDetailDrawer.tsx`)
 
-// In the FileReconciliationStatus section (~line 410):
-const reconEligible = settlements.filter(s => 
-  !isReconciliationOnly((s as any).source, s.marketplace, s.settlement_id)
-);
-// Pass reconEligible instead of settlements
+For unpushed settlements (status not `pushed_to_xero` or `already_recorded`):
+- Add an "Edit Figures" button that switches the header metadata into editable inputs for: `sales_principal`, `seller_fees`, `refunds`, `bank_deposit`, `other_fees`, `reimbursements`
+- Show a "Save & Re-check" button that:
+  - Updates the settlement row in the database
+  - Recalculates whether Sales - Fees ≈ Net and updates `reconciliation_status` to `reconciled` or keeps `recon_warning`
+  - Refreshes the drawer state
+- Show a "Cancel" button to discard changes
+- Pushed settlements remain read-only (audit integrity)
+
+#### 3. Recalculate reconciliation_status on save
+
+After updating the settlement fields, run the same maths check the parser uses:
+```
+gap = bank_deposit - (sales_principal - seller_fees + refunds + reimbursements + other_fees)
+if abs(gap) < $1.00 → reconciliation_status = 'reconciled'
+else → reconciliation_status = 'recon_warning'
 ```
 
-#### 2. Fix incomplete `isReconOnly` check in table rows (line 618)
+This happens client-side before the update call, so the status is written atomically.
 
-Replace the inline check with the canonical `isReconciliationOnly()` function so it catches both `shopify_orders_*` marketplaces AND `shopify_auto_*` settlement IDs:
+#### 4. Update AI policy to guide users to edit (`ai_policy.ts`)
 
-```typescript
-const isReconOnly = isReconciliationOnly((s as any).source, s.marketplace, s.settlement_id);
-```
+Update the settlements page explainer so the AI tells users: "Open the settlement, click Edit Figures, correct the value that's wrong, and save."
 
 ### Files Modified
-1. **`src/components/admin/accounting/GenericMarketplaceDashboard.tsx`** — import `isReconciliationOnly`, filter FileReconciliation input, fix table row check
+1. **`src/components/shared/SettlementDetailDrawer.tsx`** — add reconciliation gap display, inline edit mode for unpushed settlements, save + re-check logic
+2. **`supabase/functions/_shared/ai_policy.ts`** — update guidance to reference the new edit capability
 
 ### Result
-- `shopify_auto_bunnings_*` settlements disappear from File Reconciliation (no more false warnings)
-- The table's "Recon Only" badge and push-blocking logic correctly catches all reconciliation-only patterns
-- Real BUN- settlements remain visible and interactive for drill-down
+- Users see exactly where the maths fails and by how much
+- They can fix a wrong figure directly in the drawer without deleting/re-uploading
+- Saving auto-rechecks reconciliation — if the numbers now balance, the warning clears
+- Pushed settlements remain locked for audit integrity
 
