@@ -1,37 +1,30 @@
 
 
-## Rebrand Mirakl Panel as "Bunnings Marketplace Sync"
+## Validation: Current State Already Matches Requirements
 
-### Problem
-Australian users don't know what "Mirakl" is — they know Bunnings. The current UX exposes Mirakl terminology everywhere. Catch, MyDeal, Kogan etc. don't actually use Mirakl API sync in practice, so the dropdown is misleading.
+After reviewing the codebase, the previous round of changes already implemented nearly everything requested:
 
-### Changes
+| Requirement | Status |
+|---|---|
+| Default auth_mode = api_key | ✅ Line 36: `useState<AuthMode>('api_key')` |
+| API key field shown by default | ✅ Visible when authMode = api_key |
+| OAuth hidden unless user switches | ✅ Only shown when authMode = oauth/both |
+| Bunnings onboarding instructions in UI | ✅ Lines 246-257, step-by-step guide |
+| Backend uses `getMiraklAuthHeader()` | ✅ No Bunnings-specific logic in edge function |
+| api_key mode → `Authorization: <key>` (not Bearer) | ✅ `mirakl-token.ts` line 94: default case returns raw key |
+| Override via auth_header_type | ✅ Supported via Advanced section |
+| Dual auth (oauth / api_key / both) preserved | ✅ All three modes in RadioGroup |
 
-**1. Rename `MiraklConnectionPanel` → Bunnings-first UX**
-- Title: "Bunnings Marketplace Sync" (not "Mirakl API Connection")
-- Description: "Auto-import settlement data from Bunnings Marketplace."
-- Remove the marketplace dropdown (Catch, MyDeal, Kogan, Decathlon, Other) — hardcode to Bunnings with its base URL
-- Keep `selectedMarketplace = 'Bunnings'` and `baseUrl = 'https://marketplace.bunnings.com.au'` as fixed values
-- Remove "Mirakl" from all user-facing strings: toasts, confirmations, helper text
-- Replace "Mirakl Connect" / "Classic Mirakl" labels with "OAuth (recommended)" / "API Key"
-- Info box: reword to mention "Bunnings Marketplace" instead of "Mirakl Connect apps"
-- Loading text: "Checking Bunnings connection..." instead of "Checking Mirakl connection..."
-- Disconnect confirm: "Disconnect Bunnings Marketplace?"
-- Keep the component filename as `MiraklConnectionPanel.tsx` internally (no need to rename imports everywhere)
+### One Fix Needed
 
-**2. Settings page (`ApiConnectionsPanel.tsx`)**
-- Change section label from "Mirakl" to "Bunnings Marketplace"
-- The generic MiraklConnectionPanel there should also show Bunnings-branded UX (it already defaults to Bunnings)
+The OAuth radio label says **"OAuth (recommended)"** — this is misleading since API Key is the correct default for Bunnings. 
 
-**3. BunningsDashboard.tsx**
-- No changes needed — it already passes `marketplaceFilter="bunnings"` and will inherit the new branding
+**Change:** Swap the labels:
+- `api_key` → **"API Key (recommended)"**
+- `oauth` → **"OAuth"**
 
-**4. Landing page / marketing content**
-- Out of scope for this change, but noted: website should list "Bunnings Marketplace" as a supported API sync channel
+This is a two-line label change in `MiraklConnectionPanel.tsx` (lines 285 and 291).
 
-### No changes to
-- Backend edge functions (mirakl-auth, fetch-mirakl-settlements) — internal naming stays as-is
-- Database table name (mirakl_tokens) — internal only
-- Auth header logic
-- Settlement processing
+### No backend changes
+The `mirakl-token.ts` shared helper and `fetch-mirakl-settlements` edge function are correctly implemented with dynamic auth detection. No changes needed.
 
