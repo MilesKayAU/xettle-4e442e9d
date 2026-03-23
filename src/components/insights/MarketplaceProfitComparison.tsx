@@ -87,7 +87,7 @@ export default function MarketplaceProfitComparison() {
       }
 
       // Load profit data + all marketplaces from settlements + fulfilment/postage settings
-      const [profitRes, settlementsRes, fulfilmentMethods, postageCosts] = await Promise.all([
+      const [profitRes, settlementsRes, fulfilmentMethods, postageCosts, orderCountsRes] = await Promise.all([
         supabase
           .from('settlement_profit')
           .select('marketplace_code, settlement_id, gross_revenue, gross_profit, margin_percent')
@@ -101,6 +101,7 @@ export default function MarketplaceProfitComparison() {
           .not('status', 'in', '("push_failed_permanent","duplicate_suppressed")'),
         loadFulfilmentMethods(user.id),
         loadPostageCosts(user.id),
+        supabase.rpc('get_marketplace_order_counts', { p_user_id: user.id }).then(r => r),
       ]);
 
       if (profitRes.error) throw profitRes.error;
