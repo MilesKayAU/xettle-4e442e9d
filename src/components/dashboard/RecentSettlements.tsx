@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { ACTIVE_CONNECTION_STATUSES, isApiConnectionType } from '@/constants/connection-status';
 import { logger } from '@/utils/logger';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -345,7 +346,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
   const [showHidden, setShowHidden] = useState(false);
   const [externalMatchIds, setExternalMatchIds] = useState<Set<string>>(new Set());
   // Validation pipeline counts (from marketplace_validation — the true source of what needs pushing)
-  const [validationCounts, setValidationCounts] = useState<{ ready: number; readyTotal: number; uploadNeeded: number; gaps: number } | null>(null);
+  const [validationCounts, setValidationCounts] = useState<{ ready: number; readyTotal: number; uploadNeeded: number; uploadNeededManual: number; uploadNeededApi: number; gaps: number } | null>(null);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -447,21 +448,39 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
   // Fetch marketplace_validation counts (true source of what needs pushing)
   const fetchValidationCounts = useCallback(async () => {
     try {
-      const { data } = await supabase
-        .from('marketplace_validation')
-        .select('overall_status, settlement_net')
-        .in('overall_status', ['ready_to_push', 'pushed_to_xero', 'settlement_needed', 'missing', 'gap_detected']);
-      if (data) {
-        let ready = 0, readyTotal = 0, uploadNeeded = 0, gaps = 0;
-        for (const r of data) {
+      const [valRes, connRes] = await Promise.all([
+        supabase
+          .from('marketplace_validation')
+          .select('overall_status, settlement_net, marketplace_code')
+          .in('overall_status', ['ready_to_push', 'pushed_to_xero', 'settlement_needed', 'missing', 'gap_detected']),
+        supabase
+          .from('marketplace_connections')
+          .select('marketplace_code, connection_type, connection_status'),
+      ]);
+      if (valRes.data) {
+        // Build set of API-synced marketplace codes
+        const apiCodes = new Set<string>(
+          (connRes.data || [])
+            .filter((c: any) => isApiConnectionType(c.connection_type) && (ACTIVE_CONNECTION_STATUSES as readonly string[]).includes(c.connection_status))
+            .map((c: any) => c.marketplace_code)
+        );
+        let ready = 0, readyTotal = 0, uploadNeeded = 0, uploadNeededManual = 0, uploadNeededApi = 0, gaps = 0;
+        for (const r of valRes.data) {
           if (r.overall_status === 'ready_to_push') {
             ready++;
             readyTotal += (r as any).settlement_net || 0;
           }
-          if (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') uploadNeeded++;
+          if (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') {
+            uploadNeeded++;
+            if (apiCodes.has(r.marketplace_code)) {
+              uploadNeededApi++;
+            } else {
+              uploadNeededManual++;
+            }
+          }
           if (r.overall_status === 'gap_detected') gaps++;
         }
-        setValidationCounts({ ready, readyTotal, uploadNeeded, gaps });
+        setValidationCounts({ ready, readyTotal, uploadNeeded, uploadNeededManual, uploadNeededApi, gaps });
       }
     } catch { /* silent */ }
   }, []);
@@ -591,10 +610,12 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
   const displayReadyCount = actionableOnly && validationCounts ? validationCounts.ready : counts.ready;
   const displayReadyTotal = actionableOnly && validationCounts ? validationCounts.readyTotal : counts.readyTotal;
   const displayUploadNeeded = actionableOnly && validationCounts ? validationCounts.uploadNeeded : 0;
+  const displayUploadManual = actionableOnly && validationCounts ? validationCounts.uploadNeededManual : 0;
+  const displayUploadApi = actionableOnly && validationCounts ? validationCounts.uploadNeededApi : 0;
   const displayGaps = actionableOnly && validationCounts ? validationCounts.gaps : 0;
 
   // In actionableOnly mode, show "all clear" when nothing needs action
-  if (actionableOnly && displayReadyCount === 0 && counts.attention === 0 && displayUploadNeeded === 0) {
+  if (actionableOnly && displayReadyCount === 0 && counts.attention === 0 && displayUploadManual === 0) {
     return (
       <Card>
         <CardHeader className="pb-3">
@@ -629,14 +650,22 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
       color: 'border-sky-200 bg-sky-50/80 dark:border-sky-800 dark:bg-sky-900/20',
       icon: <Send className="h-4 w-4 text-sky-600 dark:text-sky-400" />,
     }] : []),
-    // In actionableOnly mode, show Upload Needed instead of In Xero
-    ...(actionableOnly && displayUploadNeeded > 0 ? [{
+    // In actionableOnly mode, show Manual Upload Needed (urgent) and API Sync Pending (low urgency)
+    ...(actionableOnly && displayUploadManual > 0 ? [{
       key: 'other' as StatusCategory,
       label: 'Upload Needed',
-      sublabel: `${displayUploadNeeded} period${displayUploadNeeded !== 1 ? 's' : ''} missing settlement files`,
-      count: displayUploadNeeded,
+      sublabel: `${displayUploadManual} period${displayUploadManual !== 1 ? 's' : ''} need a manual CSV upload`,
+      count: displayUploadManual,
       color: 'border-amber-200 bg-amber-50/80 dark:border-amber-800 dark:bg-amber-900/20',
       icon: <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />,
+    }] : []),
+    ...(actionableOnly && displayUploadApi > 0 ? [{
+      key: 'completed' as StatusCategory,
+      label: 'Awaiting API Sync',
+      sublabel: `${displayUploadApi} period${displayUploadApi !== 1 ? 's' : ''} will sync automatically`,
+      count: displayUploadApi,
+      color: 'border-emerald-200 bg-emerald-50/80 dark:border-emerald-800 dark:bg-emerald-900/20',
+      icon: <RefreshCw className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />,
     }] : []),
     // Hide "In Xero — Processing" on homepage (actionableOnly mode)
     ...(!actionableOnly ? [{
