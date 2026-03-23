@@ -137,6 +137,7 @@ export default function SettlementsOverview({
           code,
           name: cat?.name || code,
           icon: cat?.icon || '📦',
+          latestSettlementId,
           latestReceived,
           lastSentToXero,
           lastSentDate,
