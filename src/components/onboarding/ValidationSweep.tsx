@@ -120,7 +120,7 @@ export default function ValidationSweep({
   const { apiSyncedCodes } = useApiSyncedCodes();
   const [syncingRow, setSyncingRow] = useState<string | null>(null);
   const [pausedCodes, setPausedCodes] = useState<Set<string>>(new Set());
-  const [allConnections, setAllConnections] = useState<Array<{ marketplace_code: string; marketplace_name: string; connection_status: string }>>([]);
+  const [allConnections, setAllConnections] = useState<Array<{ marketplace_code: string; marketplace_name: string; connection_status: string; connection_type: string }>>([]);
   const [showPaused, setShowPaused] = useState(false);
   const [togglingPause, setTogglingPause] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
