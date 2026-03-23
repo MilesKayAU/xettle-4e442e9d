@@ -109,7 +109,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
   };
 
   const handleDisconnect = async () => {
-    if (!confirm('Disconnect Mirakl? You can reconnect anytime.')) return;
+    if (!confirm('Disconnect Bunnings Marketplace? You can reconnect anytime.')) return;
     setDisconnecting(true);
     try {
       const { error } = await supabase.functions.invoke('mirakl-auth', {
