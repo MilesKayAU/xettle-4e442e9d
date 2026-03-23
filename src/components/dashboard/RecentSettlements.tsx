@@ -823,7 +823,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
                             Recalculate
                           </DropdownMenuItem>
 
-                          {(row.status === 'parsed' || row.status === 'ready_to_push' || row.status === 'saved') && (
+                          {(row.status === 'parsed' || row.status === 'ready_to_push' || row.status === 'saved') && row.status !== 'pre_boundary' && (
                             <DropdownMenuItem className="text-xs" onClick={() => {
                               toast.info('Push to Xero from the Settlements tab');
                             }}>
