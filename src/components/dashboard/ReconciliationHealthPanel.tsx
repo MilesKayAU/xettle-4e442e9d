@@ -79,14 +79,12 @@ export default function ReconciliationHealthPanel() {
         destSettingsRes,
         legacySettingsRes,
         connectionsRes,
-        mappingsRes,
         bankTxRes,
       ] = await Promise.all([
         supabase.from('xero_tokens').select('id').limit(1),
         supabase.from('app_settings').select('key, value').like('key', `${DESTINATION_KEY_PREFIX}%`),
         supabase.from('app_settings').select('key, value').like('key', `${LEGACY_KEY_PREFIX}%`),
         supabase.from('marketplace_connections').select('marketplace_code, marketplace_name').in('connection_status', ['active', 'connected']),
-        supabase.from('marketplace_account_mapping').select('marketplace_code, category'),
         supabase.from('bank_transactions').select('id').limit(1),
       ]);
 
