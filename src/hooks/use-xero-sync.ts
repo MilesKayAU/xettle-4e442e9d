@@ -53,7 +53,7 @@ export function useXeroSync({ loadSettlements }: UseXeroSyncOptions) {
     bankAmount?: number,
   ) => {
     // Source Push Gate: check DB row fields BEFORE normalization
-    if (isReconciliationOnly(settlement.source, settlement.marketplace)) {
+    if (isReconciliationOnly(settlement.source, settlement.marketplace, settlement.settlement_id)) {
       toast.error('This is a Shopify-derived reconciliation record — push the marketplace CSV settlement instead.');
       return;
     }

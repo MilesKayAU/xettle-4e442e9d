@@ -18,6 +18,7 @@ import { getCorsHeaders } from '../_shared/cors.ts';
 import { safeUpsertXam } from '../_shared/xam-safe-upsert.ts';
 import { logger } from '../_shared/logger.ts';
 import { XERO_TOKEN_URL, XERO_API_BASE, getXeroHeaders } from '../_shared/xero-api-policy.ts';
+import { isReconciliationOnly } from '../_shared/settlementPolicy.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -537,31 +538,28 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // ─── SOURCE PUSH GATE ────────────────────────────────────────────
-    // Reconciliation-only settlements (Shopify-derived) must never be pushed
+    // ─── SOURCE PUSH GATE (defense-in-depth) ────────────────────────
+    // Reconciliation-only settlements must NEVER be pushed to Xero,
+    // regardless of their status. Derives decision from the actual
+    // settlement row, not from client-provided fields.
     if (action === 'create' && body.settlementId) {
       const { data: gateCheck } = await supabase
         .from('settlements')
-        .select('source, marketplace')
+        .select('source, marketplace, settlement_id')
         .eq('settlement_id', body.settlementId)
         .eq('user_id', userId)
         .maybeSingle();
 
-      if (gateCheck && gateCheck.source === 'api_sync' && (gateCheck.marketplace || '').startsWith('shopify_orders_')) {
+      if (gateCheck && isReconciliationOnly(gateCheck.source, gateCheck.marketplace, gateCheck.settlement_id)) {
         return new Response(JSON.stringify({
           success: false,
-          error: 'Reconciliation-only settlement cannot be pushed to Xero. Upload the marketplace CSV settlement instead.',
+          error: 'This settlement is reconciliation-only and cannot be pushed to Xero. Upload the marketplace CSV settlement instead.',
         }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
     }
-
-    // ─── ROLLBACK ACTION ─────────────────────────────────────────────
-    const userId = authenticatedUserId;
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // ─── ROLLBACK ACTION ─────────────────────────────────────────────
     if (action === 'rollback') {

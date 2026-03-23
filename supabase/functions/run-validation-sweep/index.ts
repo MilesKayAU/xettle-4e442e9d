@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { XERO_TOKEN_URL, XERO_API_BASE, getXeroHeaders } from '../_shared/xero-api-policy.ts'
+import { isReconciliationOnly } from '../_shared/settlementPolicy.ts'
 
 function monthKey(date: string): string {
   return date.substring(0, 7)
@@ -385,7 +386,7 @@ async function sweepUser(adminSupabase: any, userId: string) {
   // Boundary only determines what gets pushed to Xero.
   const { data: settlements } = await adminSupabase
     .from('settlements')
-    .select('settlement_id, marketplace, period_start, period_end, bank_deposit, status, reconciliation_status, xero_journal_id, xero_status, bank_verified, bank_verified_amount, created_at')
+    .select('settlement_id, marketplace, period_start, period_end, bank_deposit, status, reconciliation_status, xero_journal_id, xero_status, bank_verified, bank_verified_amount, created_at, source')
     .eq('user_id', userId)
 
   const { data: reconChecks } = await adminSupabase
@@ -406,6 +407,7 @@ async function sweepUser(adminSupabase: any, userId: string) {
   const settlementArrayMap = new Map<string, any[]>()
   for (const s of (settlements || [])) {
     if (s.status === 'duplicate_suppressed') continue // skip suppressed duplicates
+    if (isReconciliationOnly(s.source, s.marketplace, s.settlement_id)) continue // skip reconciliation-only
     const pl = `${s.period_start} → ${s.period_end}`
     const key = `${s.marketplace}|${pl}`
     if (!settlementArrayMap.has(key)) settlementArrayMap.set(key, [])
