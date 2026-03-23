@@ -308,7 +308,7 @@ export default function ValidationSweep({
         : String(bVal).localeCompare(String(aVal));
     });
     return result;
-  }, [rows, filter, marketplaceFilter, dateFrom, dateTo, sortKey, sortDir, pausedCodes, uploadSubTab, apiSyncedCodes]);
+  }, [rows, filter, marketplaceFilter, dateFrom, dateTo, sortKey, sortDir, pausedCodes, uploadSubTab, apiSyncedCodes, isUsefulRecon]);
 
   const uniqueMarketplaces = useMemo(() => [...new Set(rows.map((r) => r.marketplace_code))].sort(), [rows]);
 
