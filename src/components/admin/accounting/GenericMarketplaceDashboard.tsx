@@ -607,7 +607,10 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                     const net = s.bank_deposit || 0;
                     const isSelected = selected.has(s.id);
                      const isReconOnly = (s as any).source === 'api_sync' && (s.marketplace || '').startsWith('shopify_orders_');
-                     const isSyncable = !isReconOnly && (s.status === 'ingested' || s.status === 'ready_to_push');
+                     const reconStatus = (s as any).reconciliation_status || '';
+                     const reconOk = !reconStatus || reconStatus === 'reconciled' || reconStatus === 'matched';
+                     const isSyncable = !isReconOnly && reconOk && (s.status === 'ingested' || s.status === 'ready_to_push');
+                     const isReconBlocked = !isReconOnly && !reconOk && (s.status === 'ingested' || s.status === 'ready_to_push');
                     const isPushFailed = s.status === 'push_failed';
                     const isSynced = ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(s.status || '');
                     const isPreBoundary = !!(s as any).is_pre_boundary;
