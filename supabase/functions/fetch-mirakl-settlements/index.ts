@@ -184,7 +184,7 @@ async function fetchSettlementsForConnection(
 
   const res = await fetch(apiUrl, {
     headers: {
-      Authorization: authHeader,
+      [authResult.headerName]: authResult.headerValue,
       Accept: "application/json",
     },
   });
