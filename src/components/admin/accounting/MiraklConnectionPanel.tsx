@@ -33,7 +33,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
   // Form state
   const [selectedMarketplace] = useState('Bunnings');
   const [baseUrl] = useState<string>(BUNNINGS_BASE_URL);
-  const [authMode, setAuthMode] = useState<AuthMode>('oauth');
+  const [authMode, setAuthMode] = useState<AuthMode>('api_key');
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   const [apiKey, setApiKey] = useState('');
@@ -242,10 +242,17 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="bg-muted/30 border border-border rounded-lg p-3 text-sm text-muted-foreground">
-              <p className="text-xs">
-                Enter your Bunnings Marketplace API credentials from your seller portal
-                (<strong>Settings → API Integrations</strong>).
+            <div className="bg-muted/30 border border-border rounded-lg p-3 text-sm text-muted-foreground space-y-2">
+              <p className="text-xs font-medium">How to find your API key:</p>
+              <ol className="text-xs list-decimal list-inside space-y-0.5">
+                <li>Log into your <strong>Bunnings Marketplace seller portal</strong></li>
+                <li>Click your <strong>profile initials</strong> (top right)</li>
+                <li>Select <strong>My Settings</strong></li>
+                <li>Click the <strong>API Key</strong> tab</li>
+                <li>Click <strong>Generate a new API key</strong></li>
+                <li>Copy and paste it below</li>
+              </ol>
+              <p className="text-[10px] text-muted-foreground/70">
                 Xettle requests <strong>read-only</strong> access to settlement and transaction data.
               </p>
             </div>
@@ -314,11 +321,14 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                   <Label className="text-xs">API Key</Label>
                   <Input
                     type="password"
-                    placeholder="Your API Key"
+                    placeholder="e.g. bfb2d8a3-914b-4d8e-828b-3d75199754c5"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
                     className="font-mono text-xs h-8"
                   />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Paste the API key generated from your Bunnings seller portal.
+                  </p>
                 </div>
               )}
               {(authMode === 'api_key' || authMode === 'both') && (
@@ -353,8 +363,8 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
               <div className="flex items-start gap-1.5 text-[10px] text-muted-foreground bg-muted/20 rounded p-2">
                 <Info className="h-3 w-3 mt-0.5 shrink-0" />
                 <span>
-                  Most Bunnings Marketplace sellers use <strong>OAuth</strong> (Client ID + Secret from Settings → API Integrations).
-                  Some setups use a direct <strong>API Key</strong>. Choose the method that matches your seller portal.
+                  Most Bunnings sellers use a direct <strong>API Key</strong> from the seller portal.
+                  If your account uses OAuth credentials (Client ID + Secret), switch to OAuth above.
                 </span>
               </div>
             </div>
