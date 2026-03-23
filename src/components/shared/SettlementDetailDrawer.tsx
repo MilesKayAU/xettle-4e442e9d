@@ -1,6 +1,7 @@
 /**
- * SettlementDetailDrawer — Immutable audit view of a posted (or pending) settlement.
+ * SettlementDetailDrawer — Audit view of a posted (or pending) settlement.
  * Shows the exact payload snapshot stored at posting time, header metadata, and audit trail.
+ * Unpushed settlements can be edited inline to fix reconciliation gaps.
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
@@ -10,9 +11,10 @@ import {
 } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertTriangle, CheckCircle2, Clock, Download, ExternalLink, GitCompare, Info, Zap } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Download, ExternalLink, GitCompare, Info, Pencil, Save, X, Zap } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatAUD, MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import { cn } from '@/lib/utils';
