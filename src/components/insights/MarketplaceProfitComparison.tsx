@@ -101,7 +101,12 @@ export default function MarketplaceProfitComparison() {
           .not('status', 'in', '("push_failed_permanent","duplicate_suppressed")'),
         loadFulfilmentMethods(user.id),
         loadPostageCosts(user.id),
-        supabase.rpc('get_marketplace_order_counts', { p_user_id: user.id }).then(r => r),
+        supabase
+          .from('settlement_lines')
+          .select('marketplace_name, order_id')
+          .eq('user_id', user.id)
+          .eq('accounting_category', 'revenue')
+          .not('order_id', 'is', null),
       ]);
 
       if (profitRes.error) throw profitRes.error;
