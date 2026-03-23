@@ -198,6 +198,9 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // User account code mappings for canonical line-item resolution
+  const [userAccountCodes, setUserAccountCodes] = useState<Record<string, string> | null>(null);
+
   // PushSafetyPreview state — Golden Rule enforcement
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewSettlements, setPreviewSettlements] = useState<Array<{ settlementId: string; marketplace: string }>>([]);
