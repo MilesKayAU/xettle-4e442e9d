@@ -1081,9 +1081,9 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
                       refunds: meta.refundsExGst ? (meta.refundsExGst < 0 ? meta.refundsExGst : -meta.refundsExGst) : 0,
                       seller_fees: -Math.abs(parsed.fees_ex_gst),
                       other_fees: ((meta.subscriptionAmount || 0) + (meta.refundCommissionExGst ? Math.abs(meta.refundCommissionExGst) : 0)) * -1 || undefined,
-                      bank_deposit: parsed.bank_deposit,
-                      gst_on_income: parsed.gst_on_income,
-                      gst_on_expenses: parsed.gst_on_expenses,
+                      bank_deposit: parsed.net_payout,
+                      gst_on_income: parsed.gst_on_sales,
+                      gst_on_expenses: parsed.gst_on_fees,
                     };
                     const resolver = createAccountCodeResolver(userAccountCodes);
                     const invoiceLines = buildPostingLineItems(settlementForPosting, resolver, 'Bunnings');
