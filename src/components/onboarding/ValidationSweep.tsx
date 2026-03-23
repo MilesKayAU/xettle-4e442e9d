@@ -860,10 +860,19 @@ function RowAction({
   if (row.overall_status === 'settlement_needed' || row.overall_status === 'missing') {
     if (isApiSynced && onSync) {
       return (
-        <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onSync} disabled={syncing}>
-          {syncing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-          {syncing ? 'Syncing...' : 'Sync'}
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground" onClick={onSync} disabled={syncing}>
+                {syncing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                {syncing ? 'Syncing...' : 'Sync now'}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="text-xs max-w-[200px]">
+              This channel auto-syncs daily. Click to trigger a manual refresh.
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       );
     }
     return (
