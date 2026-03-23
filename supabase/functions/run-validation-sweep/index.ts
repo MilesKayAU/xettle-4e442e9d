@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { XERO_TOKEN_URL, XERO_API_BASE, getXeroHeaders } from '../_shared/xero-api-policy.ts'
+import { isReconciliationOnly } from '../_shared/settlementPolicy.ts'
 
 function monthKey(date: string): string {
   return date.substring(0, 7)
