@@ -27,6 +27,7 @@ interface MarketplaceStatus {
   code: string;
   name: string;
   icon: string;
+  latestSettlementId: string | null;
   latestReceived: string | null;
   lastSentToXero: string | null;
   lastSentDate: string | null;
