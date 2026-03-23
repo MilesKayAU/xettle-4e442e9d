@@ -460,6 +460,14 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
     if (activeFilter === 'hidden') return allRows.filter(r => r.status === 'hidden');
     let visible = showHidden ? allRows : allRows.filter(r => r.status !== 'hidden');
     
+    // When actionableOnly, only show rows needing user action
+    if (actionableOnly) {
+      visible = visible.filter(r => {
+        const cat = categorize(r);
+        return cat === 'ready' || cat === 'attention' || cat === 'other';
+      });
+    }
+    
     // Apply pipeline filter if set
     if (pipelineFilter) {
       visible = visible.filter(r => {
@@ -473,7 +481,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
     const base = !activeFilter ? visible : visible.filter(r => categorize(r) === activeFilter);
     // Sort by actionability: most actionable first
     return [...base].sort((a, b) => getActionSort(a) - getActionSort(b));
-  }, [allRows, activeFilter, showHidden, pipelineFilter]);
+  }, [allRows, activeFilter, showHidden, pipelineFilter, actionableOnly]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageRows = useMemo(() => {

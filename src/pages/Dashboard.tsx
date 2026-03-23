@@ -939,19 +939,6 @@ export default function Dashboard() {
         {activeView === 'home' && (
           <ErrorBoundary>
             <div className="space-y-6">
-              {/* Today's Tasks — what needs doing right now */}
-              <DailyTaskStrip
-                onNavigate={(view, subTab) => {
-                  switchView(view as DashboardView);
-                  if (subTab) switchSettlementsSubTab(subTab as SettlementsSubTab);
-                }}
-                onScrollToActionCentre={() => {
-                  setTimeout(() => {
-                    document.getElementById('action-centre-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  }, 100);
-                }}
-                onUploadClick={() => setShowUploadSheet(true)}
-              />
               {/* Post-setup scan banner — triggers adaptive sync on first load */}
               <PostSetupBanner
                 onSwitchToUpload={() => setShowUploadSheet(true)}
@@ -995,11 +982,6 @@ export default function Dashboard() {
                 <DestinationAccountMapper />
               )}
 
-              {/* Reconciliation readiness — setup health checks */}
-              <ReconciliationHealthPanel />
-
-              {/* Sync activity moved to ConnectionStatusBar hover tooltips */}
-
               {/* CoA-detected channels awaiting confirmation */}
               {suggestedConnections.length > 0 && (
                 <CoaDetectedPanel
@@ -1008,10 +990,7 @@ export default function Dashboard() {
                 />
               )}
 
-              {/* Channel alerts — accounting health info */}
-              <ChannelAlertsBanner onAlertCountChange={setPendingChannelAlerts} />
-
-              {/* Action Centre — what needs attention */}
+              {/* Action Centre — simplified 3-section daily view */}
               <div id="action-centre-section">
               <ActionCentre
                 onSwitchToUpload={(missing) => {
@@ -1030,7 +1009,7 @@ export default function Dashboard() {
               />
               </div>
 
-              {/* Recent settlements — real payout/settlement records only */}
+              {/* Settlements table — only actionable rows */}
               <div id="settlements-table-section">
                 <RecentSettlements
                   onViewAll={() => {
@@ -1039,6 +1018,7 @@ export default function Dashboard() {
                   }}
                   pipelineFilter={pipelineFilter}
                   onClearPipelineFilter={() => setPipelineFilter(null)}
+                  actionableOnly
                 />
               </div>
             </div>
