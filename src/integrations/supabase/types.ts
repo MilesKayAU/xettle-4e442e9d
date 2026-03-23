@@ -1397,6 +1397,39 @@ export type Database = {
         }
         Relationships: []
       }
+      mirakl_issue_reports: {
+        Row: {
+          base_url: string | null
+          created_at: string
+          error_message: string | null
+          event_log: Json | null
+          id: string
+          marketplace_label: string
+          resolved: boolean
+          user_id: string
+        }
+        Insert: {
+          base_url?: string | null
+          created_at?: string
+          error_message?: string | null
+          event_log?: Json | null
+          id?: string
+          marketplace_label: string
+          resolved?: boolean
+          user_id: string
+        }
+        Update: {
+          base_url?: string | null
+          created_at?: string
+          error_message?: string | null
+          event_log?: Json | null
+          id?: string
+          marketplace_label?: string
+          resolved?: boolean
+          user_id?: string
+        }
+        Relationships: []
+      }
       mirakl_tokens: {
         Row: {
           access_token: string | null
