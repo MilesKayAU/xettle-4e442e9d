@@ -74,11 +74,12 @@ export default function ApiConnectionsPanel({
       if (!user) return;
       setUserId(user.id);
 
-      const [xeroRes, amazonRes, shopifyRes, ebayRes] = await Promise.all([
+      const [xeroRes, amazonRes, shopifyRes, ebayRes, miraklRes] = await Promise.all([
         supabase.from('app_settings').select('value').eq('user_id', user.id).eq('key', 'xero_tenant_id').maybeSingle(),
         supabase.from('amazon_tokens').select('id').eq('user_id', user.id).limit(1),
         supabase.from('shopify_tokens').select('id').eq('user_id', user.id).limit(1),
         supabase.from('ebay_tokens').select('id').eq('user_id', user.id).limit(1),
+        supabase.from('mirakl_tokens').select('id').eq('user_id', user.id).limit(1),
       ]);
 
       setSummary({
