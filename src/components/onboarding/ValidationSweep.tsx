@@ -127,7 +127,7 @@ export default function ValidationSweep({
   const [bulkPushing, setBulkPushing] = useState(false);
   const [drawerSettlementId, setDrawerSettlementId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [uploadSubTab, setUploadSubTab] = useState<'manual' | 'api'>('manual');
+  const [uploadSubTab, setUploadSubTab] = useState<'manual' | 'api' | 'recon'>('manual');
 
   const handleConfirmBankMatch = async (row: ValidationRow, transactionId: string) => {
     setConfirmingBank(row.id);
@@ -171,10 +171,7 @@ export default function ValidationSweep({
       ]);
 
       if (valRes.error) throw valRes.error;
-      // Filter out phantom rows created from reconciliation-only (shopify_auto_) settlements
-      const validationRows = ((valRes.data || []) as ValidationRow[]).filter(
-        r => !r.settlement_id?.startsWith('shopify_auto_')
-      );
+      const validationRows = (valRes.data || []) as ValidationRow[];
 
       // Load marketplace connections (paused codes + display names)
       const { data: connData } = await supabase
@@ -273,13 +270,18 @@ export default function ValidationSweep({
         return r.overall_status === filter;
       });
     }
-    // Apply manual/api sub-tab when settlement_needed filter is active
+    // Apply manual/api/recon sub-tab when settlement_needed filter is active
     if (filter === 'settlement_needed') {
       if (uploadSubTab === 'manual') {
-        result = result.filter(r => !apiSyncedCodes.has(r.marketplace_code));
+        result = result.filter(r => !apiSyncedCodes.has(r.marketplace_code) && !r.settlement_id?.startsWith('shopify_auto_'));
       } else if (uploadSubTab === 'api') {
-        result = result.filter(r => apiSyncedCodes.has(r.marketplace_code));
+        result = result.filter(r => apiSyncedCodes.has(r.marketplace_code) && !r.settlement_id?.startsWith('shopify_auto_'));
+      } else if (uploadSubTab === 'recon') {
+        result = result.filter(r => r.settlement_id?.startsWith('shopify_auto_'));
       }
+    } else {
+      // Outside the settlement_needed filter, hide recon rows from all other views
+      result = result.filter(r => !r.settlement_id?.startsWith('shopify_auto_'));
     }
     if (marketplaceFilter !== 'all') {
       result = result.filter((r) => r.marketplace_code === marketplaceFilter);
@@ -315,14 +317,21 @@ export default function ValidationSweep({
 
   const statusCounts = useMemo(() => {
     const activeRows = rows.filter(r => !pausedCodes.has(r.marketplace_code));
-    const counts = { all: activeRows.length, complete: 0, ready_to_push: 0, settlement_needed: 0, settlement_needed_manual: 0, settlement_needed_api: 0, gap_detected: 0 };
+    const counts = { all: 0, complete: 0, ready_to_push: 0, settlement_needed: 0, settlement_needed_manual: 0, settlement_needed_api: 0, settlement_needed_recon: 0, gap_detected: 0 };
     activeRows.forEach((r) => {
+      const isRecon = r.settlement_id?.startsWith('shopify_auto_');
+      // Exclude recon rows from main "all" count
+      if (!isRecon) counts.all++;
       if (r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'already_recorded' || r.overall_status === 'synced_external') counts.complete++;
       else if (r.overall_status === 'ready_to_push') counts.ready_to_push++;
       else if (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') {
-        counts.settlement_needed++;
-        if (apiSyncedCodes.has(r.marketplace_code)) counts.settlement_needed_api++;
-        else counts.settlement_needed_manual++;
+        if (isRecon) {
+          counts.settlement_needed_recon++;
+        } else {
+          counts.settlement_needed++;
+          if (apiSyncedCodes.has(r.marketplace_code)) counts.settlement_needed_api++;
+          else counts.settlement_needed_manual++;
+        }
       }
       else if (r.overall_status === 'gap_detected') counts.gap_detected++;
     });
@@ -365,7 +374,7 @@ export default function ValidationSweep({
   useEffect(() => { setSelectedIds(new Set()); setPage(1); setUploadSubTab('manual'); }, [filter, marketplaceFilter, dateFrom, dateTo]);
 
   // Selectable rows (only ready_to_push)
-  const selectableRows = useMemo(() => filteredRows.filter(r => r.overall_status === 'ready_to_push' && r.settlement_id), [filteredRows]);
+  const selectableRows = useMemo(() => filteredRows.filter(r => r.overall_status === 'ready_to_push' && r.settlement_id && !r.settlement_id?.startsWith('shopify_auto_')), [filteredRows]);
   const allSelectableSelected = selectableRows.length > 0 && selectableRows.every(r => selectedIds.has(r.id));
   const someSelected = selectedIds.size > 0;
 
@@ -478,6 +487,19 @@ export default function ValidationSweep({
             >
               🔄 API Syncs ({statusCounts.settlement_needed_api})
             </button>
+            {statusCounts.settlement_needed_recon > 0 && (
+              <button
+                onClick={() => setUploadSubTab('recon')}
+                className={cn(
+                  'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                  uploadSubTab === 'recon'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                🔍 Reconciliation ({statusCounts.settlement_needed_recon})
+              </button>
+            )}
           </div>
           {uploadSubTab === 'manual' && filteredRows.length > 0 && (
             <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
@@ -497,6 +519,17 @@ export default function ValidationSweep({
           {uploadSubTab === 'api' && statusCounts.settlement_needed_api === 0 && (
             <div className="rounded-lg border border-border bg-muted/30 px-4 py-3">
               <p className="text-xs text-muted-foreground">No API-synced periods are pending — all caught up! 🎉</p>
+            </div>
+          )}
+          {uploadSubTab === 'recon' && (
+            <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 px-4 py-3">
+              <p className="text-xs text-blue-700 dark:text-blue-400 flex items-center gap-1.5">
+                <Search className="h-3 w-3 flex-shrink-0" />
+                <span>
+                  <strong>These are reconciliation summaries only</strong> — auto-generated from Shopify order data to help you identify any missing transactions in your monthly accounts.
+                  They are <strong>not sent to Xero</strong>. Your authoritative accounting records come from the marketplace CSV uploads or direct API settlements.
+                </span>
+              </p>
             </div>
           )}
         </div>
@@ -637,8 +670,9 @@ export default function ValidationSweep({
                 ) : (
                   pagedRows.map((row) => (
                     <tr key={row.id} className={cn("border-b hover:bg-muted/20 transition-colors group", selectedIds.has(row.id) && "bg-primary/5")}>
+
                       <td className="px-2 py-2 text-center w-8">
-                        {row.overall_status === 'ready_to_push' && row.settlement_id ? (
+                        {!row.settlement_id?.startsWith('shopify_auto_') && row.overall_status === 'ready_to_push' && row.settlement_id ? (
                           <Checkbox
                             checked={selectedIds.has(row.id)}
                             onCheckedChange={() => toggleSelectRow(row.id)}
@@ -680,7 +714,11 @@ export default function ValidationSweep({
                         {row.bank_matched ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" /> : <XCircle className="h-3.5 w-3.5 text-muted-foreground mx-auto" />}
                       </td>
                       <td className="px-3 py-2 text-center">
-                        <StatusPill status={row.overall_status} isApiSynced={apiSyncedCodes.has(row.marketplace_code)} />
+                        {row.settlement_id?.startsWith('shopify_auto_') ? (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400">🔍 Recon Only</Badge>
+                        ) : (
+                          <StatusPill status={row.overall_status} isApiSynced={apiSyncedCodes.has(row.marketplace_code)} />
+                        )}
                       </td>
                       <td className="px-3 py-2 text-center">
                         <div className="inline-flex items-center gap-1">
@@ -704,17 +742,20 @@ export default function ValidationSweep({
                               </Tooltip>
                             </TooltipProvider>
                           )}
-                          <RowAction
-                            row={row}
-                            pushing={pushing === row.id}
-                            syncing={syncingRow === row.id}
-                            isApiSynced={apiSyncedCodes.has(row.marketplace_code)}
-                            onUpload={() => onSwitchToUpload?.(row.marketplace_code, row.period_label)}
-                            onPush={() => handlePush(row)}
-                            onSync={() => handleSyncRow(row)}
-                          />
+                          {!row.settlement_id?.startsWith('shopify_auto_') && (
+                            <RowAction
+                              row={row}
+                              pushing={pushing === row.id}
+                              syncing={syncingRow === row.id}
+                              isApiSynced={apiSyncedCodes.has(row.marketplace_code)}
+                              onUpload={() => onSwitchToUpload?.(row.marketplace_code, row.period_label)}
+                              onPush={() => handlePush(row)}
+                              onSync={() => handleSyncRow(row)}
+                            />
+                          )}
                         </div>
                       </td>
+                      
                     </tr>
                   ))
                 )}
