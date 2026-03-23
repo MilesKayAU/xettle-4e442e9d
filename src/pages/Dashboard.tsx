@@ -1147,7 +1147,7 @@ export default function Dashboard() {
                   <ShopifyOrdersDashboard key={selectedMarketplace} onMarketplacesChanged={loadMarketplaces} />
                 </Suspense>
               ) : selectedUserMarketplace ? (
-                <GenericMarketplaceDashboard marketplace={selectedUserMarketplace} onMarketplacesChanged={loadMarketplaces} onSwitchToUpload={() => setShowUploadSheet(true)} />
+                <GenericMarketplaceDashboard key={selectedMarketplace} marketplace={selectedUserMarketplace} onMarketplacesChanged={loadMarketplaces} onSwitchToUpload={() => setShowUploadSheet(true)} />
               ) : null}
             </div>
           </ErrorBoundary>
