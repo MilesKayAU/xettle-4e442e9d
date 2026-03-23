@@ -28,6 +28,7 @@ import { Label } from '@/components/ui/label';
 import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
 import ChannelDetectedEmptyState from './shared/ChannelDetectedEmptyState';
 import EbayUploadGuide from './EbayUploadGuide';
+import { isReconciliationOnly } from '@/utils/settlement-policy';
 
 // ── Shared architecture hooks + components ──────────────────────────────────
 import { useSettlementManager, type BaseSettlementRow } from '@/hooks/use-settlement-manager';
@@ -409,7 +410,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
           <ReconciliationStatus marketplaceCode={code} userId={currentUserId} />
         ) : settlements.length > 0 ? (
           <FileReconciliationStatus
-            settlements={settlements}
+            settlements={settlements.filter(s => !isReconciliationOnly((s as any).source, s.marketplace, s.settlement_id))}
             onSettlementClick={(sid) => {
               setDrawerSettlementId(sid);
               setDrawerOpen(true);
@@ -615,7 +616,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                     const fees = s.seller_fees || 0;
                     const net = s.bank_deposit || 0;
                     const isSelected = selected.has(s.id);
-                     const isReconOnly = (s as any).source === 'api_sync' && (s.marketplace || '').startsWith('shopify_orders_');
+                     const isReconOnly = isReconciliationOnly((s as any).source, s.marketplace, s.settlement_id);
                      const reconStatus = (s as any).reconciliation_status || '';
                      const reconOk = !reconStatus || reconStatus === 'reconciled' || reconStatus === 'matched';
                      const isSyncable = !isReconOnly && reconOk && (s.status === 'ingested' || s.status === 'ready_to_push');
@@ -684,8 +685,8 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                               <div>
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="font-mono text-sm font-medium">{s.settlement_id}</span>
-                                  {s.marketplace.startsWith('shopify_orders_') && (
-                                    <Badge variant="outline" className="text-[9px] text-muted-foreground">from Orders CSV</Badge>
+                                  {isReconOnly && (
+                                    <Badge variant="outline" className="text-[9px] text-muted-foreground">Recon Only</Badge>
                                   )}
                                   {s.source === 'api_sync' && (
                                     <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-700 border-amber-200 dark:text-amber-400 dark:border-amber-800">Shopify Orders</Badge>
