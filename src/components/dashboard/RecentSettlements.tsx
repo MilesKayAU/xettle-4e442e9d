@@ -54,6 +54,8 @@ interface SettlementRow {
   storage_fees: number | null;
   advertising_costs: number | null;
   is_pre_boundary: boolean;
+  dashboard_origin?: 'settlement' | 'validation';
+  queue_type?: 'manual_upload' | 'api_sync';
 }
 
 const MARKETPLACE_DISPLAY: Record<string, string> = {
@@ -99,6 +101,8 @@ type StatusCategory = 'ready' | 'posted' | 'attention' | 'hidden' | 'completed' 
 function categorize(row: SettlementRow): StatusCategory {
   if ((row as any).is_hidden) return 'hidden';
   if (row.status === 'push_failed' || row.status === 'push_failed_permanent') return 'attention';
+  if (row.status === 'settlement_needed' || row.status === 'missing') return 'other';
+  if (row.status === 'awaiting_api_sync') return 'completed';
   // Settlement-confirmed rails that are posted are considered complete, not "waiting"
   if (['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(row.status)) {
     if (row.marketplace && !isBankMatchRequired(row.marketplace)) return 'completed';
@@ -114,9 +118,25 @@ function categorize(row: SettlementRow): StatusCategory {
   if (row.status === 'pre_boundary') return 'completed';
   if (row.status === 'ingested') return 'other';
   return 'other';
-  }
+}
 
 function StatusBadge({ status, xeroStatus, syncOrigin, marketplace }: { status: string; xeroStatus: string | null; syncOrigin?: string; marketplace?: string | null }) {
+  if (status === 'settlement_needed' || status === 'missing') {
+    return (
+      <Badge variant="outline" className="text-xs text-muted-foreground">
+        <Clock className="h-3 w-3 mr-1" />
+        Upload Needed
+      </Badge>
+    );
+  }
+  if (status === 'awaiting_api_sync') {
+    return (
+      <Badge variant="outline" className="text-xs text-muted-foreground">
+        <RefreshCw className="h-3 w-3 mr-1" />
+        Awaiting API Sync
+      </Badge>
+    );
+  }
   // Fully reconciled (PAID in Xero)
   if (status === 'reconciled_in_xero' || status === 'bank_verified' || xeroStatus === 'PAID') {
     return (
@@ -137,7 +157,6 @@ function StatusBadge({ status, xeroStatus, syncOrigin, marketplace }: { status: 
       );
     }
     if (xeroStatus === 'AUTHORISED') {
-      // Rail payout mode: settlement-confirmed rails show "Posted ✓" not "Waiting"
       if (marketplace && !isBankMatchRequired(marketplace)) {
         return (
           <Badge variant="outline" className="text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-900/30 dark:border-emerald-800 text-xs">
@@ -306,6 +325,12 @@ function SettlementDrillDown({ row }: { row: SettlementRow }) {
 const PAGE_SIZE = 10;
 
 function getPrimaryAction(row: SettlementRow): { label: string } {
+  if (row.dashboard_origin === 'validation' && (row.status === 'settlement_needed' || row.status === 'missing')) {
+    return { label: 'Upload' };
+  }
+  if (row.dashboard_origin === 'validation' && row.status === 'awaiting_api_sync') {
+    return { label: 'View' };
+  }
   if (row.status === 'hidden') return { label: 'Unhide' };
   if (row.status === 'push_failed' || row.status === 'push_failed_permanent') return { label: 'Retry' };
   if (row.status === 'reconciled_in_xero' || row.status === 'bank_verified' || row.xero_status === 'PAID') return { label: 'View evidence' };
@@ -350,17 +375,33 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
 
   const fetchAll = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('settlements')
-        .select('id, settlement_id, marketplace, period_start, period_end, bank_deposit, status, xero_status, source, created_at, bank_verified, sales_principal, seller_fees, fba_fees, refunds, gst_on_income, other_fees, storage_fees, advertising_costs, is_pre_boundary')
-        .neq('source', 'api_sync')
-        .neq('status', 'duplicate_suppressed')
-        .neq('status', 'already_recorded')
-        .order('period_end', { ascending: false });
+      const [settlementsRes, validationRes, connRes] = await Promise.all([
+        supabase
+          .from('settlements')
+          .select('id, settlement_id, marketplace, period_start, period_end, bank_deposit, status, xero_status, source, created_at, bank_verified, sales_principal, seller_fees, fba_fees, refunds, gst_on_income, other_fees, storage_fees, advertising_costs, is_pre_boundary')
+          .neq('source', 'api_sync')
+          .neq('status', 'duplicate_suppressed')
+          .neq('status', 'already_recorded')
+          .order('period_end', { ascending: false }),
+        actionableOnly
+          ? supabase
+              .from('marketplace_validation')
+              .select('id, overall_status, settlement_id, marketplace_code, period_start, period_end, settlement_net, updated_at')
+              .in('overall_status', ['settlement_needed', 'missing', 'ready_to_push'])
+          : Promise.resolve({ data: null, error: null } as any),
+        actionableOnly
+          ? supabase
+              .from('marketplace_connections')
+              .select('marketplace_code, connection_type, connection_status')
+          : Promise.resolve({ data: null, error: null } as any),
+      ]);
 
-      if (error) throw error;
-      const rows = (data || []) as SettlementRow[];
-      
+      if (settlementsRes.error) throw settlementsRes.error;
+      if (validationRes.error) throw validationRes.error;
+      if (connRes.error) throw connRes.error;
+
+      const rows = (settlementsRes.data || []) as SettlementRow[];
+
       // Bulk-promote stuck 'ingested' settlements that aren't pre-boundary
       const stuckIngested = rows.filter(r => r.status === 'ingested' && !r.is_pre_boundary);
       if (stuckIngested.length > 0) {
@@ -369,53 +410,61 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
           .update({ status: 'ready_to_push' } as any)
           .in('id', stuckIds);
         logger.debug(`[RecentSettlements] Promoted ${stuckIds.length} stuck ingested → ready_to_push`);
-        // Re-fetch with updated statuses
-        const { data: refreshed } = await supabase
-          .from('settlements')
-          .select('id, settlement_id, marketplace, period_start, period_end, bank_deposit, status, xero_status, source, created_at, bank_verified, sales_principal, seller_fees, fba_fees, refunds, gst_on_income, other_fees, storage_fees, advertising_costs, is_pre_boundary')
-          .neq('source', 'api_sync')
-          .neq('status', 'duplicate_suppressed')
-          .neq('status', 'already_recorded')
-          .order('period_end', { ascending: false });
-        const freshRows = (refreshed || []) as SettlementRow[];
-        setAllRows(freshRows);
-        // Continue with fresh rows for external match check
-        const readyIds2 = freshRows.filter(r => r.status === 'ready_to_push').map(r => r.settlement_id).filter(Boolean);
-        if (readyIds2.length > 0) {
-          const { data: matches } = await supabase
-            .from('xero_accounting_matches')
-            .select('settlement_id, xero_status')
-            .in('settlement_id', readyIds2);
-          if (matches) {
-            const paidMatchIds = new Set(
-              matches.filter((m: any) => m.xero_status === 'PAID').map((m: any) => m.settlement_id)
-            );
-            if (paidMatchIds.size > 0) {
-              const paidDbIds = freshRows.filter(r => paidMatchIds.has(r.settlement_id)).map(r => r.id);
-              supabase.from('settlements')
-                .update({ status: 'already_recorded', sync_origin: 'external' } as any)
-                .in('id', paidDbIds)
-                .then(() => { logger.debug(`[RecentSettlements] Auto-resolved ${paidDbIds.length} PAID external matches`); fetchAll(); });
-            }
-            setExternalMatchIds(new Set(
-              matches.filter((m: any) => m.xero_status !== 'PAID').map((m: any) => m.settlement_id)
-            ));
-          }
-        }
-        return; // Already handled everything
+        fetchAll();
+        return;
       }
-      
-      setAllRows(rows);
+
+      const settlementMap = new Map(rows.map(row => [row.settlement_id, row]));
+      const apiCodes = new Set<string>(
+        ((connRes.data || []) as any[])
+          .filter((c) => isApiConnectionType(c.connection_type) && (ACTIVE_CONNECTION_STATUSES as readonly string[]).includes(c.connection_status))
+          .map((c) => c.marketplace_code)
+      );
+
+      const queueRows: SettlementRow[] = actionableOnly
+        ? ((validationRes.data || []) as any[])
+            .filter((row) => !row.settlement_id?.startsWith('shopify_auto_'))
+            .map((row) => {
+              const existing = row.settlement_id ? settlementMap.get(row.settlement_id) : undefined;
+              if (existing) return { ...existing, dashboard_origin: 'settlement' as const };
+              const isApi = apiCodes.has(row.marketplace_code);
+              return {
+                id: `validation-${row.id}`,
+                settlement_id: row.settlement_id || `validation-${row.id}`,
+                marketplace: row.marketplace_code,
+                period_start: row.period_start,
+                period_end: row.period_end,
+                bank_deposit: Number(row.settlement_net || 0),
+                status: row.overall_status === 'ready_to_push' ? 'ready_to_push' : (isApi ? 'awaiting_api_sync' : row.overall_status),
+                xero_status: null,
+                source: isApi ? 'api_sync_queue' : 'manual_upload_queue',
+                created_at: row.updated_at,
+                bank_verified: null,
+                sales_principal: null,
+                seller_fees: null,
+                fba_fees: null,
+                refunds: null,
+                gst_on_income: null,
+                other_fees: null,
+                storage_fees: null,
+                advertising_costs: null,
+                is_pre_boundary: false,
+                dashboard_origin: 'validation' as const,
+                queue_type: isApi ? 'api_sync' as const : 'manual_upload' as const,
+              } satisfies SettlementRow;
+            })
+        : rows;
+
+      setAllRows(queueRows);
 
       // Fetch external matches for ready-to-push settlements with xero_status
-      const readyIds = rows.filter(r => r.status === 'ready_to_push').map(r => r.settlement_id).filter(Boolean);
+      const readyIds = queueRows.filter(r => r.status === 'ready_to_push' && !r.settlement_id.startsWith('validation-')).map(r => r.settlement_id).filter(Boolean);
       if (readyIds.length > 0) {
         const { data: matches } = await supabase
           .from('xero_accounting_matches')
           .select('settlement_id, xero_status')
           .in('settlement_id', readyIds);
         if (matches) {
-          // Auto-resolve PAID external matches — update status in background
           const paidMatchIds = new Set(
             matches.filter((m: any) => m.xero_status === 'PAID').map((m: any) => m.settlement_id)
           );
@@ -423,16 +472,16 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
             const paidDbIds = rows
               .filter(r => paidMatchIds.has(r.settlement_id))
               .map(r => r.id);
-            supabase.from('settlements')
-              .update({ status: 'already_recorded', sync_origin: 'external' } as any)
-              .in('id', paidDbIds)
-              .then(() => {
-                logger.debug(`[RecentSettlements] Auto-resolved ${paidDbIds.length} PAID external matches`);
-                // Re-fetch to remove them from view
-                fetchAll();
-              });
+            if (paidDbIds.length > 0) {
+              supabase.from('settlements')
+                .update({ status: 'already_recorded', sync_origin: 'external' } as any)
+                .in('id', paidDbIds)
+                .then(() => {
+                  logger.debug(`[RecentSettlements] Auto-resolved ${paidDbIds.length} PAID external matches`);
+                  fetchAll();
+                });
+            }
           }
-          // Only non-PAID matches show "Duplicate Risk"
           setExternalMatchIds(new Set(
             matches.filter((m: any) => m.xero_status !== 'PAID').map((m: any) => m.settlement_id)
           ));
@@ -443,7 +492,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [actionableOnly]);
 
   // Fetch marketplace_validation counts (true source of what needs pushing)
   const fetchValidationCounts = useCallback(async () => {
@@ -458,7 +507,6 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
           .select('marketplace_code, connection_type, connection_status'),
       ]);
       if (valRes.data) {
-        // Build set of API-synced marketplace codes
         const apiCodes = new Set<string>(
           (connRes.data || [])
             .filter((c: any) => isApiConnectionType(c.connection_type) && (ACTIVE_CONNECTION_STATUSES as readonly string[]).includes(c.connection_status))
@@ -466,7 +514,6 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
         );
         let ready = 0, readyTotal = 0, uploadNeeded = 0, uploadNeededManual = 0, uploadNeededApi = 0, gaps = 0;
         for (const r of valRes.data) {
-          // Exclude reconciliation-only rows (shopify_auto_) — they're not actionable
           if ((r as any).settlement_id?.startsWith('shopify_auto_')) continue;
           if (r.overall_status === 'ready_to_push') {
             ready++;
@@ -474,11 +521,8 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
           }
           if (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') {
             uploadNeeded++;
-            if (apiCodes.has(r.marketplace_code)) {
-              uploadNeededApi++;
-            } else {
-              uploadNeededManual++;
-            }
+            if (apiCodes.has(r.marketplace_code)) uploadNeededApi++;
+            else uploadNeededManual++;
           }
           if (r.overall_status === 'gap_detected') gaps++;
         }
@@ -506,11 +550,11 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
     if (activeFilter === 'hidden') return allRows.filter(r => r.status === 'hidden');
     let visible = showHidden ? allRows : allRows.filter(r => r.status !== 'hidden');
     
-    // When actionableOnly, only show rows needing user action
+    // When actionableOnly, show the same queue states represented by the homepage cards
     if (actionableOnly) {
       visible = visible.filter(r => {
         const cat = categorize(r);
-        return cat === 'ready' || cat === 'attention';
+        return cat === 'ready' || cat === 'attention' || cat === 'other' || cat === 'completed';
       });
     }
     
@@ -937,26 +981,38 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem className="text-xs" onClick={() => handleView(row)}>
+                          <DropdownMenuItem className="text-xs" onClick={() => {
+                            if (row.dashboard_origin === 'validation') {
+                              onViewAll?.();
+                              return;
+                            }
+                            handleView(row);
+                          }}>
                             <Eye className="h-3.5 w-3.5 mr-2" />
-                            {expandedId === row.id ? 'Close breakdown' : 'View breakdown'}
+                            {row.dashboard_origin === 'validation'
+                              ? row.status === 'awaiting_api_sync' ? 'View in overview' : 'Go to upload flow'
+                              : expandedId === row.id ? 'Close breakdown' : 'View breakdown'}
                           </DropdownMenuItem>
 
-                          <DropdownMenuItem className="text-xs" onClick={() => handleDownloadCSV(row)}>
-                            <Download className="h-3.5 w-3.5 mr-2" />
-                            Download CSV
-                          </DropdownMenuItem>
+                          {row.dashboard_origin !== 'validation' && (
+                            <DropdownMenuItem className="text-xs" onClick={() => handleDownloadCSV(row)}>
+                              <Download className="h-3.5 w-3.5 mr-2" />
+                              Download CSV
+                            </DropdownMenuItem>
+                          )}
 
                           <DropdownMenuSeparator />
 
-                          <DropdownMenuItem className="text-xs" onClick={() => {
-                            toast.info('Recalculate: re-parse from the Settlements tab');
-                          }}>
-                            <RefreshCw className="h-3.5 w-3.5 mr-2" />
-                            Recalculate
-                          </DropdownMenuItem>
+                          {row.dashboard_origin !== 'validation' && (
+                            <DropdownMenuItem className="text-xs" onClick={() => {
+                              toast.info('Recalculate: re-parse from the Settlements tab');
+                            }}>
+                              <RefreshCw className="h-3.5 w-3.5 mr-2" />
+                              Recalculate
+                            </DropdownMenuItem>
+                          )}
 
-                          {['parsed', 'ready_to_push', 'saved'].includes(row.status) && row.status !== 'pre_boundary' && (
+                          {row.dashboard_origin !== 'validation' && ['parsed', 'ready_to_push', 'saved'].includes(row.status) && row.status !== 'pre_boundary' && (
                             <DropdownMenuItem className="text-xs" onClick={() => {
                               toast.info('Push to Xero from the Settlements tab');
                             }}>
@@ -965,9 +1021,9 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
                             </DropdownMenuItem>
                           )}
 
-                          <DropdownMenuSeparator />
+                          {row.dashboard_origin !== 'validation' && <DropdownMenuSeparator />}
 
-                          {row.status === 'hidden' ? (
+                          {row.dashboard_origin !== 'validation' && (row.status === 'hidden' ? (
                             <DropdownMenuItem className="text-xs" onClick={() => handleUnhide(row)}>
                               <EyeIcon className="h-3.5 w-3.5 mr-2" />
                               Unhide
@@ -977,7 +1033,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
                               <EyeOff className="h-3.5 w-3.5 mr-2" />
                               Hide
                             </DropdownMenuItem>
-                          )}
+                          ))}
                         </DropdownMenuContent>
                       </DropdownMenu>
                         );
