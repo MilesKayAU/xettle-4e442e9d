@@ -167,7 +167,7 @@ async function fetchSettlementsForConnection(
   adminClient: any,
   userId: string,
   connection: any,
-  token: string,
+  apiKey: string,
   syncFrom?: string,
 ) {
   const baseUrl = connection.base_url.replace(/\/$/, "");
@@ -178,12 +178,13 @@ async function fetchSettlementsForConnection(
   defaultFrom.setDate(defaultFrom.getDate() - 90);
   const dateFrom = syncFrom || defaultFrom.toISOString().split("T")[0];
 
-  // Fetch transaction logs from Mirakl API
+  // Fetch transaction logs from Mirakl Marketplace API (TL endpoints)
+  // Auth: direct API key in Authorization header (NOT Bearer)
   const apiUrl = `${baseUrl}/api/sellerpayment/transactions_logs?start_date=${dateFrom}T00:00:00Z&paginate=false`;
 
   const res = await fetch(apiUrl, {
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: apiKey,
       Accept: "application/json",
     },
   });
