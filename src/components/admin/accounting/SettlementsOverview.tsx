@@ -329,6 +329,26 @@ export default function SettlementsOverview({
 
               {/* Actions */}
               <div className="flex items-center justify-end gap-1.5 min-w-[120px]">
+                {row.latestSettlementId && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0"
+                          onClick={() => {
+                            setDrawerSettlementId(row.latestSettlementId);
+                            setDrawerOpen(true);
+                          }}
+                        >
+                          <Eye className="h-3 w-3 text-muted-foreground" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="left" className="text-xs">Preview settlement</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
