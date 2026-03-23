@@ -209,7 +209,7 @@ export default function ApiConnectionsPanel({
           {/* eBay */}
           <EbayConnectionStatus />
 
-          {/* Mirakl */}
+          {/* Bunnings Marketplace */}
           <MiraklConnectionPanel />
 
           {/* Shopify Channel Management */}
