@@ -267,6 +267,13 @@ export default function ValidationSweep({
   }, [allConnections]);
 
   /** A shopify_auto_ recon row is useful only if the marketplace has NO direct API and the row isn't resolved */
+  // Build set of active marketplace codes — only show rows for marketplaces with an active connection
+  const activeCodes = useMemo(() => new Set(
+    allConnections
+      .filter(c => ['active', 'connected'].includes(c.connection_status))
+      .map(c => c.marketplace_code)
+  ), [allConnections]);
+
   const isUsefulRecon = useCallback((r: ValidationRow) => {
     return !!r.settlement_id?.startsWith('shopify_auto_')
       && !directApiCodes.has(r.marketplace_code)
@@ -275,8 +282,8 @@ export default function ValidationSweep({
 
   // Memoized filtering + sorting
   const filteredRows = useMemo(() => {
-    // Filter out paused marketplace rows
-    let result = rows.filter((r) => !pausedCodes.has(r.marketplace_code));
+    // Filter out paused & orphaned (no active connection) marketplace rows
+    let result = rows.filter((r) => activeCodes.has(r.marketplace_code) && !pausedCodes.has(r.marketplace_code));
     if (filter !== 'all') {
       result = result.filter((r) => {
         // Keep useful recon rows available when settlement_needed filter is active
@@ -324,7 +331,7 @@ export default function ValidationSweep({
         : String(bVal).localeCompare(String(aVal));
     });
     return result;
-  }, [rows, filter, marketplaceFilter, dateFrom, dateTo, sortKey, sortDir, pausedCodes, uploadSubTab, apiSyncedCodes, isUsefulRecon]);
+  }, [rows, filter, marketplaceFilter, dateFrom, dateTo, sortKey, sortDir, pausedCodes, activeCodes, uploadSubTab, apiSyncedCodes, isUsefulRecon]);
 
   const uniqueMarketplaces = useMemo(() => [...new Set(rows.map((r) => r.marketplace_code))].sort(), [rows]);
 
@@ -334,7 +341,7 @@ export default function ValidationSweep({
   }, [rows, allConnections]);
 
   const statusCounts = useMemo(() => {
-    const activeRows = rows.filter(r => !pausedCodes.has(r.marketplace_code));
+    const activeRows = rows.filter(r => activeCodes.has(r.marketplace_code) && !pausedCodes.has(r.marketplace_code));
     const counts = { all: 0, complete: 0, ready_to_push: 0, settlement_needed: 0, settlement_needed_manual: 0, settlement_needed_api: 0, settlement_needed_recon: 0, gap_detected: 0 };
     activeRows.forEach((r) => {
       const isRecon = r.settlement_id?.startsWith('shopify_auto_');
@@ -354,7 +361,7 @@ export default function ValidationSweep({
       else if (r.overall_status === 'gap_detected') counts.gap_detected++;
     });
     return counts;
-  }, [rows, pausedCodes, apiSyncedCodes, isUsefulRecon]);
+  }, [rows, pausedCodes, activeCodes, apiSyncedCodes, isUsefulRecon]);
 
   const handleTogglePause = async (marketplaceCode: string, currentStatus: string) => {
     setTogglingPause(marketplaceCode);

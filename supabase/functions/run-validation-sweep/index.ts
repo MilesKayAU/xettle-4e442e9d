@@ -809,6 +809,36 @@ async function sweepUser(adminSupabase: any, userId: string) {
     await logEvent(adminSupabase, userId, 'unmatched_deposit_pass_error', { error: String(e) }, 'error')
   }
 
+  // P4: Clean orphaned validation rows (marketplaces with no active connection)
+  try {
+    const activeCodeSet = new Set((connections || []).map((c: any) => c.marketplace_code))
+    const { data: allValidationRows } = await adminSupabase
+      .from('marketplace_validation')
+      .select('marketplace_code')
+      .eq('user_id', userId)
+
+    const orphanCodes = [...new Set(
+      (allValidationRows || [])
+        .map((r: any) => r.marketplace_code)
+        .filter((c: string) => !activeCodeSet.has(c))
+    )]
+
+    if (orphanCodes.length > 0) {
+      const { error: delErr } = await adminSupabase
+        .from('marketplace_validation')
+        .delete()
+        .eq('user_id', userId)
+        .in('marketplace_code', orphanCodes)
+
+      if (!delErr) {
+        console.log(`[validation-sweep] Cleaned ${orphanCodes.length} orphaned marketplace(s): ${orphanCodes.join(', ')}`)
+        await logEvent(adminSupabase, userId, 'orphan_validation_cleanup', { removed_codes: orphanCodes }, 'info')
+      }
+    }
+  } catch (e) {
+    console.error('[validation-sweep] orphan cleanup error:', e)
+  }
+
   // Log sweep completion
   await logEvent(adminSupabase, userId, 'validation_sweep_complete', summary, 'info')
 
