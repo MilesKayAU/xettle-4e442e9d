@@ -696,7 +696,7 @@ export default function Setup() {
           const detectedFrom = settings?.detected_from;
           const source = detectedFrom === 'xero_scan' ? 'Xero invoice history'
             : detectedFrom === 'xero_contact' ? 'Xero contacts'
-            : conn.connection_type === 'api' ? 'API connection'
+            : isApiConnectionType(conn.connection_type) ? 'API connection'
             : 'Auto-detected';
           marketplaces.push({
             name: conn.marketplace_name,
