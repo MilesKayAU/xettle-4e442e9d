@@ -228,7 +228,66 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
     setDismissingCandidate(false);
   }, [settlement]);
 
-  // Build reconstructed line items from settlement row (fallback for pre-snapshot settlements)
+  const isEditable = settlement && settlement.status !== 'pushed_to_xero' && settlement.status !== 'already_recorded';
+
+  const startEditing = useCallback(() => {
+    if (!settlement) return;
+    setEditFields({
+      sales_principal: settlement.sales_principal || 0,
+      seller_fees: settlement.seller_fees || 0,
+      refunds: settlement.refunds || 0,
+      bank_deposit: settlement.bank_deposit || 0,
+      other_fees: settlement.other_fees || 0,
+      reimbursements: settlement.reimbursements || 0,
+    });
+    setEditing(true);
+  }, [settlement]);
+
+  const cancelEditing = useCallback(() => {
+    setEditing(false);
+    setEditFields(null);
+  }, []);
+
+  const handleSaveAndRecheck = useCallback(async () => {
+    if (!settlement?.id || !editFields) return;
+    setSaving(true);
+
+    // Calculate new recon status
+    const tempSettlement = { ...settlement, ...editFields };
+    const gap = calculateReconGap(tempSettlement);
+    const newReconStatus = Math.abs(gap) < RECON_TOLERANCE ? 'reconciled' : 'recon_warning';
+
+    const { error } = await supabase
+      .from('settlements')
+      .update({
+        sales_principal: editFields.sales_principal,
+        seller_fees: editFields.seller_fees,
+        refunds: editFields.refunds,
+        bank_deposit: editFields.bank_deposit,
+        other_fees: editFields.other_fees,
+        reimbursements: editFields.reimbursements,
+        reconciliation_status: newReconStatus,
+      })
+      .eq('id', settlement.id);
+
+    if (error) {
+      toast.error('Failed to save changes');
+    } else {
+      setSettlement((prev: any) => prev ? {
+        ...prev,
+        ...editFields,
+        reconciliation_status: newReconStatus,
+      } : prev);
+      setEditing(false);
+      setEditFields(null);
+      toast.success(newReconStatus === 'reconciled'
+        ? 'Saved — reconciliation now balanced ✓'
+        : 'Saved — reconciliation gap still exists');
+    }
+    setSaving(false);
+  }, [settlement, editFields]);
+
+
   const reconstructedLines: NormalizedLineItem[] = settlement ? [
     { description: 'Sales', account_code: '200', tax_type: 'OUTPUT', amount: (settlement.sales_principal || 0) + (settlement.sales_shipping || 0) },
     { description: 'Promotional Discounts', account_code: '200', tax_type: 'OUTPUT', amount: settlement.promotional_discounts || 0 },
