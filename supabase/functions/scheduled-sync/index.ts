@@ -204,6 +204,12 @@ Deno.serve(async (req) => {
   // Determine eligible Amazon users (no lock, no cooldown)
   const eligibleAmazonUsers: string[] = [];
   for (const uid of amazonUserIds) {
+    // Check if auto-sync is enabled for this user
+    if (!isAutoSyncEnabled(uid, 'amazon')) {
+      console.log(`[scheduled-sync] Amazon skipped for ${uid} — auto-sync disabled`);
+      continue;
+    }
+
     // Check lock atomically via RPC
     const { data: lockResult } = await adminClient.rpc('acquire_sync_lock', {
       p_user_id: uid,
