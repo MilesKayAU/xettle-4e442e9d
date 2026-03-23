@@ -21,7 +21,7 @@ import SkuComparisonView from '@/components/insights/SkuComparisonView';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import BugReportNotificationBanner from '@/components/bug-report/BugReportNotificationBanner';
-import ConnectionStatusBar from '@/components/shared/ConnectionStatusBar';
+// ConnectionStatusBar removed — connections now shown in SystemStatusStrip
 import XettleLogo from '@/components/shared/XettleLogo';
 import SystemStatusStrip from '@/components/dashboard/SystemStatusStrip';
 import ChannelAlertsBanner from '@/components/dashboard/ChannelAlertsBanner';
@@ -831,7 +831,7 @@ export default function Dashboard() {
                 </Link>
               </Button>
             )}
-            <ConnectionStatusBar onNavigateToSettings={() => switchView('settings')} />
+            
             <span className="text-sm text-muted-foreground hidden sm:inline">
               {user?.email}
             </span>
@@ -983,8 +983,8 @@ export default function Dashboard() {
                 }}
                 onMapBankAccounts={() => setShowBankMapper(!showBankMapper)}
                 onConnect={() => setShowUploadSheet(true)}
+                onNavigateToSettings={() => switchView('settings')}
                 onRefreshStatus={() => {
-                  // Trigger the validation sweep via ActionCentre's existing mechanism
                   import('@/utils/settlement-engine').then(({ triggerValidationSweep }) => {
                     triggerValidationSweep();
                     toast.success('Status refresh started');

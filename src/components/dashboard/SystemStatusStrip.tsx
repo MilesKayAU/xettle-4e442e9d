@@ -1,6 +1,6 @@
 /**
- * SystemStatusStrip — A single compact system health summary.
- * Green/Amber/Red severity with contextual "Fix now" CTA.
+ * SystemStatusStrip — Consolidated system health + API connection status.
+ * Shows all connected marketplaces/integrations with sync times and quick actions.
  */
 
 import React, { useState } from 'react';
@@ -8,17 +8,21 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
 import { Button } from '@/components/ui/button';
-import { RefreshCw } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { RefreshCw, ChevronDown, ChevronUp, CheckCircle2, AlertTriangle, AlertOctagon, Settings, Sparkles, Clock3, X, Link2, Unplug } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ChevronDown, ChevronUp, CheckCircle2, AlertTriangle, AlertOctagon, Settings, Sparkles, Clock3, X } from 'lucide-react';
+import { useSyncStatus } from '@/hooks/useSyncStatus';
 import { cn } from '@/lib/utils';
 
 interface ConnectionStatus {
+  key: string;
   label: string;
+  icon: string;
   connected: boolean;
   synced?: boolean;
   detail?: string;
   lastSync?: string;
+  lastSyncRaw?: string;
 }
 
 interface ActionItem {
@@ -37,17 +41,19 @@ interface Props {
   onMapBankAccounts?: () => void;
   onConnect?: () => void;
   onRefreshStatus?: () => void;
+  onNavigateToSettings?: () => void;
 }
 
 async function fetchStatuses(): Promise<ConnectionStatus[]> {
-  // Ensure we have an auth session before querying RLS-protected tables
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return [];
 
-  const [xeroRes, amazonRes, shopifyRes, flagsRes] = await Promise.all([
+  const [xeroRes, amazonRes, shopifyRes, ebayRes, miraklRes, flagsRes] = await Promise.all([
     supabase.from('xero_tokens').select('tenant_name, updated_at').limit(1),
     supabase.from('amazon_tokens').select('selling_partner_id, updated_at').limit(1),
     supabase.from('shopify_tokens').select('shop_domain, updated_at').eq('is_active', true).limit(1),
+    supabase.from('ebay_tokens').select('ebay_username, updated_at').limit(1),
+    supabase.from('mirakl_tokens').select('marketplace_label, updated_at').order('updated_at', { ascending: false }),
     supabase.from('app_settings').select('key, value, updated_at').in('key', [
       'xero_scan_completed', 'amazon_scan_completed', 'shopify_scan_completed',
     ]),
@@ -56,6 +62,8 @@ async function fetchStatuses(): Promise<ConnectionStatus[]> {
   const xero = xeroRes.data?.[0];
   const amazon = amazonRes.data?.[0];
   const shopify = shopifyRes.data?.[0];
+  const ebay = ebayRes.data?.[0];
+  const miraklConnections = miraklRes.data || [];
   const flags = new Map(flagsRes.data?.map(f => [f.key, f]) || []);
 
   const timeAgo = (d: string | null | undefined) => {
@@ -70,29 +78,64 @@ async function fetchStatuses(): Promise<ConnectionStatus[]> {
     return undefined;
   };
 
-  return [
+  const connections: ConnectionStatus[] = [
     {
+      key: 'xero',
       label: 'Xero',
+      icon: '📊',
       connected: !!xero,
       synced: flags.get('xero_scan_completed')?.value === 'true',
       detail: xero?.tenant_name || undefined,
       lastSync: timeAgo(syncTime(xero?.updated_at, 'xero_scan_completed')),
+      lastSyncRaw: syncTime(xero?.updated_at, 'xero_scan_completed'),
     },
     {
-      label: 'Amazon',
-      connected: !!amazon,
-      synced: flags.get('amazon_scan_completed')?.value === 'true',
-      detail: amazon?.selling_partner_id || undefined,
-      lastSync: timeAgo(syncTime(amazon?.updated_at, 'amazon_scan_completed')),
-    },
-    {
+      key: 'shopify',
       label: 'Shopify',
+      icon: '🛍',
       connected: !!shopify,
       synced: flags.get('shopify_scan_completed')?.value === 'true',
       detail: shopify?.shop_domain || undefined,
       lastSync: timeAgo(syncTime(shopify?.updated_at, 'shopify_scan_completed')),
+      lastSyncRaw: syncTime(shopify?.updated_at, 'shopify_scan_completed'),
+    },
+    {
+      key: 'amazon',
+      label: 'Amazon',
+      icon: '📦',
+      connected: !!amazon,
+      synced: flags.get('amazon_scan_completed')?.value === 'true',
+      detail: amazon?.selling_partner_id || undefined,
+      lastSync: timeAgo(syncTime(amazon?.updated_at, 'amazon_scan_completed')),
+      lastSyncRaw: syncTime(amazon?.updated_at, 'amazon_scan_completed'),
+    },
+    {
+      key: 'ebay',
+      label: 'eBay',
+      icon: '🏷️',
+      connected: !!ebay,
+      synced: !!ebay,
+      detail: ebay?.ebay_username || undefined,
+      lastSync: timeAgo(ebay?.updated_at),
+      lastSyncRaw: ebay?.updated_at,
     },
   ];
+
+  // Add each Mirakl connection as a separate entry
+  for (const mk of miraklConnections) {
+    connections.push({
+      key: `mirakl_${mk.marketplace_label?.toLowerCase().replace(/\s+/g, '_') || 'unknown'}`,
+      label: mk.marketplace_label || 'Mirakl',
+      icon: '🏠',
+      connected: true,
+      synced: true,
+      detail: undefined,
+      lastSync: timeAgo(mk.updated_at),
+      lastSyncRaw: mk.updated_at,
+    });
+  }
+
+  return connections;
 }
 
 export default function SystemStatusStrip({
@@ -103,6 +146,7 @@ export default function SystemStatusStrip({
   onMapBankAccounts,
   onConnect,
   onRefreshStatus,
+  onNavigateToSettings,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [dismissed, setDismissed] = useState(() => {
@@ -116,11 +160,22 @@ export default function SystemStatusStrip({
     refetchOnWindowFocus: true,
   });
 
+  const { xero: xeroSync, marketplaces: mpSyncs } = useSyncStatus();
+
+  // Build sync map for last-run times from sync status hook
+  const syncMap = new Map<string, { lastRun: Date | null; status: string; message?: string }>();
+  syncMap.set('xero', xeroSync);
+  for (const mp of mpSyncs) {
+    const connKey = mp.rail.startsWith('amazon') ? 'amazon' : mp.rail.startsWith('ebay') ? 'ebay' : mp.rail;
+    syncMap.set(connKey, mp);
+  }
+
   if (connections.length === 0) return null;
 
-  const allConnected = connections.every(c => c.connected);
-  const allSynced = connections.filter(c => c.connected).every(c => c.synced);
+  const connectedOnes = connections.filter(c => c.connected);
   const disconnected = connections.filter(c => !c.connected);
+  const allConnected = disconnected.length === 0;
+  const allSynced = connectedOnes.every(c => c.synced);
 
   // Build action items
   const actions: ActionItem[] = [];
@@ -161,7 +216,6 @@ export default function SystemStatusStrip({
   const hasRedAction = actions.some(a => a.severity === 'red');
   const hasAmberAction = actions.some(a => a.severity === 'amber');
 
-  // Determine severity-based headline
   let headline: string;
   let headlineColor: string;
   let headlineIcon: React.ReactNode;
@@ -212,21 +266,28 @@ export default function SystemStatusStrip({
           {/* Mini connection indicators */}
           <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">
             {connections.map(c => (
-              <span
-                key={c.label}
-                className={cn(
-                  'h-2 w-2 rounded-full',
-                  c.connected && c.synced ? 'bg-emerald-500' :
-                  c.connected ? 'bg-amber-400' :
-                  'bg-muted-foreground/30'
-                )}
-                title={`${c.label}: ${c.connected ? (c.synced ? 'synced' : 'connected') : 'not connected'}`}
-              />
+              <TooltipProvider key={c.key} delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className={cn(
+                        'h-2 w-2 rounded-full',
+                        c.connected && c.synced ? 'bg-emerald-500' :
+                        c.connected ? 'bg-amber-400' :
+                        'bg-muted-foreground/30'
+                      )}
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">
+                    {c.label}: {c.connected ? (c.synced ? 'synced' : 'connected') : 'not connected'}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             ))}
           </div>
           {/* Compact last sync times */}
           <span className="text-[10px] text-muted-foreground ml-2 hidden sm:inline flex-shrink-0">
-            {connections.filter(c => c.connected && c.lastSync).map(c => `${c.label} ${c.lastSync}`).join(' · ')}
+            {connectedOnes.filter(c => c.lastSync).map(c => `${c.label} ${c.lastSync}`).join(' · ')}
           </span>
           {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground ml-1 flex-shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground ml-1 flex-shrink-0" />}
         </button>
@@ -259,40 +320,67 @@ export default function SystemStatusStrip({
         )}
       </div>
 
-      {/* Expanded: detail rows */}
+      {/* Expanded: connection cards + actions */}
       {expanded && (
-        <div className="border-t border-border px-4 py-3 space-y-2.5">
-          {/* Connection statuses */}
-          <div className="flex items-center gap-1 flex-wrap text-sm">
-            {connections.map((conn, i) => (
-              <React.Fragment key={conn.label}>
-                {i > 0 && <span className="text-muted-foreground mx-1">·</span>}
-                {conn.connected ? (
-                  <span className="text-foreground">
-                    <span className={conn.synced ? 'text-emerald-500' : 'text-amber-400'}>
-                      {conn.synced ? '🟢' : '🟡'}
-                    </span>{' '}
-                    <span className="font-medium">{conn.label}</span>
-                    {conn.synced && conn.lastSync ? (
-                      <span className="text-muted-foreground"> synced {conn.lastSync}</span>
-                    ) : conn.synced ? (
-                      <span className="text-muted-foreground"> synced</span>
+        <div className="border-t border-border px-4 py-3 space-y-3">
+          {/* Connection grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+            {connections.map(conn => {
+              const sync = syncMap.get(conn.key);
+              const syncLastRun = sync?.lastRun
+                ? formatDistanceToNow(sync.lastRun, { addSuffix: true })
+                : conn.lastSync;
+
+              return (
+                <div
+                  key={conn.key}
+                  className={cn(
+                    'rounded-lg border px-3 py-2 text-xs space-y-1 transition-colors',
+                    conn.connected
+                      ? 'border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/50 dark:bg-emerald-950/20'
+                      : 'border-border bg-muted/30'
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span>{conn.icon}</span>
+                      <span className="font-medium text-foreground">{conn.label}</span>
+                    </div>
+                    {conn.connected ? (
+                      <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
                     ) : (
-                      <span className="text-muted-foreground"> connected — syncing…</span>
+                      <span className="h-3 w-3 rounded-full bg-muted-foreground/20 shrink-0" />
                     )}
-                  </span>
-                ) : (
-                  <span className="text-foreground">
-                    <span className="text-muted-foreground/60">⚪</span>{' '}
-                    <span className="font-medium">{conn.label}</span>{' '}
-                    <span className="text-muted-foreground">not connected</span>
-                  </span>
-                )}
-              </React.Fragment>
-            ))}
+                  </div>
+                  {conn.connected ? (
+                    <div className="space-y-1">
+                      {conn.detail && (
+                        <p className="text-muted-foreground truncate text-[10px]">{conn.detail}</p>
+                      )}
+                      {syncLastRun && (
+                        <p className="text-muted-foreground text-[10px]">Synced {syncLastRun}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="h-5 px-0 text-[10px] text-primary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onNavigateToSettings?.();
+                      }}
+                    >
+                      <Link2 className="h-2.5 w-2.5 mr-0.5" />
+                      Connect
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
-          {/* Refresh status button — single source of truth */}
+          {/* Refresh status button */}
           {onRefreshStatus && (
             <div className="flex items-center justify-end">
               <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-muted-foreground" onClick={onRefreshStatus}>
