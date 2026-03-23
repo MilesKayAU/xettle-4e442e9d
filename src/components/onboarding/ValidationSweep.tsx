@@ -259,6 +259,7 @@ export default function ValidationSweep({
     if (filter !== 'all') {
       result = result.filter((r) => {
         if (filter === 'complete') return r.overall_status === 'complete' || r.overall_status === 'bank_matched';
+        if (filter === 'complete') return r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'already_recorded' || r.overall_status === 'synced_external';
         if (filter === 'ready_to_push') return r.overall_status === 'ready_to_push' || r.overall_status === 'pushed_to_xero';
         if (filter === 'settlement_needed') return r.overall_status === 'settlement_needed' || r.overall_status === 'missing';
         return r.overall_status === filter;
@@ -300,7 +301,7 @@ export default function ValidationSweep({
     const activeRows = rows.filter(r => !pausedCodes.has(r.marketplace_code));
     const counts: Record<FilterStatus, number> = { all: activeRows.length, complete: 0, ready_to_push: 0, settlement_needed: 0, gap_detected: 0 };
     activeRows.forEach((r) => {
-      if (r.overall_status === 'complete' || r.overall_status === 'bank_matched') counts.complete++;
+      if (r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'already_recorded' || r.overall_status === 'synced_external') counts.complete++;
       else if (r.overall_status === 'ready_to_push' || r.overall_status === 'pushed_to_xero') counts.ready_to_push++;
       else if (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') counts.settlement_needed++;
       else if (r.overall_status === 'gap_detected') counts.gap_detected++;
