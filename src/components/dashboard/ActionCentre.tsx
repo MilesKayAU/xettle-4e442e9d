@@ -1,18 +1,18 @@
 /**
- * ActionCentre — The main dashboard landing page.
- * Shows 4 workflow-stage cards, visual pipeline timeline, and activity log.
+ * ActionCentre — Simplified daily dashboard.
+ * Three sections: API Sync Status, Manual Uploads Needed, Ready to Push to Xero.
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { logger } from '@/utils/logger';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  RefreshCw, Upload, Send, CheckCircle2, AlertTriangle, Plus,
-  ArrowRight, Clock, PartyPopper, Loader2, Search, ShieldAlert,
+  RefreshCw, Upload, Send, CheckCircle2, AlertTriangle,
+  Clock, PartyPopper, Search, ShieldAlert,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import SettlementDetailDrawer from '@/components/shared/SettlementDetailDrawer';
