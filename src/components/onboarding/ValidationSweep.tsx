@@ -374,7 +374,7 @@ export default function ValidationSweep({
   useEffect(() => { setSelectedIds(new Set()); setPage(1); setUploadSubTab('manual'); }, [filter, marketplaceFilter, dateFrom, dateTo]);
 
   // Selectable rows (only ready_to_push)
-  const selectableRows = useMemo(() => filteredRows.filter(r => r.overall_status === 'ready_to_push' && r.settlement_id), [filteredRows]);
+  const selectableRows = useMemo(() => filteredRows.filter(r => r.overall_status === 'ready_to_push' && r.settlement_id && !r.settlement_id?.startsWith('shopify_auto_')), [filteredRows]);
   const allSelectableSelected = selectableRows.length > 0 && selectableRows.every(r => selectedIds.has(r.id));
   const someSelected = selectedIds.size > 0;
 
