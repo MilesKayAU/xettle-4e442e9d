@@ -281,7 +281,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                   <div>
                     <Label className="text-xs">Client ID</Label>
                     <Input
-                      placeholder="Your Mirakl Client ID"
+                      placeholder="Your Client ID"
                       value={clientId}
                       onChange={(e) => setClientId(e.target.value)}
                       className="font-mono text-xs h-8"
