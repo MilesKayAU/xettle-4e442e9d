@@ -75,6 +75,8 @@ export default function ApiConnectionsPanel({
   const [subChannels, setSubChannels] = useState<SubChannelPref[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [autoSyncFlags, setAutoSyncFlags] = useState<Record<string, boolean>>({});
+  const [lastSyncRun, setLastSyncRun] = useState<Date | null>(null);
+  const [syncFrequencyHours, setSyncFrequencyHours] = useState<number | null>(null);
 
   useEffect(() => {
     checkConnections();
