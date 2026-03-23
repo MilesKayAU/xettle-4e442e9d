@@ -64,33 +64,9 @@ interface ActionCentreProps {
   onSwitchToSettlements: () => void;
   onSwitchToReconciliation?: () => void;
   userName?: string;
-  onPipelineFilter?: (marketplace: string, month: string) => void;
+  
 }
 
-// Pipeline stage helpers
-const PIPELINE_STAGES = ['S', 'X', 'B', 'R'] as const; // Settlement, Xero, Bank, Reconciled
-type PipelineStage = { settlement: boolean; xero: boolean; bank: boolean; reconciled: boolean };
-
-function getPipelineForRow(r: ValidationRow): PipelineStage {
-  const hasSettlement = r.settlement_uploaded || r.overall_status === 'ready_to_push' || r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external' || r.overall_status === 'complete' || r.overall_status === 'bank_matched';
-  const hasXero = r.xero_pushed || r.overall_status === 'pushed_to_xero' || r.overall_status === 'synced_external' || r.overall_status === 'complete' || r.overall_status === 'bank_matched';
-  // For settlement-confirmed rails, bank stage is auto-complete once posted to Xero
-  const settlementConfirmed = hasXero && !isBankMatchRequired(r.marketplace_code);
-  const hasBank = r.bank_matched || r.overall_status === 'complete' || r.overall_status === 'bank_matched' || settlementConfirmed;
-  const isReconciled = r.overall_status === 'complete' || r.overall_status === 'bank_matched' || settlementConfirmed;
-  return { settlement: hasSettlement, xero: hasXero, bank: hasBank, reconciled: isReconciled };
-}
-
-function getPipelineForCell(rows: ValidationRow[]): PipelineStage {
-  if (rows.length === 0) return { settlement: false, xero: false, bank: false, reconciled: false };
-  // Aggregate: a stage is "done" if ALL rows in the cell have it
-  return {
-    settlement: rows.every(r => getPipelineForRow(r).settlement),
-    xero: rows.every(r => getPipelineForRow(r).xero),
-    bank: rows.every(r => getPipelineForRow(r).bank),
-    reconciled: rows.every(r => getPipelineForRow(r).reconciled),
-  };
-}
 
 const EVENT_ICONS: Record<string, { icon: React.ReactNode; color: string }> = {
   settlement_saved: { icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: 'text-emerald-500' },
@@ -112,7 +88,7 @@ export default function ActionCentre({
   onSwitchToSettlements,
   onSwitchToReconciliation,
   userName,
-  onPipelineFilter,
+  
 }: ActionCentreProps) {
   const [rows, setRows] = useState<ValidationRow[]>([]);
   const [events, setEvents] = useState<SystemEvent[]>([]);
@@ -143,8 +119,6 @@ export default function ActionCentre({
     period_start: string; period_end: string; bank_deposit: number | null;
   }>>([]);
   const [externalMatchIds, setExternalMatchIds] = useState<Set<string>>(new Set());
-  // Settlement-level pipeline fallback: marketplace+month → stage summary
-  const [settlementPipeline, setSettlementPipeline] = useState<Map<string, PipelineStage>>(new Map());
 
   const handleRefreshUploads = async () => {
     setRefreshingUploads(true);
@@ -154,7 +128,7 @@ export default function ActionCentre({
 
   const loadData = useCallback(async () => {
     try {
-      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, readySettlementsRes, ingestedRes, autoPostRailsRes, autoPostFailedRes, pipelineSettlementsRes] = await Promise.all([
+      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, readySettlementsRes, ingestedRes, autoPostRailsRes, autoPostFailedRes] = await Promise.all([
         supabase.from('marketplace_validation').select('*').order('marketplace_code').order('period_start', { ascending: false }),
         supabase.from('system_events').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.auth.getUser(),
@@ -187,14 +161,6 @@ export default function ActionCentre({
           .eq('posting_state', 'failed')
           .eq('is_hidden', false)
           .order('period_start', { ascending: false }),
-        // Pipeline fallback: fetch recent settlements with their Xero/bank status
-        supabase.from('settlements')
-          .select('marketplace, period_start, status, xero_invoice_id, xero_status, bank_verified, bank_deposit, posting_state')
-          .eq('is_hidden', false)
-          .eq('is_pre_boundary', false)
-          .is('duplicate_of_settlement_id', null)
-          .order('period_start', { ascending: false })
-          .limit(500),
       ]);
 
       if (validationRes.data) setRows(validationRes.data as ValidationRow[]);
@@ -261,30 +227,6 @@ export default function ActionCentre({
       }
       if (autoPostFailedRes.data) {
         setAutoPostFailed(autoPostFailedRes.data as any);
-      }
-      // Build settlement-level pipeline fallback for cells without marketplace_validation rows
-      if (pipelineSettlementsRes.data) {
-        const pipeMap = new Map<string, PipelineStage>();
-        for (const s of pipelineSettlementsRes.data as any[]) {
-          const mp = MARKETPLACE_ALIASES[s.marketplace || ''] || s.marketplace || '';
-          if (!mp || GATEWAY_CODES.has(mp)) continue;
-          const month = s.period_start?.substring(0, 7);
-          if (!month) continue;
-          const key = `${mp}_${month}`;
-          const existing = pipeMap.get(key) || { settlement: false, xero: false, bank: false, reconciled: false };
-          // Settlement exists = stage 1 done
-          existing.settlement = true;
-          // Xero: has invoice or is pushed
-          const hasXero = !!s.xero_invoice_id || s.xero_status === 'AUTHORISED' || s.xero_status === 'PAID' || s.status === 'pushed_to_xero' || s.posting_state === 'posted';
-          if (hasXero) existing.xero = true;
-          // Bank: verified or settlement-confirmed rail
-          const bankDone = s.bank_verified || (hasXero && !isBankMatchRequired(mp));
-          if (bankDone) existing.bank = true;
-          // Reconciled: bank done + xero done
-          if (existing.xero && existing.bank) existing.reconciled = true;
-          pipeMap.set(key, existing);
-        }
-        setSettlementPipeline(pipeMap);
       }
     } catch (err) {
       console.error('ActionCentre load error:', err);
@@ -429,48 +371,6 @@ export default function ActionCentre({
   const lastChecked = rows.length > 0 && rows[0].last_checked_at
     ? new Date(rows[0].last_checked_at) : null;
 
-  // 3-month timeline
-  const timelineData = useMemo(() => {
-    const months: string[] = [];
-    for (let i = 2; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-    }
-
-    // Combine marketplaces from validation rows, connected marketplaces, AND settlement pipeline
-    const allMps = new Set<string>();
-    for (const r of normalisedRows) allMps.add(r.marketplace_code);
-    for (const c of connectedMarketplaces) {
-      const code = MARKETPLACE_ALIASES[c] || c;
-      if (!GATEWAY_CODES.has(code)) allMps.add(code);
-    }
-    for (const key of settlementPipeline.keys()) {
-      const mp = key.split('_').slice(0, -1).join('_'); // remove month suffix
-      if (!GATEWAY_CODES.has(mp)) allMps.add(mp);
-    }
-    const marketplaces = [...allMps].sort();
-
-    return { months, marketplaces };
-  }, [normalisedRows, connectedMarketplaces, settlementPipeline]);
-
-  const getRowsForCell = (marketplace: string, monthKey: string): ValidationRow[] => {
-    return normalisedRows.filter(r => {
-      const rowMonth = r.period_start?.substring(0, 7);
-      return r.marketplace_code === marketplace && rowMonth === monthKey;
-    });
-  };
-
-  const isCellPreBoundary = (monthKey: string): boolean => {
-    if (!accountingBoundary) return false;
-    const boundaryMonth = accountingBoundary.substring(0, 7);
-    return monthKey < boundaryMonth;
-  };
-
-  const formatMonthLabel = (key: string): string => {
-    const [, m] = key.split('-').map(Number);
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return `${months[(m || 1) - 1]} ${key.substring(0, 4)}`;
-  };
 
   // Greeting
   const hour = new Date().getHours();
@@ -779,130 +679,6 @@ export default function ActionCentre({
         </div>
       )}
 
-      {/* Visual Pipeline Timeline */}
-      {timelineData.marketplaces.length > 0 && (
-        <Card className="border-border">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Settlement pipeline</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                   <th className="text-left py-2 pr-4 text-xs font-medium text-muted-foreground w-40">
-                     <TooltipProvider>
-                       <Tooltip>
-                         <TooltipTrigger asChild>
-                           <span className="cursor-help border-b border-dotted border-muted-foreground/40">Rail</span>
-                         </TooltipTrigger>
-                         <TooltipContent className="text-xs max-w-[220px]">Payout rail — the source that generates settlement payouts (Amazon AU, Shopify Payments, PayPal, etc.)</TooltipContent>
-                       </Tooltip>
-                     </TooltipProvider>
-                   </th>
-                  {timelineData.months.map(m => (
-                    <th key={m} className="text-center py-2 px-3 text-xs font-medium text-muted-foreground">
-                      {formatMonthLabel(m)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50">
-                {timelineData.marketplaces.map(mp => (
-                  <tr key={mp} className="hover:bg-muted/20 transition-colors">
-                    <td className="py-2.5 pr-4 font-medium text-foreground text-xs">
-                      {MARKETPLACE_LABELS[mp] || mp}
-                    </td>
-                    {timelineData.months.map(m => {
-                      if (isCellPreBoundary(m)) {
-                        return (
-                          <td key={m} className="text-center py-2.5 px-3">
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="text-[10px] text-muted-foreground/50 cursor-default">—</span>
-                                </TooltipTrigger>
-                                <TooltipContent className="text-xs">Before accounting boundary — not tracked</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </td>
-                        );
-                      }
-                      const cellRows = getRowsForCell(mp, m);
-                      // Use settlement pipeline fallback when no validation rows exist
-                      const fallbackKey = `${mp}_${m}`;
-                      const fallbackPipeline = settlementPipeline.get(fallbackKey);
-                      if (cellRows.length === 0 && !fallbackPipeline) {
-                        return (
-                          <td key={m} className="text-center py-2.5 px-3">
-                            <span className="text-[10px] text-muted-foreground/40">—</span>
-                          </td>
-                        );
-                      }
-                      const pipeline = cellRows.length > 0
-                        ? getPipelineForCell(cellRows)
-                        : fallbackPipeline!;
-                      const stageEntries: { key: string; label: string; done: boolean }[] = [
-                        { key: 'S', label: 'Settlement uploaded', done: pipeline.settlement },
-                         { key: 'X', label: 'Sent to Xero', done: pipeline.xero },
-                         { key: 'B', label: 'Destination deposit matched', done: pipeline.bank },
-                         { key: 'R', label: 'Fully reconciled', done: pipeline.reconciled },
-                      ];
-                      return (
-                        <td key={m} className="text-center py-2.5 px-3">
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  className="inline-flex items-center gap-1 cursor-pointer hover:scale-110 transition-transform rounded-md p-1 hover:bg-muted/40"
-                                  onClick={() => onPipelineFilter?.(mp, m)}
-                                >
-                                  {stageEntries.map(s => (
-                                    <span
-                                      key={s.key}
-                                      className={cn(
-                                        "h-2.5 w-2.5 rounded-full inline-block transition-colors",
-                                        s.done ? "bg-emerald-500" : "bg-muted-foreground/20"
-                                      )}
-                                    />
-                                  ))}
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent className="text-xs space-y-0.5">
-                                {stageEntries.map(s => (
-                                  <div key={s.key} className="flex items-center gap-1.5">
-                                    <span className={s.done ? 'text-emerald-500' : 'text-muted-foreground'}>
-                                      {s.done ? '✓' : '○'}
-                                    </span>
-                                    <span>{s.label}</span>
-                                  </div>
-                                ))}
-                                <div className="text-muted-foreground pt-1 border-t border-border mt-1">
-                                  {cellRows.length > 0
-                                    ? `${cellRows.length} settlement${cellRows.length > 1 ? 's' : ''}`
-                                    : 'From settlement data'}
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 mt-3 pt-3 border-t border-border text-xs text-muted-foreground">
-              <span className="font-medium text-foreground/70">Rail stages:</span>
-              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" /> Settlement</span>
-              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" /> Xero</span>
-              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" /> Destination feed</span>
-              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" /> Reconciled</span>
-              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/20 inline-block" /> Not yet</span>
-              <span className="flex items-center gap-1.5"><span className="text-muted-foreground/50">—</span> Pre-boundary</span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Activity log */}
       {events.length > 0 && (
