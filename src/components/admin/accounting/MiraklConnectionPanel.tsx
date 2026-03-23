@@ -159,7 +159,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
             </CardDescription>
           </div>
           {connected ? (
-            <Badge className="bg-green-100 text-green-800 gap-1">
+            <Badge className="bg-primary/10 text-primary gap-1">
               <CheckCircle2 className="h-3 w-3" /> Connected
             </Badge>
           ) : (
