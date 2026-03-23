@@ -209,6 +209,9 @@ export default function ApiConnectionsPanel({
           {/* eBay */}
           <EbayConnectionStatus />
 
+          {/* Mirakl */}
+          <MiraklConnectionPanel />
+
           {/* Shopify Channel Management */}
           <ChannelManagement />
         </CardContent>

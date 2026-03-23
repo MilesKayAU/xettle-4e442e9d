@@ -614,6 +614,12 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
 
   return (
     <div className="space-y-6">
+      {/* Mirakl API Connection */}
+      <MiraklConnectionPanel
+        onSettlementsAutoFetched={() => loadHistory()}
+        marketplaceFilter="bunnings"
+      />
+
       {/* Alerts Banner */}
       <MarketplaceAlertsBanner marketplaceCode="bunnings" />
 
