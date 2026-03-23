@@ -513,6 +513,7 @@ export default function Dashboard() {
   }, [userMarketplaces, hasAmazon, amazonXettleCode, hasShopify, hasEbay]);
 
 
+  useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       navigate('/auth', { replace: true });
     }
