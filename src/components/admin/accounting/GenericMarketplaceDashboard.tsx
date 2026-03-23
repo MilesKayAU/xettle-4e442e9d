@@ -405,7 +405,10 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         {hasShopify && !isCsvOnly && currentUserId ? (
           <ReconciliationStatus marketplaceCode={code} userId={currentUserId} />
         ) : settlements.length > 0 ? (
-          <FileReconciliationStatus settlements={settlements} />
+          <FileReconciliationStatus
+            settlements={settlements}
+            onSettlementClick={(sid) => loadLineItems(sid)}
+          />
         ) : null}
       </div>
 
