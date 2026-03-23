@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { ACTIVE_CONNECTION_STATUSES, isApiConnectionType } from '@/constants/connection-status';
 import { logger } from '@/utils/logger';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
