@@ -62,11 +62,6 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
     checkStatus();
   }, [checkStatus]);
 
-  const handleMarketplaceChange = (label: string) => {
-    setSelectedMarketplace(label);
-    const found = MIRAKL_MARKETPLACES.find(m => m.label === label);
-    if (found && found.baseUrl) setBaseUrl(found.baseUrl);
-  };
 
   const isFormValid = () => {
     if (!baseUrl || !sellerCompanyId) return false;
