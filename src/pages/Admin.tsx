@@ -42,6 +42,7 @@ import FulfillmentBridge from '@/components/admin/FulfillmentBridge';
 import HealthScannerDashboard from '@/components/admin/HealthScannerDashboard';
 import AmazonComplianceDashboard from '@/components/admin/AmazonComplianceDashboard';
 import ShippingEstimateSettings from '@/components/settings/ShippingEstimateSettings';
+import MiraklBetaFeedback from '@/components/admin/MiraklBetaFeedback';
 import { cn } from '@/lib/utils';
 
 interface UserRow {
