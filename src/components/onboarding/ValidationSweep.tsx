@@ -302,15 +302,19 @@ export default function ValidationSweep({
 
   const statusCounts = useMemo(() => {
     const activeRows = rows.filter(r => !pausedCodes.has(r.marketplace_code));
-    const counts: Record<FilterStatus, number> = { all: activeRows.length, complete: 0, ready_to_push: 0, settlement_needed: 0, gap_detected: 0 };
+    const counts = { all: activeRows.length, complete: 0, ready_to_push: 0, settlement_needed: 0, settlement_needed_manual: 0, settlement_needed_api: 0, gap_detected: 0 };
     activeRows.forEach((r) => {
       if (r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'already_recorded' || r.overall_status === 'synced_external') counts.complete++;
       else if (r.overall_status === 'ready_to_push') counts.ready_to_push++;
-      else if (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') counts.settlement_needed++;
+      else if (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') {
+        counts.settlement_needed++;
+        if (apiSyncedCodes.has(r.marketplace_code)) counts.settlement_needed_api++;
+        else counts.settlement_needed_manual++;
+      }
       else if (r.overall_status === 'gap_detected') counts.gap_detected++;
     });
     return counts;
-  }, [rows, pausedCodes]);
+  }, [rows, pausedCodes, apiSyncedCodes]);
 
   const handleTogglePause = async (marketplaceCode: string, currentStatus: string) => {
     setTogglingPause(marketplaceCode);
@@ -431,7 +435,7 @@ export default function ValidationSweep({
         <SummaryCard label="All Periods" count={statusCounts.all} emoji="📋" active={filter === 'all'} onClick={() => { setFilter('all'); }} bgClass="bg-muted/50" borderClass="border-border" />
         <SummaryCard label="Complete" count={statusCounts.complete} emoji="✅" active={filter === 'complete'} onClick={() => { setFilter('complete'); }} bgClass="bg-emerald-50 dark:bg-emerald-900/20" borderClass="border-emerald-200 dark:border-emerald-800" />
         <SummaryCard label="Ready to Push" count={statusCounts.ready_to_push} emoji="🚀" active={filter === 'ready_to_push'} onClick={() => { setFilter('ready_to_push'); }} bgClass="bg-blue-50 dark:bg-blue-900/20" borderClass="border-blue-200 dark:border-blue-800" />
-        <SummaryCard label="Upload Needed" count={statusCounts.settlement_needed} emoji="📤" active={filter === 'settlement_needed'} onClick={() => { setFilter('settlement_needed'); setDateFrom(''); setDateTo(''); setMarketplaceFilter('all'); }} bgClass="bg-amber-50 dark:bg-amber-900/20" borderClass="border-amber-200 dark:border-amber-800" />
+        <SummaryCard label="Upload Needed" count={statusCounts.settlement_needed_manual} emoji="📤" active={filter === 'settlement_needed'} onClick={() => { setFilter('settlement_needed'); setDateFrom(''); setDateTo(''); setMarketplaceFilter('all'); }} bgClass="bg-amber-50 dark:bg-amber-900/20" borderClass="border-amber-200 dark:border-amber-800" subtitle={statusCounts.settlement_needed_api > 0 ? `${statusCounts.settlement_needed_manual} manual · ${statusCounts.settlement_needed_api} auto-sync` : undefined} />
         <SummaryCard label="Gaps" count={statusCounts.gap_detected} emoji="⚠️" active={filter === 'gap_detected'} onClick={() => { setFilter('gap_detected'); setDateFrom(''); setDateTo(''); setMarketplaceFilter('all'); }} bgClass="bg-red-50 dark:bg-red-900/20" borderClass="border-red-200 dark:border-red-800" />
       </div>
 
@@ -743,10 +747,10 @@ export default function ValidationSweep({
 }
 
 function SummaryCard({
-  label, count, emoji, active, onClick, bgClass, borderClass,
+  label, count, emoji, active, onClick, bgClass, borderClass, subtitle,
 }: {
   label: string; count: number; emoji: string; active: boolean;
-  onClick: () => void; bgClass: string; borderClass: string;
+  onClick: () => void; bgClass: string; borderClass: string; subtitle?: string;
 }) {
   return (
     <button
@@ -758,6 +762,7 @@ function SummaryCard({
     >
       <div className="text-2xl font-bold">{emoji} {count}</div>
       <div className="text-xs font-medium text-muted-foreground mt-1">{label}</div>
+      {subtitle && <div className="text-[10px] text-muted-foreground mt-0.5">{subtitle}</div>}
     </button>
   );
 }

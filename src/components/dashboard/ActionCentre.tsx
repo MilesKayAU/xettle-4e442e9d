@@ -448,6 +448,15 @@ export default function ActionCentre({
                 </li>
               ))}
             </ul>
+            {(() => {
+              const apiUploadNeeded = uploadNeeded.filter(r => connectedApiMarketplaces.has(r.marketplace_code));
+              return apiUploadNeeded.length > 0 ? (
+                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3 shrink-0" />
+                  Plus {apiUploadNeeded.length} API-connected period{apiUploadNeeded.length !== 1 ? 's' : ''} — these sync automatically.
+                </p>
+              ) : null;
+            })()}
             <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400" onClick={() => {
               onSwitchToUpload(buildMissingList());
             }}>
