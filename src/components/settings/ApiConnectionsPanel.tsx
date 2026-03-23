@@ -295,9 +295,34 @@ export default function ApiConnectionsPanel({
               Daily Auto-Sync
             </CardTitle>
             <CardDescription className="text-xs mt-1">
-              Control which connected APIs automatically fetch new settlements every day at 2:00 AM AEST. 
+              Control which connected APIs automatically fetch new settlements. 
               Disable to use manual sync or CSV uploads only.
             </CardDescription>
+            {/* Sync schedule insight */}
+            {(lastSyncRun || syncFrequencyHours) && (
+              <div className="flex flex-wrap items-center gap-3 mt-2">
+                {syncFrequencyHours && (
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <Clock className="h-3 w-3 text-primary" />
+                    <span className="text-foreground font-medium">Every {syncFrequencyHours}h</span>
+                  </div>
+                )}
+                {lastSyncRun && (
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                    <span className="text-muted-foreground">Last run {formatDistanceToNow(lastSyncRun, { addSuffix: true })}</span>
+                  </div>
+                )}
+                {lastSyncRun && syncFrequencyHours && (
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <RefreshCw className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-muted-foreground">
+                      Next run ~{formatDistanceToNow(new Date(lastSyncRun.getTime() + syncFrequencyHours * 60 * 60 * 1000), { addSuffix: true })}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
           </CardHeader>
           <CardContent className="pt-0">
             <div className="space-y-3">
