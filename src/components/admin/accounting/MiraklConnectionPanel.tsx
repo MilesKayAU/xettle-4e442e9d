@@ -127,12 +127,22 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
     }
   };
 
-  const handleFetchNow = async () => {
+  const handleFetchNow = async (e?: React.MouseEvent) => {
+    e?.preventDefault();
     setFetching(true);
     try {
       const { data, error } = await supabase.functions.invoke('fetch-mirakl-settlements');
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (data?.error) {
+        // Surface API-level errors (e.g. 401 Unauthorized) clearly
+        const msg = data.error;
+        if (msg.includes('401') || msg.toLowerCase().includes('unauthorized')) {
+          toast.error('Bunnings API credentials are invalid or expired. Please reconnect with updated credentials.');
+        } else {
+          toast.error(`Bunnings sync error: ${msg}`);
+        }
+        return;
+      }
       const { imported = 0, skipped = 0, empty_skipped = 0 } = data || {};
       const parts = [];
       if (imported > 0) parts.push(`${imported} imported`);

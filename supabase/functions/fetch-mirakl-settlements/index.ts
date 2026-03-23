@@ -143,7 +143,20 @@ Deno.serve(async (req) => {
     const totalImported = allResults.reduce((s, r) => s + (r.imported || 0), 0);
     const totalSkipped = allResults.reduce((s, r) => s + (r.skipped || 0), 0);
     const totalEmpty = allResults.reduce((s, r) => s + (r.empty_skipped || 0), 0);
-    console.log(`[fetch-mirakl-settlements] ✅ Done — imported: ${totalImported}, skipped: ${totalSkipped}, empty: ${totalEmpty}`);
+    const errors = allResults.filter((r) => r.error);
+    console.log(`[fetch-mirakl-settlements] ✅ Done — imported: ${totalImported}, skipped: ${totalSkipped}, empty: ${totalEmpty}, errors: ${errors.length}`);
+
+    // If ALL connections errored, surface the error to the client
+    if (errors.length > 0 && errors.length === allResults.length) {
+      const firstError = errors[0].error;
+      return new Response(
+        JSON.stringify({
+          error: firstError,
+          connections: allResults,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     return new Response(
       JSON.stringify({
