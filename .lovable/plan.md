@@ -1,46 +1,75 @@
 
 
-## Settlement Audit Fix — Reconciliation-Only Push Prevention
+# Fix: Derive API-connected badges from actual connection data
 
-### Status: ✅ IMPLEMENTED
+## Problem
 
-### Problem
-Shopify-derived `api_sync` settlements with `shopify_auto_*` IDs were incorrectly reaching `ready_to_push` status, risking $0 invoices and double-counting in Xero. The `isReconciliationOnly()` policy only caught `shopify_orders_*` marketplaces but missed the actual settlement ID pattern.
+The green "Auto" badge on marketplace pills in the Settlements tab is hardcoded from three boolean flags (`hasAmazon`, `hasShopify`, `hasEbay`) derived from token tables. Bunnings (mirakl_api) and any future API connection are completely ignored. When you add or remove an API connection in Settings, the badge never updates.
 
-### Changes Made
+## Root Cause
 
-**1. Policy helper broadened** (`src/utils/settlement-policy.ts` + `supabase/functions/_shared/settlementPolicy.ts`)
-- Added `settlementId` parameter
-- New rule: `source === 'api_sync' && settlementId.startsWith('shopify_auto_')` → reconciliation-only
-- Original `shopify_orders_*` rule preserved
-- Both files kept identical
+In `src/pages/Dashboard.tsx` (line ~1108), `apiConnectedCodes` is built as:
 
-**2. All callers updated to same signature**
-- `src/hooks/use-xero-sync.ts` — passes `settlement.settlement_id`
-- `supabase/functions/sync-settlement-to-xero/index.ts` — selects `settlement_id` in gate check, uses shared helper
-- `supabase/functions/run-validation-sweep/index.ts` — imports and uses shared helper for skip
+```typescript
+apiConnectedCodes={new Set([
+  ...(hasAmazon ? [amazonXettleCode] : []),
+  ...(hasShopify ? ['shopify_payments', 'shopify_orders'] : []),
+  ...(hasEbay ? ['ebay_au'] : []),
+])}
+```
 
-**3. Defense-in-depth in push endpoint**
-- `sync-settlement-to-xero` hard-refuses reconciliation-only rows with clear error message regardless of status
-- Fixed duplicate variable declarations bug
+This is a static list. It misses Bunnings (`mirakl_api`), and won't react to Settings changes.
 
-**4. Validation sweep hardened**
-- Excludes reconciliation-only settlements BEFORE choosing "best settlement" per period
-- Uses shared `isReconciliationOnly()` helper (no inline logic)
+## Fix
 
-**5. Database trigger updated**
-- `calculate_validation_status` now derives decision from the actual linked settlement row
-- Caps reconciliation-only settlements at `settlement_needed` max status
-- Never allows `ready_to_push`, `ready_to_export`, or `exported`
+### 1. Derive `apiConnectedCodes` from `marketplace_connections` table
 
-**6. Data migration executed**
-- Downgraded `shopify_auto_*` settlements from `ready_to_push`/`validated`/`matched` → `ingested`
-- Suppressed `api_sync` settlements where CSV/API data exists for same marketplace+period
-- Null-period safety included in suppression query
-- Never touched `exported`, `pushed_to_xero`, or `locked` statuses
-- Refreshed affected `marketplace_validation` rows
+In `Dashboard.tsx`, after `loadMarketplaces` fetches `userMarketplaces`, compute the set dynamically:
 
-### Spot-check cases
-- ✅ Bunnings with CSV overlap → api_sync suppressed
-- ✅ eBay with real API payout + Shopify-derived row → api_sync suppressed
-- ✅ Marketplace with only shopify_auto_* data → visible for reconciliation, never pushable
+```typescript
+const apiConnectedCodes = useMemo(() => {
+  const codes = new Set<string>();
+  for (const um of userMarketplaces) {
+    if (isApiConnectionType(um.connection_type)) {
+      codes.add(um.marketplace_code);
+    }
+  }
+  // Also include token-derived APIs that may not have explicit connection_type set
+  if (hasAmazon) codes.add(amazonXettleCode);
+  if (hasShopify) { codes.add('shopify_payments'); codes.add('shopify_orders'); }
+  if (hasEbay) codes.add('ebay_au');
+  return codes;
+}, [userMarketplaces, hasAmazon, amazonXettleCode, hasShopify, hasEbay]);
+```
+
+This merges both sources: the `marketplace_connections.connection_type` field (catches Bunnings/mirakl_api and future APIs) and the legacy token-table booleans (backward compat).
+
+### 2. Pass derived set to MarketplaceSwitcher
+
+Replace the inline `new Set([...])` with the computed `apiConnectedCodes` variable.
+
+### 3. Audit other pages for same issue
+
+Search for any other place that shows API/Auto indicators using hardcoded logic instead of `isApiConnectionType()`:
+- `ActionCentre.tsx` — already fixed in prior session
+- `ValidationSweep.tsx` — already fixed
+- `SettlementsOverview.tsx` — check and fix if needed
+- `GenericMarketplaceDashboard.tsx` — check header badge
+
+### 4. Ensure Settings changes propagate
+
+`loadMarketplaces` is already called after connection changes via `onMarketplacesChanged`. Since `apiConnectedCodes` is derived from `userMarketplaces` via `useMemo`, any Settings page change that updates `marketplace_connections.connection_type` will automatically reflect in the badge on next load.
+
+## Files to modify
+
+| File | Change |
+|------|--------|
+| `src/pages/Dashboard.tsx` | Replace hardcoded `apiConnectedCodes` with `useMemo` derived from `userMarketplaces` + `isApiConnectionType()` |
+| Any other files found in audit step 3 | Ensure consistent use of `isApiConnectionType()` |
+
+## Expected outcome
+
+- Bunnings shows green "Auto" badge immediately
+- Any future API marketplace gets the badge automatically
+- Adding/removing API connections in Settings reflects on the Settlements tab after reload
+
