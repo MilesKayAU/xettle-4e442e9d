@@ -341,7 +341,7 @@ export default function ValidationSweep({
   }, [rows, allConnections]);
 
   const statusCounts = useMemo(() => {
-    const activeRows = rows.filter(r => !pausedCodes.has(r.marketplace_code));
+    const activeRows = rows.filter(r => activeCodes.has(r.marketplace_code) && !pausedCodes.has(r.marketplace_code));
     const counts = { all: 0, complete: 0, ready_to_push: 0, settlement_needed: 0, settlement_needed_manual: 0, settlement_needed_api: 0, settlement_needed_recon: 0, gap_detected: 0 };
     activeRows.forEach((r) => {
       const isRecon = r.settlement_id?.startsWith('shopify_auto_');
