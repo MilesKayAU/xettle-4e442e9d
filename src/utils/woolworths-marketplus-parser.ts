@@ -79,6 +79,14 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/**
+ * Detect platform-level transaction fee rows by product name.
+ * These rows have `Product` matching "Transaction fee for DD/MM/YYYY" and are
+ * platform-wide fees that Woolworths incorrectly attributes to a single Order Source.
+ */
+export const isTransactionFee = (row: WoolworthsOrderRow): boolean =>
+  /transaction fee for/i.test(row.product);
+
 function parseAmount(raw: string): number {
   if (!raw) return 0;
   const cleaned = raw.replace(/[^0-9.\-,]/g, '').replace(/,/g, '');
