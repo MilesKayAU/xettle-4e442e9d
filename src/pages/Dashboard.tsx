@@ -1027,13 +1027,6 @@ export default function Dashboard() {
                   switchSettlementsSubTab('reconciliation');
                 }}
                 userName={user?.email?.split('@')[0]}
-                onPipelineFilter={(marketplace, month) => {
-                  setPipelineFilter({ marketplace, month });
-                  // Scroll to settlements table
-                  setTimeout(() => {
-                    document.getElementById('settlements-table-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  }, 100);
-                }}
               />
               </div>
 
