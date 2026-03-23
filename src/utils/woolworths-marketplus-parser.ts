@@ -496,81 +496,12 @@ function buildWoolworthsSettlements(
         currency: 'AUD',
         reference: `${g.displayName} Settlement ${bankPaymentRef}`,
         invoiceType: 'clearing',
-        salesAccountCode: '200',
-        shippingAccountCode: '200',
-        clearingAccountCode: '613',
-        feesAccountCode: '405',
         paymentType: 'direct_bank_transfer',
       },
     };
   });
 }
 
-// ─── Xero Invoice Line Builder ──────────────────────────────────────────────
-
-export interface WoolworthsXeroLineItem {
-  Description: string;
-  AccountCode: string;
-  TaxType: string;
-  UnitAmount: number;
-  TaxAmount?: number;
-  Quantity: number;
-}
-
-export function buildWoolworthsInvoiceLines(settlement: StandardSettlement): WoolworthsXeroLineItem[] {
-  const meta = settlement.metadata || {};
-  const lines: WoolworthsXeroLineItem[] = [];
-
-  // Line 1: Sales (ex GST)
-  if (meta.grossSalesExGst && meta.grossSalesExGst !== 0) {
-    lines.push({
-      Description: `${meta.displayName} Sales — ${meta.orderCount} orders`,
-      AccountCode: meta.salesAccountCode || '200',
-      TaxType: 'OUTPUT',
-      UnitAmount: round2(meta.grossSalesExGst),
-      TaxAmount: round2(meta.gstOnSales || 0),
-      Quantity: 1,
-    });
-  }
-
-  // Line 2: Refunds (ex GST, negative)
-  if (meta.refundsExGst && meta.refundsExGst !== 0) {
-    lines.push({
-      Description: `${meta.displayName} Refunds`,
-      AccountCode: meta.salesAccountCode || '200',
-      TaxType: 'OUTPUT',
-      UnitAmount: round2(meta.refundsExGst),
-      TaxAmount: round2(meta.gstOnRefunds || 0),
-      Quantity: 1,
-    });
-  }
-
-  // Line 3: Commission Fees (ex GST, positive — commission is a cost)
-  if (meta.commissionExGst && meta.commissionExGst !== 0) {
-    lines.push({
-      Description: `${meta.displayName} Commission Fees`,
-      AccountCode: meta.feesAccountCode || '405',
-      TaxType: 'INPUT',
-      UnitAmount: round2(meta.commissionExGst),
-      TaxAmount: round2(meta.gstOnCommission ? -Math.abs(meta.gstOnCommission) : 0),
-      Quantity: 1,
-    });
-  }
-
-  // Line 4: Clearing (negative net, BAS Excluded)
-  if (meta.clearingAmount && meta.clearingAmount !== 0) {
-    lines.push({
-      Description: `Awaiting ${meta.displayName} settlement payment — Bank Ref ${meta.bankPaymentRef}`,
-      AccountCode: meta.clearingAccountCode || '613',
-      TaxType: 'BASEXCLUDED',
-      UnitAmount: round2(meta.clearingAmount),
-      TaxAmount: 0,
-      Quantity: 1,
-    });
-  }
-
-  return lines;
-}
 
 // ─── Fingerprint Check ──────────────────────────────────────────────────────
 
