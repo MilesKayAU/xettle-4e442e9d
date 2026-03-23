@@ -374,6 +374,19 @@ export default function MarketplaceProfitComparison() {
                           </TooltipContent>
                         </Tooltip>
                       )}
+                      {mp.shipping_deduction > 0 && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 border-primary/30 text-primary cursor-help">
+                              <Truck className="h-2 w-2 mr-0.5" />
+                              Est. Shipping
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent className="text-xs max-w-xs">
+                            Incl. est. shipping: -{formatAUD(mp.shipping_deduction)} ({mp.order_count} orders)
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
                     </TableCell>
                     <TableCell className={`text-xs text-right font-semibold ${getMarginColor(mp.avg_margin)}`}>
                       {mp.avg_margin.toFixed(1)}%
