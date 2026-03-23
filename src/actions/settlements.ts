@@ -427,7 +427,7 @@ export async function applySourcePriority(
           },
         } as any);
       }
-    } else if (newSource === 'api_sync') {
+    } else if (newSource === 'api_sync' || newSource === 'mirakl_api') {
       // API sync → self-suppress if manual settlement already covers this period
       const { data: manualExists } = await supabase
         .from('settlements')

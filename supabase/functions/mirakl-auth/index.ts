@@ -75,6 +75,22 @@ Deno.serve(async (req) => {
 
       if (upsertErr) throw upsertErr;
 
+      // ─── Item 5: Create marketplace_connections row ───
+      const effectiveMarketplaceCode = (marketplace_label || "bunnings").toLowerCase().replace(/\s+/g, "_");
+      await adminClient
+        .from("marketplace_connections")
+        .upsert(
+          {
+            user_id: userId,
+            marketplace_code: effectiveMarketplaceCode,
+            marketplace_name: marketplace_label || "Bunnings",
+            connection_type: "mirakl_api",
+            connection_status: "active",
+            country_code: "AU",
+          },
+          { onConflict: "user_id,marketplace_code" },
+        );
+
       // Verify connection by testing auth
       const { data: row } = await adminClient
         .from("mirakl_tokens")
