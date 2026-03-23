@@ -21,6 +21,7 @@ const MIRAKL_MARKETPLACES = [
 ] as const;
 
 type AuthMode = 'oauth' | 'api_key' | 'both';
+type AuthHeaderType = 'auto' | 'bearer' | 'authorization' | 'x-api-key';
 
 interface MiraklConnectionPanelProps {
   onSettlementsAutoFetched?: () => void;
