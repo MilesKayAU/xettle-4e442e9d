@@ -119,7 +119,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
       if (error) throw error;
       setConnected(false);
       setConnection(null);
-      toast.success('Mirakl disconnected');
+      toast.success('Bunnings Marketplace disconnected');
     } catch (err: any) {
       toast.error(`Disconnect failed: ${err.message}`);
     } finally {
