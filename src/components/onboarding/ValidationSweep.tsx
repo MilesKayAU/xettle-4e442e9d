@@ -302,15 +302,19 @@ export default function ValidationSweep({
 
   const statusCounts = useMemo(() => {
     const activeRows = rows.filter(r => !pausedCodes.has(r.marketplace_code));
-    const counts: Record<FilterStatus, number> = { all: activeRows.length, complete: 0, ready_to_push: 0, settlement_needed: 0, gap_detected: 0 };
+    const counts = { all: activeRows.length, complete: 0, ready_to_push: 0, settlement_needed: 0, settlement_needed_manual: 0, settlement_needed_api: 0, gap_detected: 0 };
     activeRows.forEach((r) => {
       if (r.overall_status === 'complete' || r.overall_status === 'bank_matched' || r.overall_status === 'already_recorded' || r.overall_status === 'synced_external') counts.complete++;
       else if (r.overall_status === 'ready_to_push') counts.ready_to_push++;
-      else if (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') counts.settlement_needed++;
+      else if (r.overall_status === 'settlement_needed' || r.overall_status === 'missing') {
+        counts.settlement_needed++;
+        if (apiSyncedCodes.has(r.marketplace_code)) counts.settlement_needed_api++;
+        else counts.settlement_needed_manual++;
+      }
       else if (r.overall_status === 'gap_detected') counts.gap_detected++;
     });
     return counts;
-  }, [rows, pausedCodes]);
+  }, [rows, pausedCodes, apiSyncedCodes]);
 
   const handleTogglePause = async (marketplaceCode: string, currentStatus: string) => {
     setTogglingPause(marketplaceCode);
