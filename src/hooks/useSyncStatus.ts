@@ -110,6 +110,7 @@ async function fetchSyncStatus(): Promise<Omit<SyncStatusResult, 'loading'>> {
       supabase.from('amazon_tokens').select('id').limit(1),
       supabase.from('shopify_tokens').select('id').limit(1),
       supabase.from('ebay_tokens').select('id').limit(1),
+      supabase.from('mirakl_tokens').select('id').limit(1),
     ]),
     Promise.all(
       API_INTEGRATIONS.map(async integration => {
