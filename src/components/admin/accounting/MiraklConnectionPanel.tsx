@@ -138,7 +138,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
       if (imported > 0) parts.push(`${imported} imported`);
       if (skipped > 0) parts.push(`${skipped} duplicates skipped`);
       if (empty_skipped > 0) parts.push(`${empty_skipped} empty periods skipped`);
-      toast.success(parts.length > 0 ? `Done! ${parts.join(', ')}.` : 'All settlements already synced.');
+      toast.success(parts.length > 0 ? `Done! ${parts.join(', ')}.` : 'No new Bunnings settlements found.');
       if (imported > 0) onSettlementsAutoFetched?.();
     } catch (err: any) {
       toast.error(`Fetch failed: ${err.message}`);
