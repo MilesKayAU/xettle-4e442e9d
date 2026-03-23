@@ -100,6 +100,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
           client_secret: clientSecret || '',
           api_key: apiKey || null,
           auth_mode: authMode,
+          auth_header_type: authHeaderType === 'auto' ? null : authHeaderType,
           seller_company_id: sellerCompanyId,
           marketplace_label: selectedMarketplace,
         },
