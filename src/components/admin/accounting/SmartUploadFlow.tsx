@@ -996,16 +996,39 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
             } catch { /* silent */ }
           }
 
-          // ── Save settlement_lines for Bunnings PDF ──
+          // ── Save settlement_lines for Bunnings PDF (full breakdown) ──
           if (user && marketplace === 'bunnings') {
             try {
-              const summaryLines = [
-                { user_id: user.id, settlement_id: s.settlement_id, amount: s.sales_ex_gst, amount_type: 'order', transaction_type: 'Summary', amount_description: 'Bunnings sales total (ex GST)', marketplace_name: 'Bunnings Marketplace', accounting_category: 'revenue' },
-                { user_id: user.id, settlement_id: s.settlement_id, amount: s.fees_ex_gst, amount_type: 'fee', transaction_type: 'Summary', amount_description: 'Bunnings commission (ex GST)', marketplace_name: 'Bunnings Marketplace', accounting_category: 'marketplace_fee' },
-                { user_id: user.id, settlement_id: s.settlement_id, amount: s.gst_on_sales, amount_type: 'tax', transaction_type: 'Summary', amount_description: 'GST on sales', marketplace_name: 'Bunnings Marketplace', accounting_category: 'gst_income' },
-              ].filter(l => l.amount !== 0);
-              if (summaryLines.length > 0) {
-                await supabase.from('settlement_lines').insert(summaryLines as any);
+              // Delete existing lines for idempotency (delete-then-insert)
+              await supabase.from('settlement_lines').delete()
+                .eq('settlement_id', s.settlement_id).eq('user_id', user.id);
+
+              const meta = s.metadata || {};
+              const bunningsLines = [
+                { amount: s.sales_ex_gst, amount_type: 'order', transaction_type: 'Summary', amount_description: 'Payable orders (ex GST)', accounting_category: 'revenue' },
+                { amount: s.gst_on_sales, amount_type: 'tax', transaction_type: 'Summary', amount_description: 'GST on sales', accounting_category: 'gst_income' },
+                { amount: s.fees_ex_gst, amount_type: 'fee', transaction_type: 'Summary', amount_description: 'Commission on orders (ex GST)', accounting_category: 'marketplace_fee' },
+                { amount: meta.refundsExGst || 0, amount_type: 'refund', transaction_type: 'Summary', amount_description: 'Refunded orders (ex GST)', accounting_category: 'refund' },
+                { amount: meta.refundsGst || 0, amount_type: 'tax', transaction_type: 'Summary', amount_description: 'GST on refunds', accounting_category: 'gst_refund' },
+                { amount: meta.refundCommissionExGst || 0, amount_type: 'fee', transaction_type: 'Summary', amount_description: 'Commission on refunded orders (ex GST)', accounting_category: 'marketplace_fee_refund' },
+                { amount: meta.shippingExGst || 0, amount_type: 'shipping', transaction_type: 'Summary', amount_description: 'Shipping charges (ex GST)', accounting_category: 'shipping' },
+                { amount: meta.shippingGst || 0, amount_type: 'tax', transaction_type: 'Summary', amount_description: 'GST on shipping', accounting_category: 'gst_shipping' },
+                { amount: meta.subscriptionAmount || 0, amount_type: 'fee', transaction_type: 'Summary', amount_description: 'Subscription amount', accounting_category: 'subscription_fee' },
+                { amount: meta.manualCreditInclGst || 0, amount_type: 'adjustment', transaction_type: 'Summary', amount_description: 'Manual credit', accounting_category: 'adjustment' },
+                { amount: meta.manualDebitInclGst || 0, amount_type: 'adjustment', transaction_type: 'Summary', amount_description: 'Manual debit', accounting_category: 'adjustment' },
+                { amount: meta.otherChargesInclGst || 0, amount_type: 'fee', transaction_type: 'Summary', amount_description: 'Other charges', accounting_category: 'other_fee' },
+              ]
+                .filter(l => l.amount !== 0)
+                .map(l => ({
+                  user_id: user.id,
+                  settlement_id: s.settlement_id,
+                  ...l,
+                  marketplace_name: 'Bunnings Marketplace',
+                  source: 'pdf_upload',
+                }));
+
+              if (bunningsLines.length > 0) {
+                await supabase.from('settlement_lines').insert(bunningsLines as any);
               }
             } catch { /* silent */ }
           }
