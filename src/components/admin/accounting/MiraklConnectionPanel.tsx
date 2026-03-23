@@ -372,7 +372,12 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                 </Collapsible>
               )}
               <div className="flex items-start gap-1.5 text-[10px] text-muted-foreground bg-muted/20 rounded p-2">
-            </div>
+                <Info className="h-3 w-3 mt-0.5 shrink-0" />
+                <span>
+                  Most Mirakl Connect apps use <strong>OAuth</strong> (Client ID + Secret from Settings → API Integrations).
+                  Some older setups use a direct <strong>API Key</strong>. Choose "Both" if unsure — Xettle will try OAuth first and fall back to API key.
+                </span>
+              </div>
             <Button
               size="sm"
               onClick={handleConnect}
