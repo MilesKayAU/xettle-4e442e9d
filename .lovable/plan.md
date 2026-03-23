@@ -1,38 +1,37 @@
 
 
-## Add Mirakl Auth Header Variant Support
+## Rebrand Mirakl Panel as "Bunnings Marketplace Sync"
 
 ### Problem
-Currently `getMiraklAuthHeader()` returns a string value that always goes into the `Authorization` header. Some Mirakl marketplaces require the API key in `X-API-KEY` header instead. This will cause auth failures for those marketplaces.
+Australian users don't know what "Mirakl" is — they know Bunnings. The current UX exposes Mirakl terminology everywhere. Catch, MyDeal, Kogan etc. don't actually use Mirakl API sync in practice, so the dropdown is misleading.
 
 ### Changes
 
-**1. Database migration — add `auth_header_type` column**
-- Add nullable `auth_header_type` column to `mirakl_tokens` table
-- Values: `'bearer'` | `'authorization'` | `'x-api-key'`
-- Default: `NULL` (helper infers from `auth_mode`: oauth→bearer, api_key→authorization)
+**1. Rename `MiraklConnectionPanel` → Bunnings-first UX**
+- Title: "Bunnings Marketplace Sync" (not "Mirakl API Connection")
+- Description: "Auto-import settlement data from Bunnings Marketplace."
+- Remove the marketplace dropdown (Catch, MyDeal, Kogan, Decathlon, Other) — hardcode to Bunnings with its base URL
+- Keep `selectedMarketplace = 'Bunnings'` and `baseUrl = 'https://marketplace.bunnings.com.au'` as fixed values
+- Remove "Mirakl" from all user-facing strings: toasts, confirmations, helper text
+- Replace "Mirakl Connect" / "Classic Mirakl" labels with "OAuth (recommended)" / "API Key"
+- Info box: reword to mention "Bunnings Marketplace" instead of "Mirakl Connect apps"
+- Loading text: "Checking Bunnings connection..." instead of "Checking Mirakl connection..."
+- Disconnect confirm: "Disconnect Bunnings Marketplace?"
+- Keep the component filename as `MiraklConnectionPanel.tsx` internally (no need to rename imports everywhere)
 
-**2. Update `mirakl-token.ts` — return header name + value**
-- Change `getMiraklAuthHeader()` to return `{ headerName: string; headerValue: string }` instead of a plain string
-- Logic:
-  - `auth_header_type='bearer'` or oauth default → `{ headerName: 'Authorization', headerValue: 'Bearer <token>' }`
-  - `auth_header_type='authorization'` or api_key default → `{ headerName: 'Authorization', headerValue: '<key>' }`
-  - `auth_header_type='x-api-key'` → `{ headerName: 'X-API-KEY', headerValue: '<key>' }`
-- Add `MiraklTokenRow.auth_header_type` to the interface
-- No change to existing defaults — backward compatible
+**2. Settings page (`ApiConnectionsPanel.tsx`)**
+- Change section label from "Mirakl" to "Bunnings Marketplace"
+- The generic MiraklConnectionPanel there should also show Bunnings-branded UX (it already defaults to Bunnings)
 
-**3. Update callers (`fetch-mirakl-settlements/index.ts`, `mirakl-auth/index.ts`)**
-- Replace `Authorization: authHeader` with dynamic `[result.headerName]: result.headerValue`
+**3. BunningsDashboard.tsx**
+- No changes needed — it already passes `marketplaceFilter="bunnings"` and will inherit the new branding
 
-**4. Update UI (`MiraklConnectionPanel.tsx`)**
-- Add optional "Header Format" select (hidden behind an "Advanced" collapsible) with options: Auto (default), Bearer, Authorization, X-API-KEY
-- Only shown when auth_mode is `api_key` or `both` (OAuth always uses Bearer)
-
-**5. Update `mirakl-api-policy.ts`**
-- Document the three header variants and when each is used
+**4. Landing page / marketing content**
+- Out of scope for this change, but noted: website should list "Bunnings Marketplace" as a supported API sync channel
 
 ### No changes to
-- Transaction type mappings
-- OAuth token refresh logic
-- Accumulator/settlement engine
+- Backend edge functions (mirakl-auth, fetch-mirakl-settlements) — internal naming stays as-is
+- Database table name (mirakl_tokens) — internal only
+- Auth header logic
+- Settlement processing
 
