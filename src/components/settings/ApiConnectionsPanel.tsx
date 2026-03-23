@@ -120,6 +120,23 @@ export default function ApiConnectionsPanel({
       }
       setAutoSyncFlags(flags);
 
+      // Load sync schedule info
+      const { data: syncRuns } = await supabase
+        .from('sync_history')
+        .select('created_at')
+        .eq('event_type', 'scheduled_sync')
+        .order('created_at', { ascending: false })
+        .limit(3);
+
+      if (syncRuns && syncRuns.length > 0) {
+        setLastSyncRun(new Date(syncRuns[0].created_at));
+        if (syncRuns.length >= 2) {
+          const diff = new Date(syncRuns[0].created_at).getTime() - new Date(syncRuns[1].created_at).getTime();
+          const hours = Math.round(diff / (1000 * 60 * 60));
+          if (hours > 0) setSyncFrequencyHours(hours);
+        }
+      }
+
       // Load sub-channels for source preference
       const { data: channels } = await supabase
         .from('shopify_sub_channels')
