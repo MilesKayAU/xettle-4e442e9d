@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { BookOpen, CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
+import { storeXeroOauthReturnPath, XERO_OAUTH_STATE_KEY } from '@/utils/xero-oauth';
 
 interface Props {
   onNext: () => void;
@@ -30,7 +31,8 @@ export default function SetupStepConnectXero({ onNext, onSkip, hasXero, onFireBa
       if (error || data?.error) throw new Error(data?.error || 'Failed to get Xero auth URL');
       const authUrl = data?.authUrl || data?.url;
       if (authUrl) {
-        if (data.state) sessionStorage.setItem('xero_oauth_state', data.state);
+        storeXeroOauthReturnPath();
+        if (data.state) sessionStorage.setItem(XERO_OAUTH_STATE_KEY, data.state);
         window.location.href = authUrl;
       }
     } catch (err: any) {
