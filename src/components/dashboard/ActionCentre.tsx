@@ -86,6 +86,7 @@ export default function ActionCentre({
   const [apiSyncedMarketplaces, setApiSyncedMarketplaces] = useState<Set<string>>(new Set());
   const [accountingBoundary, setAccountingBoundary] = useState<string | null>(null);
   const [connectedMarketplaces, setConnectedMarketplaces] = useState<string[]>([]);
+  const [trueApiChannels, setTrueApiChannels] = useState<Set<string>>(new Set());
   const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
   const [drawerSettlementId, setDrawerSettlementId] = useState<string | null>(null);
@@ -115,7 +116,7 @@ export default function ActionCentre({
 
   const loadData = useCallback(async () => {
     try {
-      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, readySettlementsRes, ingestedRes, autoPostRailsRes, autoPostFailedRes] = await Promise.all([
+      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, readySettlementsRes, ingestedRes, autoPostRailsRes, autoPostFailedRes, amazonTokenRes, ebayTokenRes, shopifyTokenRes, miraklTokenRes] = await Promise.all([
         supabase.from('marketplace_validation').select('*').order('marketplace_code').order('period_start', { ascending: false }),
         supabase.from('system_events').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.auth.getUser(),
@@ -148,6 +149,11 @@ export default function ActionCentre({
           .eq('posting_state', 'failed')
           .eq('is_hidden', false)
           .order('period_start', { ascending: false }),
+        // Token presence checks — these determine true API channels
+        supabase.from('amazon_tokens').select('selling_partner_id').limit(1),
+        supabase.from('ebay_tokens').select('id').limit(1),
+        supabase.from('shopify_tokens').select('id').eq('is_active', true).limit(1),
+        supabase.from('mirakl_tokens').select('marketplace_label').order('updated_at', { ascending: false }),
       ]);
 
       if (validationRes.data) setRows(validationRes.data as ValidationRow[]);
@@ -164,6 +170,20 @@ export default function ActionCentre({
       if (connectionsRes.data) {
         setConnectedMarketplaces(connectionsRes.data.map((c: any) => c.marketplace_code));
       }
+
+      // Build set of channels that have their own dedicated API token
+      // Sub-channels flowing through Shopify (Kogan, Big W, etc.) are NOT true API channels
+      const apiChannels = new Set<string>();
+      if (amazonTokenRes.data && amazonTokenRes.data.length > 0) apiChannels.add('amazon_au');
+      if (ebayTokenRes.data && ebayTokenRes.data.length > 0) apiChannels.add('ebay_au');
+      if (shopifyTokenRes.data && shopifyTokenRes.data.length > 0) apiChannels.add('shopify_payments');
+      if (miraklTokenRes.data) {
+        for (const mk of miraklTokenRes.data) {
+          const label = mk.marketplace_label?.toLowerCase().replace(/\s+/g, '_') || '';
+          if (label) apiChannels.add(label);
+        }
+      }
+      setTrueApiChannels(apiChannels);
       if (lastSyncRes.data?.created_at) {
         setLastAutoSync(new Date(lastSyncRes.data.created_at));
       }
@@ -280,9 +300,9 @@ export default function ActionCentre({
   const now = new Date();
 
   const uploadNeeded = normalisedRows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
-  // Filter out API-synced marketplaces, only show for closed months, AND only if no settlement exists
+  // Filter out true API channels (with dedicated tokens), only show manual-upload channels
   const uploadNeededManual = uploadNeeded.filter(r => {
-    if (apiSyncedMarketplaces.has(r.marketplace_code)) return false;
+    if (trueApiChannels.has(r.marketplace_code)) return false;
     if (r.settlement_uploaded || r.settlement_id) return false; // settlement already exists
     const periodEnd = new Date(r.period_end);
     return periodEnd < now; // only show if period already ended
@@ -364,17 +384,16 @@ export default function ActionCentre({
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const currentMonth = new Date().toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
 
-  // Build API sync status for Section 1
+  // Build API sync status for Section 1 — only channels with dedicated API tokens
   const apiConnections = useMemo(() => {
-    const apiRails = ['amazon_au', 'ebay_au', 'shopify_payments', 'bunnings'];
     return connectedMarketplaces
-      .filter(code => apiRails.includes(code) || apiSyncedMarketplaces.has(code))
+      .filter(code => trueApiChannels.has(code))
       .map(code => ({
         code,
         label: MARKETPLACE_LABELS[code] || code,
         synced: apiSyncedMarketplaces.has(code),
       }));
-  }, [connectedMarketplaces, apiSyncedMarketplaces]);
+  }, [connectedMarketplaces, apiSyncedMarketplaces, trueApiChannels]);
 
   const allApiSynced = apiConnections.length > 0 && apiConnections.every(c => c.synced);
 
