@@ -242,7 +242,13 @@ export default function ValidationSweep({
         toast.success(`Synced ${row.marketplace_code} for ${row.period_label}`);
         loadData();
       } else {
-        toast.error(result?.error || 'Sync failed');
+        const msg = result?.error || 'Sync failed';
+        // Cooldown errors are informational, not failures
+        if (msg.includes('wait') || msg.includes('cooldown') || msg.includes('auto-sync')) {
+          toast.info(msg);
+        } else {
+          toast.error(msg);
+        }
       }
     } catch (err: any) {
       toast.error(err.message || 'Sync failed');
