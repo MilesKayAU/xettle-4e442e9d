@@ -596,11 +596,33 @@ async function sweepUser(adminSupabase: any, userId: string) {
           record.settlement_net = settlement.bank_deposit || 0
           record.settlement_uploaded_at = settlement.created_at || new Date().toISOString()
 
-          // Guard: if settlement is already_recorded or pushed_to_xero, force validation to complete
+          // Guard: if settlement is already_recorded, also repair any legacy validation rows for the same settlement
           if (settlement.status === 'already_recorded') {
+            const resolvedAt = new Date().toISOString()
+            const xam = xamBySettlement.get(settlement.settlement_id)
+            record.xero_pushed = true
+            record.xero_invoice_id = settlement.xero_journal_id || xam?.xero_invoice_id || null
+            record.xero_pushed_at = resolvedAt
             record.overall_status = 'already_recorded'
             record.processing_state = 'processed'
-            record.processing_completed_at = new Date().toISOString()
+            record.processing_completed_at = resolvedAt
+
+            await adminSupabase
+              .from('marketplace_validation')
+              .update({
+                xero_pushed: true,
+                xero_invoice_id: settlement.xero_journal_id || xam?.xero_invoice_id || null,
+                xero_pushed_at: resolvedAt,
+                overall_status: 'already_recorded',
+                processing_state: 'processed',
+                processing_completed_at: resolvedAt,
+                processing_error: null,
+                updated_at: resolvedAt,
+                last_checked_at: resolvedAt,
+              })
+              .eq('user_id', userId)
+              .eq('settlement_id', settlement.settlement_id)
+
             // Upsert and skip remaining steps for this period
             await adminSupabase
               .from('marketplace_validation')
