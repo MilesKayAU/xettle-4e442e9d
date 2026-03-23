@@ -184,8 +184,15 @@ async function fetchSettlementsForConnection(
   const dateFrom = syncFrom || defaultFrom.toISOString().split("T")[0];
 
   // Fetch transaction logs from Mirakl Marketplace API (TL endpoints)
-  // authHeader is pre-resolved: either "Bearer <token>" (OAuth) or raw API key
-  const apiUrl = `${baseUrl}/api/sellerpayment/transactions_logs?start_date=${dateFrom}T00:00:00Z&paginate=false`;
+  let apiUrl = `${baseUrl}/api/sellerpayment/transactions_logs?start_date=${dateFrom}T00:00:00Z&paginate=false`;
+
+  // Include seller_company_id as shop param if available
+  if (connection.seller_company_id) {
+    apiUrl += `&shop=${connection.seller_company_id}`;
+  }
+
+  console.log(`[fetch-mirakl-settlements] 🌐 API URL: ${apiUrl}`);
+  console.log(`[fetch-mirakl-settlements] Auth header: ${authResult.headerName}: ${authResult.headerValue.slice(0, 20)}...`);
 
   const res = await fetch(apiUrl, {
     headers: {
@@ -194,15 +201,26 @@ async function fetchSettlementsForConnection(
     },
   });
 
+  console.log(`[fetch-mirakl-settlements] 📡 Response status: ${res.status}`);
+
   if (!res.ok) {
     const errorText = await res.text().catch(() => "");
+    console.error(`[fetch-mirakl-settlements] ❌ API error ${res.status}: ${errorText.slice(0, 500)}`);
     throw new Error(`Mirakl API error ${res.status}: ${errorText.slice(0, 200)}`);
   }
 
   const data = await res.json();
   const transactions = data.transactions || data.transaction_logs || data.data || [];
 
+  console.log(`[fetch-mirakl-settlements] 📦 Response keys: ${Object.keys(data).join(", ")}`);
+  console.log(`[fetch-mirakl-settlements] 📦 Transactions count: ${Array.isArray(transactions) ? transactions.length : "not an array"}`);
+  if (Array.isArray(transactions) && transactions.length > 0) {
+    console.log(`[fetch-mirakl-settlements] 📦 Sample txn keys: ${Object.keys(transactions[0]).join(", ")}`);
+    console.log(`[fetch-mirakl-settlements] 📦 Sample txn: ${JSON.stringify(transactions[0]).slice(0, 300)}`);
+  }
+
   if (!Array.isArray(transactions) || transactions.length === 0) {
+    console.log(`[fetch-mirakl-settlements] ⚠️ No transactions in response`);
     return { imported: 0, skipped: 0, empty_skipped: 0, message: "No transactions found" };
   }
 
