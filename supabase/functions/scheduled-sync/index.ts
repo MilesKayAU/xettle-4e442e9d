@@ -349,6 +349,12 @@ Deno.serve(async (req) => {
     // Acquire Shopify locks per user
     const eligibleShopifyUsers: string[] = [];
     for (const uid of shopifyUserIds) {
+      // Check if auto-sync is enabled for this user
+      if (!isAutoSyncEnabled(uid, 'shopify')) {
+        console.log(`[scheduled-sync] Shopify skipped for ${uid} — auto-sync disabled`);
+        continue;
+      }
+
       const { data: lockResult } = await adminClient.rpc('acquire_sync_lock', {
         p_user_id: uid,
         p_integration: 'shopify',
