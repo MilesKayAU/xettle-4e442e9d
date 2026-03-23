@@ -21,6 +21,7 @@ import { isBankMatchRequired } from '@/constants/settlement-rails';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { isApiConnectionType } from '@/constants/connection-status';
+import { useSyncStatus } from '@/hooks/useSyncStatus';
 
 
 interface ValidationRow {
@@ -84,11 +85,11 @@ export default function ActionCentre({
   const [refreshing, setRefreshing] = useState(false);
   const [refreshingUploads, setRefreshingUploads] = useState(false);
   const [userCreatedAt, setUserCreatedAt] = useState<Date | null>(null);
-  const [apiSyncedMarketplaces, setApiSyncedMarketplaces] = useState<Set<string>>(new Set());
   const [accountingBoundary, setAccountingBoundary] = useState<string | null>(null);
   const [connectedMarketplaces, setConnectedMarketplaces] = useState<string[]>([]);
   const [trueApiChannels, setTrueApiChannels] = useState<Set<string>>(new Set());
   const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
+  const [xeroConnected, setXeroConnected] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
   const [drawerSettlementId, setDrawerSettlementId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -108,6 +109,7 @@ export default function ActionCentre({
     period_start: string; period_end: string; bank_deposit: number | null;
   }>>([]);
   const [externalMatchIds, setExternalMatchIds] = useState<Set<string>>(new Set());
+  const { xero: xeroSync, marketplaces: syncedIntegrations, loading: syncStatusLoading } = useSyncStatus();
 
   const handleRefreshUploads = async () => {
     setRefreshingUploads(true);
@@ -117,11 +119,10 @@ export default function ActionCentre({
 
   const loadData = useCallback(async () => {
     try {
-      const [validationRes, eventsRes, userRes, apiSettlementsRes, boundaryRes, connectionsRes, lastSyncRes, readySettlementsRes, ingestedRes, autoPostRailsRes, autoPostFailedRes] = await Promise.all([
+      const [validationRes, eventsRes, userRes, boundaryRes, connectionsRes, lastSyncRes, readySettlementsRes, ingestedRes, autoPostRailsRes, autoPostFailedRes, xeroRes] = await Promise.all([
         supabase.from('marketplace_validation').select('*').order('marketplace_code').order('period_start', { ascending: false }),
         supabase.from('system_events').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.auth.getUser(),
-        supabase.from('settlements').select('marketplace').in('source', ['api', 'api_sync', 'mirakl_api']),
         supabase.from('app_settings').select('value').eq('key', 'accounting_boundary_date').maybeSingle(),
         supabase.from('marketplace_connections').select('marketplace_code, connection_type').in('connection_status', ['active', 'connected']).order('created_at'),
         supabase.from('sync_history').select('created_at').eq('event_type', 'scheduled_sync').order('created_at', { ascending: false }).limit(1).maybeSingle(),
@@ -150,14 +151,12 @@ export default function ActionCentre({
           .eq('posting_state', 'failed')
           .eq('is_hidden', false)
           .order('period_start', { ascending: false }),
+        supabase.from('xero_tokens').select('id').limit(1),
       ]);
 
       if (validationRes.data) setRows(validationRes.data as ValidationRow[]);
       if (eventsRes.data) setEvents(eventsRes.data as SystemEvent[]);
       if (userRes.data?.user?.created_at) setUserCreatedAt(new Date(userRes.data.user.created_at));
-      if (apiSettlementsRes.data) {
-        setApiSyncedMarketplaces(new Set(apiSettlementsRes.data.map((s: any) => s.marketplace)));
-      }
       if (boundaryRes.data?.value) {
         setAccountingBoundary(boundaryRes.data.value);
       } else if (userRes.data?.user?.created_at) {
@@ -178,6 +177,7 @@ export default function ActionCentre({
       if (lastSyncRes.data?.created_at) {
         setLastAutoSync(new Date(lastSyncRes.data.created_at));
       }
+      setXeroConnected(!!xeroRes.data?.length);
       if (readySettlementsRes.data) {
         const allReady = readySettlementsRes.data as any[];
         // Fetch external matches for ready settlements with xero_status
@@ -292,8 +292,17 @@ export default function ActionCentre({
 
   const uploadNeeded = normalisedRows.filter(r => r.overall_status === 'settlement_needed' || r.overall_status === 'missing');
   // Filter out true API channels (with dedicated tokens), only show manual-upload channels
+  const connectedApiMarketplaces = useMemo(() => {
+    const connectedCodes = new Set<string>(trueApiChannels);
+    for (const integration of syncedIntegrations) {
+      const normalizedCode = MARKETPLACE_ALIASES[integration.rail] || integration.rail;
+      connectedCodes.add(normalizedCode);
+    }
+    return connectedCodes;
+  }, [trueApiChannels, syncedIntegrations]);
+
   const uploadNeededManual = uploadNeeded.filter(r => {
-    if (trueApiChannels.has(r.marketplace_code)) return false;
+    if (connectedApiMarketplaces.has(r.marketplace_code)) return false;
     if (r.settlement_uploaded || r.settlement_id) return false; // settlement already exists
     const periodEnd = new Date(r.period_end);
     return periodEnd < now; // only show if period already ended
@@ -375,20 +384,33 @@ export default function ActionCentre({
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const currentMonth = new Date().toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
 
-  // Build API sync status for Section 1 — only channels with dedicated API tokens
+  // Build API sync status for Section 1 from the shared live integration status source.
   const apiConnections = useMemo(() => {
-    return connectedMarketplaces
-      .filter(code => trueApiChannels.has(code))
-      .map(code => ({
-        code,
-        label: MARKETPLACE_LABELS[code] || code,
-        synced: apiSyncedMarketplaces.has(code),
-      }));
-  }, [connectedMarketplaces, apiSyncedMarketplaces, trueApiChannels]);
+    const deduped = new Map<string, { code: string; label: string; synced: boolean }>();
+
+    if (xeroConnected) {
+      deduped.set('xero', {
+        code: 'xero',
+        label: 'Xero',
+        synced: xeroSync.status === 'success',
+      });
+    }
+
+    for (const integration of syncedIntegrations) {
+      const normalizedCode = MARKETPLACE_ALIASES[integration.rail] || integration.rail;
+      deduped.set(normalizedCode, {
+        code: normalizedCode,
+        label: MARKETPLACE_LABELS[normalizedCode] || integration.name,
+        synced: integration.status === 'success',
+      });
+    }
+
+    return Array.from(deduped.values());
+  }, [syncedIntegrations, xeroConnected, xeroSync.status]);
 
   const allApiSynced = apiConnections.length > 0 && apiConnections.every(c => c.synced);
 
-  if (loading) {
+  if (loading || syncStatusLoading) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-12 w-96" />
@@ -439,9 +461,9 @@ export default function ActionCentre({
               ) : (
                 <RefreshCw className="h-4 w-4 text-muted-foreground" />
               )}
-              <h3 className="font-semibold text-sm">
-                {allApiSynced ? 'All API channels synced' : 'API Sync Status'}
-              </h3>
+                <h3 className="font-semibold text-sm">
+                  {allApiSynced ? 'All connected integrations synced' : 'Integration Sync Status'}
+                </h3>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {apiConnections.map(conn => (
