@@ -163,22 +163,17 @@ export default function ActionCentre({
         setAccountingBoundary(userRes.data.user.created_at.substring(0, 10));
       }
       if (connectionsRes.data) {
-        setConnectedMarketplaces(connectionsRes.data.map((c: any) => c.marketplace_code));
-      }
+        const allConns = connectionsRes.data as Array<{ marketplace_code: string; connection_type: string }>;
+        setConnectedMarketplaces(allConns.map(c => c.marketplace_code));
 
-      // Build set of channels that have their own dedicated API token
-      // Sub-channels flowing through Shopify (Kogan, Big W, etc.) are NOT true API channels
-      const apiChannels = new Set<string>();
-      if (amazonTokenRes.data && amazonTokenRes.data.length > 0) apiChannels.add('amazon_au');
-      if (ebayTokenRes.data && ebayTokenRes.data.length > 0) apiChannels.add('ebay_au');
-      if (shopifyTokenRes.data && shopifyTokenRes.data.length > 0) apiChannels.add('shopify_payments');
-      if (miraklTokenRes.data) {
-        for (const mk of miraklTokenRes.data) {
-          const label = mk.marketplace_label?.toLowerCase().replace(/\s+/g, '_') || '';
-          if (label) apiChannels.add(label);
-        }
+        // Build set of channels with dedicated API connections (not sub-channels)
+        const apiChannels = new Set<string>(
+          allConns
+            .filter(c => isApiConnectionType(c.connection_type))
+            .map(c => c.marketplace_code)
+        );
+        setTrueApiChannels(apiChannels);
       }
-      setTrueApiChannels(apiChannels);
       if (lastSyncRes.data?.created_at) {
         setLastAutoSync(new Date(lastSyncRes.data.created_at));
       }
