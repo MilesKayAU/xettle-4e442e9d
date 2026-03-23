@@ -742,17 +742,20 @@ export default function ValidationSweep({
                               </Tooltip>
                             </TooltipProvider>
                           )}
-                          <RowAction
-                            row={row}
-                            pushing={pushing === row.id}
-                            syncing={syncingRow === row.id}
-                            isApiSynced={apiSyncedCodes.has(row.marketplace_code)}
-                            onUpload={() => onSwitchToUpload?.(row.marketplace_code, row.period_label)}
-                            onPush={() => handlePush(row)}
-                            onSync={() => handleSyncRow(row)}
-                          />
+                          {!isReconRow && (
+                            <RowAction
+                              row={row}
+                              pushing={pushing === row.id}
+                              syncing={syncingRow === row.id}
+                              isApiSynced={apiSyncedCodes.has(row.marketplace_code)}
+                              onUpload={() => onSwitchToUpload?.(row.marketplace_code, row.period_label)}
+                              onPush={() => handlePush(row)}
+                              onSync={() => handleSyncRow(row)}
+                            />
+                          )}
                         </div>
                       </td>
+                      </>); })()}
                     </tr>
                   ))
                 )}
