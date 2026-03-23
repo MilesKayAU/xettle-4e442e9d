@@ -304,7 +304,7 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
                   <Label className="text-xs">API Key</Label>
                   <Input
                     type="password"
-                    placeholder="Your Mirakl API Key"
+                    placeholder="Your API Key"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
                     className="font-mono text-xs h-8"
