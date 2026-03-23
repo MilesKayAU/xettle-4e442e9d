@@ -44,6 +44,8 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
   const [clientSecret, setClientSecret] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [sellerCompanyId, setSellerCompanyId] = useState('');
+  const [authHeaderType, setAuthHeaderType] = useState<AuthHeaderType>('auto');
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const checkStatus = useCallback(async () => {
     setLoading(true);
