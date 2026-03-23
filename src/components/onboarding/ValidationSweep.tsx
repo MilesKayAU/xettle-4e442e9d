@@ -640,15 +640,37 @@ export default function ValidationSweep({
                         <StatusPill status={row.overall_status} isApiSynced={apiSyncedCodes.has(row.marketplace_code)} />
                       </td>
                       <td className="px-3 py-2 text-center">
-                        <RowAction
-                          row={row}
-                          pushing={pushing === row.id}
-                          syncing={syncingRow === row.id}
-                          isApiSynced={apiSyncedCodes.has(row.marketplace_code)}
-                          onUpload={() => onSwitchToUpload?.(row.marketplace_code, row.period_label)}
-                          onPush={() => handlePush(row)}
-                          onSync={() => handleSyncRow(row)}
-                        />
+                        <div className="inline-flex items-center gap-1">
+                          {row.settlement_id && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0"
+                                    onClick={() => {
+                                      setDrawerSettlementId(row.settlement_id);
+                                      setDrawerOpen(true);
+                                    }}
+                                  >
+                                    <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="text-xs">Preview settlement details</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                          <RowAction
+                            row={row}
+                            pushing={pushing === row.id}
+                            syncing={syncingRow === row.id}
+                            isApiSynced={apiSyncedCodes.has(row.marketplace_code)}
+                            onUpload={() => onSwitchToUpload?.(row.marketplace_code, row.period_label)}
+                            onPush={() => handlePush(row)}
+                            onSync={() => handleSyncRow(row)}
+                          />
+                        </div>
                       </td>
                     </tr>
                   ))
