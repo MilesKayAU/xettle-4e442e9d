@@ -59,6 +59,7 @@ export default function ApiConnectionsPanel({
     amazon: false,
     shopify: false,
     ebay: false,
+    mirakl: false,
   });
   const [subChannels, setSubChannels] = useState<SubChannelPref[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
