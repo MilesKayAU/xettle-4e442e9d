@@ -23,12 +23,14 @@ Deno.serve(async (req) => {
   const { data: shopifyTokens } = await adminClient.from('shopify_tokens').select('user_id').eq('is_active', true);
   const { data: xeroTokens } = await adminClient.from('xero_tokens').select('user_id');
   const { data: ebayTokens } = await adminClient.from('ebay_tokens').select('user_id');
+  const { data: miraklTokens } = await adminClient.from('mirakl_tokens').select('user_id');
 
   const allUserIds = new Set<string>();
   for (const t of amazonTokens || []) allUserIds.add(t.user_id);
   for (const t of shopifyTokens || []) allUserIds.add(t.user_id);
   for (const t of xeroTokens || []) allUserIds.add(t.user_id);
   for (const t of ebayTokens || []) allUserIds.add(t.user_id);
+  for (const t of miraklTokens || []) allUserIds.add(t.user_id);
 
   // ─── Write interim "running" sync_history per user ─────────────
   const interimIds: Record<string, string> = {};
@@ -284,6 +286,23 @@ Deno.serve(async (req) => {
     } else {
       results.ebay = { skipped: true, reason: 'all_users_locked_or_rate_limited', users_checked: ebayUserIds.length };
     }
+  }
+
+  // 4.7. Fetch Mirakl settlements (per-user)
+  console.log("[scheduled-sync] Step 4.7: Mirakl fetch (per-user)...");
+  const miraklUserIds = [...new Set((miraklTokens || []).map(t => t.user_id))];
+  if (miraklUserIds.length > 0 && Date.now() - startTime < MAX_ELAPSED_MS) {
+    results.mirakl = { users: miraklUserIds.length, results: [] };
+    for (const uid of miraklUserIds) {
+      const syncFrom = userSyncFromMap[uid] || defaultSyncFrom;
+      const miraklResult = await callFunction("fetch-mirakl-settlements", {}, { userId: uid, sync_from: syncFrom });
+      (results.mirakl.results as any[]).push({ user_id: uid, ...miraklResult });
+      if (miraklResult?.error) stepErrors.push('mirakl');
+    }
+  } else if (miraklUserIds.length > 0) {
+    results.mirakl = { skipped: true, reason: 'elapsed_timeout' };
+  } else {
+    results.mirakl = { skipped: true, reason: 'no_mirakl_users' };
   }
 
   // 5. Fetch Shopify payouts (with per-user Shopify mutex)

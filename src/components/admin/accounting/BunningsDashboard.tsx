@@ -30,6 +30,7 @@ import { runUniversalReconciliation, type UniversalReconciliationResult } from '
 import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
 import MarketplaceInfoPanel from '@/components/MarketplaceInfoPanel';
 import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
+import MiraklConnectionPanel from './MiraklConnectionPanel';
 
 interface BunningsDashboardProps {
   marketplace: { marketplace_code: string; marketplace_name: string };
@@ -613,6 +614,12 @@ export default function BunningsDashboard({ marketplace }: BunningsDashboardProp
 
   return (
     <div className="space-y-6">
+      {/* Mirakl API Connection */}
+      <MiraklConnectionPanel
+        onSettlementsAutoFetched={() => loadHistory()}
+        marketplaceFilter="bunnings"
+      />
+
       {/* Alerts Banner */}
       <MarketplaceAlertsBanner marketplaceCode="bunnings" />
 

@@ -39,7 +39,7 @@ export interface MarketplaceDefinition {
   icon: string;
   country: string;
   countryFlag: string;
-  connectionMethods: Array<'sp_api' | 'manual_csv' | 'api_key'>;
+  connectionMethods: Array<'sp_api' | 'manual_csv' | 'api_key' | 'mirakl_api'>;
   phase: 'live' | 'csv_ready' | 'coming_soon';
   description: string;
 }
@@ -61,9 +61,9 @@ export const MARKETPLACE_CATALOG: MarketplaceDefinition[] = [
     icon: '🔨',
     country: 'AU',
     countryFlag: '🇦🇺',
-    connectionMethods: ['manual_csv'],
-    phase: 'csv_ready',
-    description: 'Bunnings Marketplace — manual CSV upload. Mirakl API coming Phase 2.',
+    connectionMethods: ['mirakl_api', 'manual_csv'],
+    phase: 'live',
+    description: 'Bunnings Marketplace — Mirakl API auto-fetch or manual PDF upload.',
   },
   {
     code: 'bigw',

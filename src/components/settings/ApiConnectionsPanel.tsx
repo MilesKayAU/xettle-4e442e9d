@@ -19,6 +19,7 @@ import XeroConnectionStatus from '@/components/admin/XeroConnectionStatus';
 import ShopifyConnectionStatus from '@/components/admin/ShopifyConnectionStatus';
 import EbayConnectionStatus from '@/components/admin/EbayConnectionStatus';
 import AmazonConnectionPanel from '@/components/admin/accounting/AmazonConnectionPanel';
+import MiraklConnectionPanel from '@/components/admin/accounting/MiraklConnectionPanel';
 import ChannelManagement from '@/components/shopify/ChannelManagement';
 
 interface ApiConnectionsPanelProps {
@@ -35,6 +36,7 @@ interface ConnectionSummary {
   amazon: boolean;
   shopify: boolean;
   ebay: boolean;
+  mirakl: boolean;
 }
 
 interface SubChannelPref {
@@ -57,6 +59,7 @@ export default function ApiConnectionsPanel({
     amazon: false,
     shopify: false,
     ebay: false,
+    mirakl: false,
   });
   const [subChannels, setSubChannels] = useState<SubChannelPref[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
@@ -71,11 +74,12 @@ export default function ApiConnectionsPanel({
       if (!user) return;
       setUserId(user.id);
 
-      const [xeroRes, amazonRes, shopifyRes, ebayRes] = await Promise.all([
+      const [xeroRes, amazonRes, shopifyRes, ebayRes, miraklRes] = await Promise.all([
         supabase.from('app_settings').select('value').eq('user_id', user.id).eq('key', 'xero_tenant_id').maybeSingle(),
         supabase.from('amazon_tokens').select('id').eq('user_id', user.id).limit(1),
         supabase.from('shopify_tokens').select('id').eq('user_id', user.id).limit(1),
         supabase.from('ebay_tokens').select('id').eq('user_id', user.id).limit(1),
+        supabase.from('mirakl_tokens').select('id').eq('user_id', user.id).limit(1),
       ]);
 
       setSummary({
@@ -83,6 +87,7 @@ export default function ApiConnectionsPanel({
         amazon: !!(amazonRes.data && amazonRes.data.length > 0),
         shopify: !!(shopifyRes.data && shopifyRes.data.length > 0),
         ebay: !!(ebayRes.data && ebayRes.data.length > 0),
+        mirakl: !!(miraklRes.data && miraklRes.data.length > 0),
       });
 
       // Load sub-channels for source preference
@@ -170,6 +175,7 @@ export default function ApiConnectionsPanel({
               { key: 'amazon', label: 'Amazon' },
               { key: 'shopify', label: 'Shopify' },
               { key: 'ebay', label: 'eBay' },
+              { key: 'mirakl', label: 'Mirakl' },
             ] as const).map(({ key, label }) => (
               <div key={key} className="flex items-center gap-1 text-xs">
                 {summary[key] ? (
@@ -202,6 +208,9 @@ export default function ApiConnectionsPanel({
 
           {/* eBay */}
           <EbayConnectionStatus />
+
+          {/* Mirakl */}
+          <MiraklConnectionPanel />
 
           {/* Shopify Channel Management */}
           <ChannelManagement />

@@ -1397,6 +1397,48 @@ export type Database = {
         }
         Relationships: []
       }
+      mirakl_tokens: {
+        Row: {
+          access_token: string | null
+          base_url: string
+          client_id: string
+          client_secret: string
+          created_at: string
+          expires_at: string | null
+          id: string
+          marketplace_label: string
+          seller_company_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token?: string | null
+          base_url: string
+          client_id: string
+          client_secret: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          marketplace_label?: string
+          seller_company_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string | null
+          base_url?: string
+          client_id?: string
+          client_secret?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          marketplace_label?: string
+          seller_company_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       order_shipping_estimates: {
         Row: {
           calculation_basis: Json | null

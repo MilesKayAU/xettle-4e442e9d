@@ -1,0 +1,339 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { verifyRequest } from "../_shared/auth-guard.ts";
+import { getValidMiraklToken } from "../_shared/mirakl-token.ts";
+
+// ═══════════════════════════════════════════════════════════════
+// MIRAKL TRANSACTION TYPE → STANDARD SETTLEMENT FIELD MAP
+// All signs = 1 because Mirakl's `amount` field carries its own sign
+// (credits positive, debits negative).
+// ═══════════════════════════════════════════════════════════════
+
+const MIRAKL_TYPE_MAP: Record<string, { field: string; sign: 1 }> = {
+  ORDER_AMOUNT:                     { field: "sales_principal", sign: 1 },
+  ORDER_AMOUNT_TAX:                 { field: "gst_on_income", sign: 1 },
+  ORDER_SHIPPING_AMOUNT:            { field: "sales_shipping", sign: 1 },
+  ORDER_SHIPPING_AMOUNT_TAX:        { field: "gst_on_income", sign: 1 },
+  COMMISSION_FEE:                   { field: "seller_fees", sign: 1 },
+  COMMISSION_VAT:                   { field: "gst_on_expenses", sign: 1 },
+  ORDER_REFUND_AMOUNT:              { field: "refunds", sign: 1 },
+  ORDER_REFUND_AMOUNT_TAX:          { field: "gst_on_income", sign: 1 },
+  ORDER_REFUND_SHIPPING_AMOUNT:     { field: "refunds", sign: 1 },
+  ORDER_REFUND_SHIPPING_AMOUNT_TAX: { field: "gst_on_income", sign: 1 },
+  MANUAL_CREDIT:                    { field: "reimbursements", sign: 1 },
+  MANUAL_CREDIT_VAT:                { field: "gst_on_expenses", sign: 1 },
+  MANUAL_INVOICE:                   { field: "other_fees", sign: 1 },
+  MANUAL_INVOICE_VAT:               { field: "gst_on_expenses", sign: 1 },
+};
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+Deno.serve(async (req) => {
+  const origin = req.headers.get("Origin") ?? "";
+  const corsHeaders = getCorsHeaders(origin);
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+  try {
+    const { userId, isCron } = await verifyRequest(req, { allowCron: true });
+    const body = await req.json().catch(() => ({}));
+
+    // Determine which user(s) to fetch for
+    const targetUserId = isCron ? (body.userId || null) : userId;
+    if (!targetUserId) {
+      return new Response(
+        JSON.stringify({ error: "No target user" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // Load Mirakl connections for user (service role bypasses RLS)
+    const { data: connections, error: connErr } = await adminClient
+      .from("mirakl_tokens")
+      .select("*")
+      .eq("user_id", targetUserId);
+
+    if (connErr) throw connErr;
+    if (!connections || connections.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "No Mirakl connections found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const allResults: any[] = [];
+
+    for (const connection of connections) {
+      try {
+        const token = await getValidMiraklToken(adminClient, connection);
+        const result = await fetchSettlementsForConnection(
+          adminClient, targetUserId, connection, token, body.sync_from,
+        );
+        allResults.push({
+          marketplace_label: connection.marketplace_label,
+          base_url: connection.base_url,
+          ...result,
+        });
+      } catch (connError: any) {
+        allResults.push({
+          marketplace_label: connection.marketplace_label,
+          base_url: connection.base_url,
+          error: connError.message,
+        });
+      }
+    }
+
+    const totalImported = allResults.reduce((s, r) => s + (r.imported || 0), 0);
+    const totalSkipped = allResults.reduce((s, r) => s + (r.skipped || 0), 0);
+    const totalEmpty = allResults.reduce((s, r) => s + (r.empty_skipped || 0), 0);
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        imported: totalImported,
+        skipped: totalSkipped,
+        empty_skipped: totalEmpty,
+        connections: allResults,
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  } catch (err: any) {
+    console.error("[fetch-mirakl-settlements] Error:", err);
+    return new Response(
+      JSON.stringify({ error: err.message }),
+      { status: err.message?.includes("Forbidden") ? 403 : 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// CORE FETCH + MAP LOGIC
+// ═══════════════════════════════════════════════════════════════
+
+async function fetchSettlementsForConnection(
+  adminClient: any,
+  userId: string,
+  connection: any,
+  token: string,
+  syncFrom?: string,
+) {
+  const baseUrl = connection.base_url.replace(/\/$/, "");
+  const marketplaceCode = (connection.marketplace_label || "mirakl").toLowerCase().replace(/\s+/g, "_");
+
+  // Default to 90 days if no sync_from
+  const defaultFrom = new Date();
+  defaultFrom.setDate(defaultFrom.getDate() - 90);
+  const dateFrom = syncFrom || defaultFrom.toISOString().split("T")[0];
+
+  // Fetch transaction logs from Mirakl API
+  const apiUrl = `${baseUrl}/api/sellerpayment/transactions_logs?start_date=${dateFrom}T00:00:00Z&paginate=false`;
+
+  const res = await fetch(apiUrl, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => "");
+    throw new Error(`Mirakl API error ${res.status}: ${errorText.slice(0, 200)}`);
+  }
+
+  const data = await res.json();
+  const transactions = data.transactions || data.transaction_logs || data.data || [];
+
+  if (!Array.isArray(transactions) || transactions.length === 0) {
+    return { imported: 0, skipped: 0, empty_skipped: 0, message: "No transactions found" };
+  }
+
+  // Group transactions by payment_reference (payout group)
+  const groups = new Map<string, any[]>();
+  for (const txn of transactions) {
+    const key = txn.payment_reference || txn.payout_id || txn.accounting_document_number || "ungrouped";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(txn);
+  }
+
+  let imported = 0;
+  let skipped = 0;
+  let emptySkipped = 0;
+
+  for (const [payoutRef, txns] of groups) {
+    // ─── Accumulate into standard settlement fields (Rule 1: additive, coerce to Number) ───
+    const totals: Record<string, number> = {
+      sales_principal: 0,
+      sales_shipping: 0,
+      seller_fees: 0,
+      refunds: 0,
+      reimbursements: 0,
+      other_fees: 0,
+      gst_on_income: 0,
+      gst_on_expenses: 0,
+      bank_deposit: 0,
+    };
+
+    let periodStart = "";
+    let periodEnd = "";
+
+    for (const txn of txns) {
+      // Rule 1: Always coerce amount to Number
+      const amount = Number(txn.amount) || 0;
+      const type = (txn.transaction_type || txn.type || "").toUpperCase();
+
+      // Track date range
+      const txnDate = txn.date_created || txn.transaction_date || txn.created_date || "";
+      if (txnDate) {
+        const dateOnly = txnDate.split("T")[0];
+        if (!periodStart || dateOnly < periodStart) periodStart = dateOnly;
+        if (!periodEnd || dateOnly > periodEnd) periodEnd = dateOnly;
+      }
+
+      // Rule 2: Flexible payout type detection
+      if (type.includes("PAYMENT") || type.includes("PAYOUT") || type.includes("TRANSFER")) {
+        totals.bank_deposit += amount;
+      } else if (MIRAKL_TYPE_MAP[type]) {
+        const mapping = MIRAKL_TYPE_MAP[type];
+        totals[mapping.field] += amount * mapping.sign;
+      } else {
+        // Rule 4: Unknown type logger
+        totals.other_fees += amount;
+        await adminClient.from("system_events").insert({
+          user_id: userId,
+          event_type: "mirakl_unknown_transaction_type",
+          severity: "warning",
+          marketplace_code: marketplaceCode,
+          details: {
+            transaction_type: txn.transaction_type || txn.type,
+            amount: txn.amount,
+            payment_reference: payoutRef,
+            marketplace: connection.marketplace_label,
+            base_url: connection.base_url,
+          },
+        });
+      }
+    }
+
+    // ─── Rule 5: Do not save empty settlements ───
+    const hasActivity =
+      Math.abs(totals.sales_principal) > 0.001 ||
+      Math.abs(totals.sales_shipping) > 0.001 ||
+      Math.abs(totals.seller_fees) > 0.001 ||
+      Math.abs(totals.refunds) > 0.001 ||
+      Math.abs(totals.reimbursements) > 0.001 ||
+      Math.abs(totals.other_fees) > 0.001 ||
+      Math.abs(totals.bank_deposit) > 0.001;
+
+    if (!hasActivity) {
+      emptySkipped++;
+      await adminClient.from("system_events").insert({
+        user_id: userId,
+        event_type: "mirakl_empty_settlement_skipped",
+        severity: "info",
+        marketplace_code: marketplaceCode,
+        details: {
+          payment_reference: payoutRef,
+          transaction_count: txns.length,
+          marketplace: connection.marketplace_label,
+        },
+      });
+      continue;
+    }
+
+    // ─── Rule 3: Reconciliation check with tolerance ───
+    const calculatedSum = round2(
+      totals.sales_principal +
+      totals.sales_shipping +
+      totals.seller_fees +
+      totals.refunds +
+      totals.reimbursements +
+      totals.other_fees +
+      totals.gst_on_income +
+      totals.gst_on_expenses,
+    );
+    const reconDiff = Math.abs(calculatedSum - totals.bank_deposit);
+
+    let reconStatus = "reconciled";
+    if (reconDiff >= 1.0) {
+      reconStatus = "recon_warning";
+      await adminClient.from("system_events").insert({
+        user_id: userId,
+        event_type: "mirakl_reconciliation_mismatch",
+        severity: "warning",
+        marketplace_code: marketplaceCode,
+        details: {
+          payment_reference: payoutRef,
+          calculated_sum: calculatedSum,
+          bank_deposit: totals.bank_deposit,
+          difference: round2(reconDiff),
+          marketplace: connection.marketplace_label,
+        },
+      });
+    } else if (reconDiff >= 0.05) {
+      // Minor rounding — log info but proceed normally
+      await adminClient.from("system_events").insert({
+        user_id: userId,
+        event_type: "mirakl_reconciliation_rounding",
+        severity: "info",
+        marketplace_code: marketplaceCode,
+        details: {
+          payment_reference: payoutRef,
+          difference: round2(reconDiff),
+        },
+      });
+    }
+
+    // Build settlement ID
+    const settlementId = `mirakl-${marketplaceCode}-${payoutRef}`;
+
+    // Check for duplicate
+    const { data: existing } = await adminClient
+      .from("settlements")
+      .select("id")
+      .eq("settlement_id", settlementId)
+      .eq("user_id", userId)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      skipped++;
+      continue;
+    }
+
+    // Save settlement
+    const { error: insertErr } = await adminClient.from("settlements").insert({
+      user_id: userId,
+      settlement_id: settlementId,
+      marketplace: marketplaceCode,
+      period_start: periodStart || dateFrom,
+      period_end: periodEnd || new Date().toISOString().split("T")[0],
+      bank_deposit: round2(totals.bank_deposit),
+      sales_principal: round2(totals.sales_principal),
+      sales_shipping: round2(totals.sales_shipping),
+      seller_fees: round2(totals.seller_fees),
+      refunds: round2(totals.refunds),
+      reimbursements: round2(totals.reimbursements),
+      other_fees: round2(totals.other_fees),
+      gst_on_income: round2(totals.gst_on_income),
+      gst_on_expenses: round2(totals.gst_on_expenses),
+      status: reconStatus === "recon_warning" ? "recon_warning" : "saved",
+      source: "mirakl_api",
+      currency: "AUD",
+    });
+
+    if (insertErr) {
+      console.error(`[fetch-mirakl-settlements] Insert failed for ${settlementId}:`, insertErr);
+      continue;
+    }
+
+    imported++;
+  }
+
+  return { imported, skipped, empty_skipped: emptySkipped };
+}

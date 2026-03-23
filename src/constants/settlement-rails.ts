@@ -38,6 +38,7 @@ export function getValidDestTypes(railCode: string): readonly string[] {
 /** Maps legacy/variant marketplace codes to canonical rail codes */
 export const RAIL_ALIASES: Record<string, string> = {
   ebay: 'ebay_au',
+  mirakl: 'mirakl_marketplace',
 };
 
 /** Normalise a marketplace code to its canonical rail code */
@@ -77,6 +78,7 @@ export const RAIL_PAYOUT_MODE: Record<string, RailPayoutConfig> = {
   ebay:              { payout_source: 'settlement', bank_match_required: false },
   catch:             { payout_source: 'settlement', bank_match_required: false },
   mydeal:            { payout_source: 'settlement', bank_match_required: false },
+  mirakl_marketplace: { payout_source: 'settlement', bank_match_required: false },
 };
 
 /** Default config for unknown rails — assume bank match required (safe default) */
