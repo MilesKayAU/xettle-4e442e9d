@@ -35,6 +35,8 @@ interface AggregatedMarketplace {
   has_cost_data: boolean;
   has_estimated_fees: boolean;
   implied_commission_rate: number | null;
+  shipping_deduction: number;
+  order_count: number;
 }
 
 function formatAUD(amount: number): string {
