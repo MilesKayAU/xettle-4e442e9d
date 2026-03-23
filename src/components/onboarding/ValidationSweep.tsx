@@ -176,7 +176,7 @@ export default function ValidationSweep({
       setAllConnections(allConns.map(c => ({ marketplace_code: c.marketplace_code, marketplace_name: c.marketplace_name, connection_status: c.connection_status })));
       const apiCodes = new Set<string>(
         allConns
-          .filter((c) => c.connection_type === 'api' && (ACTIVE_CONNECTION_STATUSES as readonly string[]).includes(c.connection_status))
+          .filter((c) => isApiConnectionType(c.connection_type) && (ACTIVE_CONNECTION_STATUSES as readonly string[]).includes(c.connection_status))
           .map((c) => c.marketplace_code)
       );
       setApiSyncedCodes(apiCodes);
