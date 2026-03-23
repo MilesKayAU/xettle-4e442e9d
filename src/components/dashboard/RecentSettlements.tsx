@@ -113,8 +113,7 @@ function categorize(row: SettlementRow): StatusCategory {
   if (row.status === 'pre_boundary') return 'completed';
   if (row.status === 'ingested') return 'other';
   return 'other';
-}
-
+  }
 
 function StatusBadge({ status, xeroStatus, syncOrigin, marketplace }: { status: string; xeroStatus: string | null; syncOrigin?: string; marketplace?: string | null }) {
   // Fully reconciled (PAID in Xero)
@@ -464,7 +463,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
     if (actionableOnly) {
       visible = visible.filter(r => {
         const cat = categorize(r);
-        return cat === 'ready' || cat === 'attention' || cat === 'other';
+        return cat === 'ready' || cat === 'attention';
       });
     }
     
@@ -562,6 +561,31 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
     );
   }
 
+  // In actionableOnly mode, show "all clear" when nothing needs action
+  if (actionableOnly && counts.ready === 0 && counts.attention === 0) {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              Settlements — All Clear
+            </CardTitle>
+            {onViewAll && (
+              <Button variant="ghost" size="sm" onClick={onViewAll} className="text-xs text-muted-foreground hover:text-foreground">
+                Full ledger
+                <ArrowRight className="h-3 w-3 ml-1" />
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0 pb-4">
+          <p className="text-sm text-muted-foreground">No settlements waiting to be sent to Xero.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const summaryCards: { key: StatusCategory; label: string; sublabel: string; count: number; total?: number; color: string; icon: React.ReactNode }[] = [
     {
       key: 'ready',
@@ -572,15 +596,16 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
       color: 'border-sky-200 bg-sky-50/80 dark:border-sky-800 dark:bg-sky-900/20',
       icon: <Send className="h-4 w-4 text-sky-600 dark:text-sky-400" />,
     },
-    {
-      key: 'posted',
+    // Hide "In Xero — Processing" on homepage (actionableOnly mode)
+    ...(!actionableOnly ? [{
+      key: 'posted' as StatusCategory,
       label: 'In Xero — Processing',
       sublabel: 'Posted, awaiting reconciliation',
       count: counts.posted,
       total: counts.postedTotal,
       color: 'border-amber-300 bg-amber-50/80 dark:border-amber-700 dark:bg-amber-900/25',
       icon: <CheckCircle2 className="h-4 w-4 text-amber-600 dark:text-amber-400" />,
-    },
+    }] : []),
     // Only show Needs Attention when there are items
     ...(counts.attention > 0 ? [{
       key: 'attention' as StatusCategory,
