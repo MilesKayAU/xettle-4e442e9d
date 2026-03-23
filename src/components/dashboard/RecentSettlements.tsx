@@ -331,9 +331,11 @@ interface RecentSettlementsProps {
   /** External filter from pipeline click: { marketplace, month (YYYY-MM) } */
   pipelineFilter?: { marketplace: string; month: string } | null;
   onClearPipelineFilter?: () => void;
+  /** When true, only show settlements needing user action (ready_to_push, push_failed, ingested) */
+  actionableOnly?: boolean;
 }
 
-export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPipelineFilter }: RecentSettlementsProps) {
+export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPipelineFilter, actionableOnly }: RecentSettlementsProps) {
   const [allRows, setAllRows] = useState<SettlementRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -458,6 +460,14 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
     if (activeFilter === 'hidden') return allRows.filter(r => r.status === 'hidden');
     let visible = showHidden ? allRows : allRows.filter(r => r.status !== 'hidden');
     
+    // When actionableOnly, only show rows needing user action
+    if (actionableOnly) {
+      visible = visible.filter(r => {
+        const cat = categorize(r);
+        return cat === 'ready' || cat === 'attention' || cat === 'other';
+      });
+    }
+    
     // Apply pipeline filter if set
     if (pipelineFilter) {
       visible = visible.filter(r => {
@@ -471,7 +481,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
     const base = !activeFilter ? visible : visible.filter(r => categorize(r) === activeFilter);
     // Sort by actionability: most actionable first
     return [...base].sort((a, b) => getActionSort(a) - getActionSort(b));
-  }, [allRows, activeFilter, showHidden, pipelineFilter]);
+  }, [allRows, activeFilter, showHidden, pipelineFilter, actionableOnly]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageRows = useMemo(() => {
