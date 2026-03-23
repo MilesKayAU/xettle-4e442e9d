@@ -170,6 +170,20 @@ export default function ActionCentre({
       if (connectionsRes.data) {
         setConnectedMarketplaces(connectionsRes.data.map((c: any) => c.marketplace_code));
       }
+
+      // Build set of channels that have their own dedicated API token
+      // Sub-channels flowing through Shopify (Kogan, Big W, etc.) are NOT true API channels
+      const apiChannels = new Set<string>();
+      if (amazonTokenRes.data && amazonTokenRes.data.length > 0) apiChannels.add('amazon_au');
+      if (ebayTokenRes.data && ebayTokenRes.data.length > 0) apiChannels.add('ebay_au');
+      if (shopifyTokenRes.data && shopifyTokenRes.data.length > 0) apiChannels.add('shopify_payments');
+      if (miraklTokenRes.data) {
+        for (const mk of miraklTokenRes.data) {
+          const label = mk.marketplace_label?.toLowerCase().replace(/\s+/g, '_') || '';
+          if (label) apiChannels.add(label);
+        }
+      }
+      setTrueApiChannels(apiChannels);
       if (lastSyncRes.data?.created_at) {
         setLastAutoSync(new Date(lastSyncRes.data.created_at));
       }
