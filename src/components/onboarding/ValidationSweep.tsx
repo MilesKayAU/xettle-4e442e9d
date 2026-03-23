@@ -25,7 +25,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import PushSafetyPreview from '@/components/admin/accounting/PushSafetyPreview';
 import { runMarketplaceSync, runDirectMarketplaceSync } from '@/actions/sync';
-import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
+import { ACTIVE_CONNECTION_STATUSES, isApiConnectionType } from '@/constants/connection-status';
 
 interface ValidationRow {
   id: string;
