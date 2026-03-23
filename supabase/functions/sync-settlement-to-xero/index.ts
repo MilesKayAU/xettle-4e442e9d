@@ -1247,18 +1247,24 @@ serve(async (req) => {
     };
 
     const marketplace = body.settlementData?.marketplace || body.marketplace || '';
-    const resolvedContact = contactName || SERVER_MARKETPLACE_CONTACTS[marketplace];
+    let resolvedContact = contactName || SERVER_MARKETPLACE_CONTACTS[marketplace];
     if (!resolvedContact) {
-      // Hard error: refuse to create an invoice with no contact mapping
+      // Soft fallback: use generic contact name and log a warning
+      resolvedContact = 'Marketplace Settlement';
+      console.warn(`[contact-mapping] No contact mapping for marketplace "${marketplace}" — using generic fallback "Marketplace Settlement"`);
       await supabase.from('system_events').insert({
         user_id: userId,
-        event_type: 'xero_push_blocked',
+        event_type: 'xero_push_contact_fallback',
         settlement_id: settlementId,
         marketplace_code: marketplace,
-        severity: 'error',
-        details: { reason: 'missing_contact_mapping', marketplace },
+        severity: 'warning',
+        details: {
+          reason: 'missing_contact_mapping',
+          marketplace,
+          fallback_contact: 'Marketplace Settlement',
+          message: `No contact mapping found for marketplace: ${marketplace} — used generic fallback. Add to SERVER_MARKETPLACE_CONTACTS to resolve.`,
+        },
       });
-      throw new Error(`missing_contact_mapping: No Xero contact mapping for marketplace "${marketplace}". Add a mapping before pushing.`);
     }
 
     // ─── INVOICE STATUS: DRAFT (default) or AUTHORISED (stricter gates) ──
