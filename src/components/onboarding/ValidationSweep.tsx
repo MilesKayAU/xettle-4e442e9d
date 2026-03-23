@@ -714,7 +714,7 @@ export default function ValidationSweep({
                         {row.bank_matched ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" /> : <XCircle className="h-3.5 w-3.5 text-muted-foreground mx-auto" />}
                       </td>
                       <td className="px-3 py-2 text-center">
-                        {isReconRow ? (
+                        {row.settlement_id?.startsWith('shopify_auto_') ? (
                           <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400">🔍 Recon Only</Badge>
                         ) : (
                           <StatusPill status={row.overall_status} isApiSynced={apiSyncedCodes.has(row.marketplace_code)} />
