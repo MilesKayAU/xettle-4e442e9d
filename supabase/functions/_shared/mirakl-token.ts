@@ -11,8 +11,19 @@
  *    → Some sellers/marketplaces only support this
  *
  * Each connection stores `auth_mode` = 'oauth' | 'api_key' | 'both'
- * This helper returns the correct Authorization header value based on mode.
+ * and optional `auth_header_type` = 'bearer' | 'authorization' | 'x-api-key'
+ * This helper returns the correct header name + value based on mode.
+ *
+ * Header variants (varies by marketplace):
+ *   - bearer       → Authorization: Bearer <token>   (default for OAuth)
+ *   - authorization → Authorization: <api_key>       (default for API key)
+ *   - x-api-key    → X-API-KEY: <api_key>            (some legacy Mirakl instances)
  */
+
+export interface MiraklAuthResult {
+  headerName: string;
+  headerValue: string;
+}
 
 interface MiraklTokenRow {
   id: string;
@@ -24,39 +35,63 @@ interface MiraklTokenRow {
   expires_at: string | null;
   api_key: string | null;
   auth_mode: string; // 'oauth' | 'api_key' | 'both'
+  auth_header_type: string | null; // 'bearer' | 'authorization' | 'x-api-key' | null
 }
 
 /**
- * Returns the correct Authorization header value for Marketplace API calls.
+ * Returns the correct header name + value for Marketplace API calls.
  *
- * - auth_mode='api_key' → returns the api_key directly
+ * - auth_mode='api_key' → returns api_key with appropriate header
  * - auth_mode='oauth' → returns 'Bearer <token>' (refreshing if needed)
  * - auth_mode='both' → prefers OAuth Bearer, falls back to api_key
+ *
+ * Header format is determined by auth_header_type (if set), otherwise:
+ *   oauth → bearer (Authorization: Bearer <token>)
+ *   api_key → authorization (Authorization: <key>)
  */
 export async function getMiraklAuthHeader(
   adminClient: any,
   row: MiraklTokenRow,
-): Promise<string> {
+): Promise<MiraklAuthResult> {
   const mode = row.auth_mode || "oauth";
 
   if (mode === "api_key") {
     if (!row.api_key) {
       throw new Error(`[mirakl-token] auth_mode=api_key but no api_key set for ${row.base_url}`);
     }
-    return row.api_key;
+    return buildApiKeyResult(row.api_key, row.auth_header_type);
   }
 
   // OAuth or both — try OAuth first
   try {
     const bearerToken = await refreshOAuthToken(adminClient, row);
-    return `Bearer ${bearerToken}`;
+    return { headerName: "Authorization", headerValue: `Bearer ${bearerToken}` };
   } catch (err) {
     // If mode='both', fall back to API key
     if (mode === "both" && row.api_key) {
       console.warn(`[mirakl-token] OAuth failed for ${row.base_url}, falling back to API key`);
-      return row.api_key;
+      return buildApiKeyResult(row.api_key, row.auth_header_type);
     }
     throw err;
+  }
+}
+
+/**
+ * Builds the header result for API key auth based on auth_header_type.
+ *
+ * - 'x-api-key' → X-API-KEY: <key>
+ * - 'bearer' → Authorization: Bearer <key>  (unusual but some marketplaces)
+ * - 'authorization' | null → Authorization: <key>  (default)
+ */
+function buildApiKeyResult(apiKey: string, headerType: string | null): MiraklAuthResult {
+  switch (headerType) {
+    case "x-api-key":
+      return { headerName: "X-API-KEY", headerValue: apiKey };
+    case "bearer":
+      return { headerName: "Authorization", headerValue: `Bearer ${apiKey}` };
+    case "authorization":
+    default:
+      return { headerName: "Authorization", headerValue: apiKey };
   }
 }
 
@@ -127,7 +162,7 @@ export function getMiraklApiKey(row: MiraklTokenRow): string {
 export async function getValidMiraklToken(
   adminClient: any,
   row: MiraklTokenRow,
-): Promise<string> {
+): Promise<MiraklAuthResult> {
   return getMiraklAuthHeader(adminClient, row);
 }
 

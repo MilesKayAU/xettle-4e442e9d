@@ -1,0 +1,1 @@
+ALTER TABLE public.mirakl_tokens ADD COLUMN IF NOT EXISTS auth_header_type text DEFAULT NULL;
