@@ -72,7 +72,7 @@ export default function Auth() {
           // After auth, auto-initiate Shopify OAuth
           initiateShopifyOAuth(session.user.id);
         } else {
-          navigate('/dashboard');
+          navigate('/dashboard', { replace: true });
         }
       }
     });
@@ -108,7 +108,7 @@ export default function Auth() {
       toast({ title: "Welcome back!", description: "You have been signed in successfully." });
       // Navigation handled by onAuthStateChange
       if (!isShopifyInstall) {
-        navigate('/dashboard');
+        navigate('/dashboard', { replace: true });
       }
     } catch (err: any) {
       const msg = err?.message === 'timeout'
