@@ -1,30 +1,29 @@
 
 
-## Validation: Current State Already Matches Requirements
+## Make Seller Company ID Optional & Relabel for Bunnings
 
-After reviewing the codebase, the previous round of changes already implemented nearly everything requested:
+### Problem
+"Seller Company ID" is Mirakl jargon. Bunnings sellers who received their API key from Bunnings support won't know this value. They'd know their Bunnings Vendor Number (if anything), but most likely their API key is scoped to their single shop already.
 
-| Requirement | Status |
-|---|---|
-| Default auth_mode = api_key | ✅ Line 36: `useState<AuthMode>('api_key')` |
-| API key field shown by default | ✅ Visible when authMode = api_key |
-| OAuth hidden unless user switches | ✅ Only shown when authMode = oauth/both |
-| Bunnings onboarding instructions in UI | ✅ Lines 246-257, step-by-step guide |
-| Backend uses `getMiraklAuthHeader()` | ✅ No Bunnings-specific logic in edge function |
-| api_key mode → `Authorization: <key>` (not Bearer) | ✅ `mirakl-token.ts` line 94: default case returns raw key |
-| Override via auth_header_type | ✅ Supported via Advanced section |
-| Dual auth (oauth / api_key / both) preserved | ✅ All three modes in RadioGroup |
+### Changes
 
-### One Fix Needed
+**1. MiraklConnectionPanel.tsx — Relabel & make optional**
+- Rename label from "Seller Company ID" to **"Shop ID (optional)"**
+- Add helper text: *"Leave blank if you only have one store. You can find this in your seller portal under My Settings → Mirakl seller account."*
+- Update placeholder to: `e.g. your Bunnings vendor number or Mirakl shop ID`
+- Allow empty value — generate a fallback for DB uniqueness (e.g. `default-{userId-prefix}`)
 
-The OAuth radio label says **"OAuth (recommended)"** — this is misleading since API Key is the correct default for Bunnings. 
+**2. mirakl-auth edge function — Accept empty seller_company_id**
+- Remove the required validation for `seller_company_id`
+- If blank, default to `"default"` for the DB unique constraint
+- This preserves multi-shop support for users who do have multiple shops
 
-**Change:** Swap the labels:
-- `api_key` → **"API Key (recommended)"**
-- `oauth` → **"OAuth"**
+**3. fetch-mirakl-settlements — Skip shop param when empty/default**
+- Only append `&shop=` if `seller_company_id` exists and is not `"default"`
+- This lets the API return all settlements for the authenticated key
 
-This is a two-line label change in `MiraklConnectionPanel.tsx` (lines 285 and 291).
-
-### No backend changes
-The `mirakl-token.ts` shared helper and `fetch-mirakl-settlements` edge function are correctly implemented with dynamic auth detection. No changes needed.
+### No changes to
+- Database schema (seller_company_id column stays, just allows "default" value)
+- OAuth flow
+- Any other marketplace logic
 
