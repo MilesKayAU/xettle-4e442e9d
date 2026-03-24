@@ -503,6 +503,12 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               ? (result.isSettlementFile ? (isFirstContact ? 'first_contact' : 'detected') : 'wrong_file')
               : 'unknown';
 
+            // Kogan PDF is a companion file — mark as detected even without settlements
+            const isKoganPdf = result?.marketplace === 'kogan' && uniqueFiles[idx].name.toLowerCase().endsWith('.pdf');
+            if (isKoganPdf && settlements.length === 0) {
+              status = 'detected';
+            }
+
             let error: string | undefined;
             if (allDupes) {
               status = 'error';
