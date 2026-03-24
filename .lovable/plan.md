@@ -45,3 +45,26 @@ net_payout  = PDF "Total paid amount"             = $753.86
 ```
 
 ### No database changes needed
+
+---
+
+## Plan: Kogan Multi-File Pairing with Missing File Warnings
+
+### Status: ✅ Implemented
+
+### What Was Done
+
+1. **Added `extractKoganPdfDocNumbers`** to `src/utils/kogan-remittance-parser.ts` — lightweight doc number extraction for pairing CSVs with PDFs.
+
+2. **Added Kogan pairing logic** to `SmartUploadFlow.tsx` — `koganPairings` memo groups Kogan CSVs and PDFs by AP Invoice doc number, tracking paired/unpaired status.
+
+3. **Added KoganPairingCard UI** — replaces individual file cards for Kogan uploads with a grouped settlement view showing:
+   - ✅ Paired settlements (CSV + PDF matched)
+   - ⚠️ Missing PDF warnings with clear explanation of inaccuracy
+   - ⚠️ Missing CSV warnings (orphaned PDFs)
+   - Per-settlement save buttons with pairing status
+   - "Upload missing files" button
+
+4. **Added missing PDF metadata flag** — when saving a Kogan CSV without its PDF, settlements get `missingPdf: true` in metadata and user sees an amber warning toast.
+
+5. **Individual Kogan file cards hidden** — when pairing card is shown, individual Kogan file cards are suppressed to avoid confusion.
