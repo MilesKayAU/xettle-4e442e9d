@@ -257,6 +257,7 @@ export default function InventoryDashboard({ onNavigateToSettings }: { onNavigat
           }}
           loading={universalLoading}
           inventoryRules={rules}
+          onSaveSkuLink={handleSaveSkuLink}
         />
       )}
       {activeTab === 'shopify' && <ShopifyInventoryTab />}
