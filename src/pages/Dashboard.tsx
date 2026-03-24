@@ -503,6 +503,7 @@ export default function Dashboard() {
   const [outstandingCount, setOutstandingCount] = useState(0);
   const [settlementCounts, setSettlementCounts] = useState<Record<string, number>>({});
   const [readyToPushCount, setReadyToPushCount] = useState(0);
+  const [koganMissingPdfCount, setKoganMissingPdfCount] = useState(0);
 
   // Derive API-connected marketplace codes dynamically from marketplace_connections + legacy token flags
   const apiConnectedCodes = useMemo(() => {
@@ -691,7 +692,21 @@ export default function Dashboard() {
     }
   }, [user, loadMarketplaces]);
 
-  // Auto-sweep marketplace_validation if empty but active connections exist
+  // Check for Kogan settlements saved without PDF (missingPdf=true)
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const { count } = await supabase
+          .from('settlements')
+          .select('id', { count: 'exact', head: true })
+          .ilike('marketplace', '%kogan%')
+          .eq('metadata->>missingPdf', 'true');
+        setKoganMissingPdfCount(count ?? 0);
+      } catch { /* silent */ }
+    })();
+  }, [user]);
+
   useEffect(() => {
     if (!user) return;
     (async () => {
@@ -1046,6 +1061,22 @@ export default function Dashboard() {
                 <DestinationAccountMapper />
               )}
 
+              {/* Kogan missingPdf alert */}
+              {koganMissingPdfCount > 0 && (
+                <div className="flex items-center justify-between rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/20 px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                    <span className="text-xs text-foreground">
+                      <strong>{koganMissingPdfCount} Kogan settlement{koganMissingPdfCount !== 1 ? 's' : ''} saved without PDF</strong>
+                      <span className="text-muted-foreground"> — net payout may not match bank deposit. Upload the Remittance PDF to correct.</span>
+                    </span>
+                  </div>
+                  <Button size="sm" variant="outline" className="gap-1.5 text-xs border-amber-300 dark:border-amber-700" onClick={() => setShowUploadSheet(true)}>
+                    <Upload className="h-3 w-3" /> Upload PDF
+                  </Button>
+                </div>
+              )}
+
               {/* CoA-detected channels awaiting confirmation */}
               {suggestedConnections.length > 0 && (
                 <CoaDetectedPanel
@@ -1119,7 +1150,12 @@ export default function Dashboard() {
                         <p className="text-sm font-medium text-amber-800 dark:text-amber-300 mb-1">📤 Upload needed for:</p>
                         <ul className="text-xs text-amber-700 dark:text-amber-400 space-y-0.5">
                           {missingSettlements.map((m, i) => (
-                            <li key={i}>• <strong>{m.marketplace_label}</strong> — {m.period_label}</li>
+                            <li key={i}>
+                              • <strong>{m.marketplace_label}</strong> — {m.period_label}
+                              {m.marketplace_code.toLowerCase().includes('kogan') && (
+                                <span className="ml-1 font-medium">(CSV + PDF pair required)</span>
+                              )}
+                            </li>
                           ))}
                         </ul>
                       </div>

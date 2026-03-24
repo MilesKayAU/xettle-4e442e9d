@@ -424,13 +424,17 @@ export default function ActionCentre({
               These marketplaces don't have API connections — upload settlement CSVs to keep Xero up to date.
             </p>
             <ul className="space-y-1.5">
-              {uploadNeededManual.map(r => (
-                <li key={r.id} className="text-xs flex items-center gap-2 bg-background/50 rounded px-3 py-1.5">
-                  <span className="text-amber-400">↑</span>
-                  <span className="font-medium">{MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code}</span>
-                  <span className="text-muted-foreground">— {formatPeriod(r.period_start)}</span>
-                </li>
-              ))}
+              {uploadNeededManual.map(r => {
+                const isKogan = r.marketplace_code.toLowerCase().includes('kogan');
+                return (
+                  <li key={r.id} className="text-xs flex items-center gap-2 bg-background/50 rounded px-3 py-1.5">
+                    <span className="text-amber-400">↑</span>
+                    <span className="font-medium">{MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code}</span>
+                    <span className="text-muted-foreground">— {formatPeriod(r.period_start)}</span>
+                    {isKogan && <span className="text-amber-600 dark:text-amber-400 font-medium">(CSV + PDF pair)</span>}
+                  </li>
+                );
+              })}
             </ul>
             {(() => {
               const apiUploadNeeded = uploadNeeded.filter(r => connectedApiMarketplaces.has(r.marketplace_code));

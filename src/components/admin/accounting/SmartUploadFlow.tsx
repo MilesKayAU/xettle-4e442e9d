@@ -2062,6 +2062,16 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
             return null;
           })()}
 
+          {/* Kogan Pairing Guidance Banner */}
+          {koganPairings && koganPairings.groups.some(g => !g.hasPdf || !g.csvFile) && (
+            <div className="flex items-center gap-2 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 px-4 py-2.5">
+              <Info className="h-4 w-4 text-blue-500 shrink-0" />
+              <span className="text-xs text-foreground">
+                <strong>Kogan requires two files per settlement:</strong> a CSV (order data) and a PDF (Remittance Advice) for accurate bank reconciliation. Upload both together for best results.
+              </span>
+            </div>
+          )}
+
           {/* Kogan Pairing Card */}
           {koganPairings && (
             <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/10">
