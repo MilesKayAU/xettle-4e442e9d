@@ -482,7 +482,7 @@ export default function Dashboard() {
       if (stored === 'dashboard') return 'home';
       if (stored === 'outstanding') { try { localStorage.setItem('xettle_settlements_subtab', 'outstanding'); } catch {} return 'settlements'; }
       if (stored === 'smart_upload') return 'home';
-      if (stored === 'home' || stored === 'settlements' || stored === 'insights' || stored === 'settings') return stored as DashboardView;
+      if (stored === 'home' || stored === 'settlements' || stored === 'insights' || stored === 'inventory' || stored === 'settings') return stored as DashboardView;
     } catch { /* storage unavailable */ }
     return 'home';
   });
