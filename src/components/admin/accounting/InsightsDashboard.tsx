@@ -861,21 +861,21 @@ export default function InsightsDashboard() {
   const bestProfit = [...stats].sort((a, b) => b.returnRatio - a.returnRatio)[0];
 
   function getHeroInsight(): string {
+    const shippingNote = anyShippingDeducted ? ' (incl. est. shipping)' : '';
     if (stats.length === 1) {
       const r = stats[0].returnRatio;
       if (r < 0.60) {
-        return `${stats[0].label} keeps $${r.toFixed(2)} per $1 sold — ${((1 - r) * 100).toFixed(0)}% goes to marketplace fees and deductions.`;
+        return `${stats[0].label} keeps $${r.toFixed(2)} per $1 sold${shippingNote} — ${((1 - r) * 100).toFixed(0)}% goes to marketplace fees and deductions.`;
       }
-      return `${stats[0].label} returns $${r.toFixed(2)} for every $1 sold after marketplace fees.`;
+      return `${stats[0].label} returns $${r.toFixed(2)} for every $1 sold after marketplace fees${shippingNote}.`;
     }
-    // If same marketplace leads both, simple message
     if (topRevenue.marketplace === bestProfit.marketplace) {
       if (topRevenue.returnRatio < 0.60) {
-        return `${topRevenue.label} leads in revenue (${formatCurrency(topRevenue.totalSales)}) and retains the most at $${topRevenue.returnRatio.toFixed(2)} per $1 — though ${((1 - topRevenue.returnRatio) * 100).toFixed(0)}% is consumed by fees.`;
+        return `${topRevenue.label} leads in revenue (${formatCurrency(topRevenue.totalSales)}) and retains the most at $${topRevenue.returnRatio.toFixed(2)} per $1${shippingNote} — though ${((1 - topRevenue.returnRatio) * 100).toFixed(0)}% is consumed by fees.`;
       }
-      return `${topRevenue.label} leads in both revenue (${formatCurrency(topRevenue.totalSales)}) and efficiency ($${topRevenue.returnRatio.toFixed(2)} per $1).`;
+      return `${topRevenue.label} leads in both revenue (${formatCurrency(topRevenue.totalSales)}) and efficiency ($${topRevenue.returnRatio.toFixed(2)} per $1${shippingNote}).`;
     }
-    return `${topRevenue.label} drives the most revenue (${formatCurrency(topRevenue.totalSales)}), while ${bestProfit.label} retains the most at $${bestProfit.returnRatio.toFixed(2)} per $1 sold.`;
+    return `${topRevenue.label} drives the most revenue (${formatCurrency(topRevenue.totalSales)}), while ${bestProfit.label} retains the most at $${bestProfit.returnRatio.toFixed(2)} per $1 sold${shippingNote}.`;
   }
 
   // Stacked bar segments for $1 breakdown
