@@ -482,7 +482,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           } catch { /* silent */ }
         }
 
-        return { idx, result, settlements, dbDupeIds, splitResult: undefined as MultiMarketplaceSplitResult | undefined, csvHeaders: fileHeaders, sampleRows, koganDocNumbers, koganRemittanceResult };
+        return { idx, result, settlements, dbDupeIds, splitResult: undefined as MultiMarketplaceSplitResult | undefined, csvHeaders: fileHeaders, sampleRows, koganDocNumbers, koganPdfPeriodMonth, koganRemittanceResult };
       })
     );
 
