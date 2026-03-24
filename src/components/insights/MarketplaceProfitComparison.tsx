@@ -150,7 +150,11 @@ export default function MarketplaceProfitComparison() {
         const apiSyncRows = rows.filter(r => r.source === 'api_sync');
         if (realRows.length > 0 && apiSyncRows.length > 0) {
           grouped[mp] = realRows;
-        }
+      }
+
+      // Build activeSettlementIds AFTER dedup so shopify_auto_* IDs are excluded when CSV exists
+      const dedupedSettlements = Object.values(grouped).flat();
+      const activeSettlementIds = new Set(dedupedSettlements.map(s => (s as any).settlement_id));
       }
 
       // Load observed rates for redistribution
