@@ -158,6 +158,8 @@ Deno.serve(async (req) => {
       }
     }
 
+    console.log(`[profit] autoOrderCounts: ${JSON.stringify([...autoOrderCounts.entries()].map(([k, v]) => [k, Object.fromEntries(v)]))}`);
+
     const AMAZON_PREFIXES = ["amazon"];
     function isAmazonCode(code: string): boolean {
       return AMAZON_PREFIXES.some((p) => code.toLowerCase().startsWith(p));
