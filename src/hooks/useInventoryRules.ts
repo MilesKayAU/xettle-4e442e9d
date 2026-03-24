@@ -25,6 +25,7 @@ export const DEFAULT_INVENTORY_RULES: InventoryRules = {
     ebay: 'shopify',
     mirakl: 'shopify',
   },
+  sku_links: [],
 };
 
 export function useInventoryRules() {
