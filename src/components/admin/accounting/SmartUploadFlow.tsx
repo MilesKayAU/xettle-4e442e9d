@@ -44,7 +44,7 @@ import { parseGenericCSV, parseGenericXLSX } from '@/utils/generic-csv-parser';
 import { parseShopifyPayoutCSV } from '@/utils/shopify-payments-parser';
 import { parseShopifyOrdersCSV } from '@/utils/shopify-orders-parser';
 import { parseBunningsSummaryPdf } from '@/utils/bunnings-summary-parser';
-import { parseKoganRemittancePdf, extractKoganPdfInfo, type KoganRemittanceResult } from '@/utils/kogan-remittance-parser';
+import { parseKoganRemittancePdf, extractKoganPdfInfo, parseKoganPayoutCSV, type KoganRemittanceResult } from '@/utils/kogan-remittance-parser';
 import { parseWoolworthsMarketPlusCSV, isTransactionFee } from '@/utils/woolworths-marketplus-parser';
 import { saveSettlement, validateSettlementSanity, triggerValidationSweep, MARKETPLACE_LABELS as ENGINE_LABELS, type StandardSettlement } from '@/utils/settlement-engine';
 import { createDraftFingerprint } from '@/utils/fingerprint-lifecycle';
@@ -277,6 +277,17 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         // Doc numbers and result are stored via detection callback (see below)
         // Return empty settlements; the merge happens on save
         return [];
+      }
+
+      // Kogan CSV — use dedicated parser instead of generic
+      if (marketplace === 'kogan' && !file.name.toLowerCase().endsWith('.pdf')) {
+        const text = await file.text();
+        const result = parseKoganPayoutCSV(text);
+        if (!result.success) {
+          console.warn('[Kogan CSV] Parse failed:', result.error);
+          return [];
+        }
+        return result.settlements;
       }
       
       if (marketplace === 'shopify_payments') {
@@ -805,6 +816,11 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           const result = await parseBunningsSummaryPdf(df.file);
           if (!result.success) throw new Error('error' in result ? result.error : 'Bunnings parse failed');
           settlements = [result.settlement];
+        } else if (marketplace === 'kogan' && !df.file.name.toLowerCase().endsWith('.pdf')) {
+          const text = await df.file.text();
+          const result = parseKoganPayoutCSV(text);
+          if (!result.success) throw new Error(result.error || 'Kogan CSV parse failed');
+          settlements = result.settlements;
         } else if (marketplace === 'shopify_payments') {
           const text = await df.file.text();
           const result = parseShopifyPayoutCSV(text);
