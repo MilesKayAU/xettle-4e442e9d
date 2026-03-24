@@ -816,6 +816,11 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           const result = await parseBunningsSummaryPdf(df.file);
           if (!result.success) throw new Error('error' in result ? result.error : 'Bunnings parse failed');
           settlements = [result.settlement];
+        } else if (marketplace === 'kogan' && !df.file.name.toLowerCase().endsWith('.pdf')) {
+          const text = await df.file.text();
+          const result = parseKoganPayoutCSV(text);
+          if (!result.success) throw new Error(result.error || 'Kogan CSV parse failed');
+          settlements = result.settlements;
         } else if (marketplace === 'shopify_payments') {
           const text = await df.file.text();
           const result = parseShopifyPayoutCSV(text);
