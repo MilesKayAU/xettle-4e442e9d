@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyRequest } from "../_shared/auth-guard.ts";
-import { getMiraklToken } from "../_shared/mirakl-token.ts";
+import { getMiraklAuthHeader } from "../_shared/mirakl-token.ts";
 
 const PAGE_TIMEOUT_MS = 8000;
 const DEFAULT_LIMIT = 500;
