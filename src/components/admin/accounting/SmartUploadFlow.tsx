@@ -179,6 +179,10 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
   const inputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<DetectedFile[]>([]);
 
+  useEffect(() => {
+    filesRef.current = files;
+  }, [files]);
+
   // Re-parse stale in-memory Kogan CSV entries that were created by the old generic parser
   useEffect(() => {
     const staleKoganCsvs = files
