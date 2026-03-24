@@ -360,7 +360,7 @@ export default function InsightsDashboard() {
             ? totalSales // All clearing invoices — revenue IS the sales total
             : rows.reduce((sum, r) => sum + (r.bank_deposit || 0), 0);
         // Cap ratio at 1.0 — a return > $1 per $1 sold is impossible
-        const returnRatio = totalSales > 0 ? Math.min(netPayout / totalSales, 1) : 0;
+        const returnRatioRaw = totalSales > 0 ? Math.min(netPayout / totalSales, 1) : 0;
         const feesOnlyLoad = totalSales > 0 ? Math.min(totalFees / totalSales, 1) : 0;
         const feeLoad = totalSales > 0 ? Math.min(totalFees / totalSales, 1) : 0;
         const commissionTotal = Math.abs(rows.reduce((sum, r) => sum + (r.seller_fees || 0), 0));
@@ -381,16 +381,21 @@ export default function InsightsDashboard() {
         const fulfilmentUnknown = fulfilmentMethod === 'not_sure';
 
         // Shipping cost estimation — only applied for self_ship / third_party_logistics
-        // Use marketplace_shipping_costs table first, fall back to app_settings postage_cost
         const shippingCostPerOrder = shippingCostByMp[mp] || postageCosts[mp] || 0;
-        // Use real order counts from settlement_profit — do NOT fall back to rows.length
         const estimatedOrderCount = (() => {
           const profitOrderCount = profitOrderCounts[mp];
           if (profitOrderCount && profitOrderCount > 0) return profitOrderCount;
-          return 0; // No real order count available — don't fabricate
+          return 0;
         })();
         const shouldDeductShipping = fulfilmentMethod === 'self_ship' || fulfilmentMethod === 'third_party_logistics';
         const estimatedShippingCost = shouldDeductShipping ? shippingCostPerOrder * estimatedOrderCount : 0;
+        
+        // Primary returnRatio now includes shipping when configured — this makes
+        // FBA vs self-ship comparisons fair (FBA fees already include fulfilment)
+        const returnRatio = totalSales > 0 
+          ? Math.min(Math.max((netPayout - estimatedShippingCost) / totalSales, -1), 1) 
+          : 0;
+        
         const returnAfterShipping = totalSales > 0 && shouldDeductShipping && shippingCostPerOrder > 0 && estimatedOrderCount > 0
           ? Math.max(Math.min((netPayout - estimatedShippingCost) / totalSales, 1), -1) 
           : null;
@@ -798,12 +803,14 @@ export default function InsightsDashboard() {
   // Now we pick the true best and annotate if it uses estimated data.
   const bestRatio = Math.max(...stats.map(s => s.returnRatio));
   const totalAllSales = stats.reduce((sum, s) => sum + s.totalSales, 0);
-  const totalAllNet = stats.reduce((sum, s) => sum + s.netPayout, 0);
+  const totalAllShipping = stats.reduce((sum, s) => sum + s.estimatedShippingCost, 0);
+  const totalAllNet = stats.reduce((sum, s) => sum + s.netPayout - s.estimatedShippingCost, 0);
   const totalAllFees = stats.reduce((sum, s) => sum + s.totalFees, 0);
   const totalAllAdSpend = stats.reduce((sum, s) => sum + s.adSpend, 0);
   const overallRatio = totalAllSales > 0 ? totalAllNet / totalAllSales : 0;
   const overallAfterAds = totalAllSales > 0 ? Math.max((totalAllNet - totalAllAdSpend) / totalAllSales, -1) : null;
   const netPctOfSales = totalAllSales > 0 ? (totalAllNet / totalAllSales * 100).toFixed(0) : '0';
+  const anyShippingDeducted = stats.some(s => s.estimatedShippingCost > 0);
 
   function formatPct(value: number): string {
     return `${(value * 100).toFixed(1)}%`;
@@ -854,31 +861,32 @@ export default function InsightsDashboard() {
   const bestProfit = [...stats].sort((a, b) => b.returnRatio - a.returnRatio)[0];
 
   function getHeroInsight(): string {
+    const shippingNote = anyShippingDeducted ? ' (incl. est. shipping)' : '';
     if (stats.length === 1) {
       const r = stats[0].returnRatio;
       if (r < 0.60) {
-        return `${stats[0].label} keeps $${r.toFixed(2)} per $1 sold — ${((1 - r) * 100).toFixed(0)}% goes to marketplace fees and deductions.`;
+        return `${stats[0].label} keeps $${r.toFixed(2)} per $1 sold${shippingNote} — ${((1 - r) * 100).toFixed(0)}% goes to marketplace fees and deductions.`;
       }
-      return `${stats[0].label} returns $${r.toFixed(2)} for every $1 sold after marketplace fees.`;
+      return `${stats[0].label} returns $${r.toFixed(2)} for every $1 sold after marketplace fees${shippingNote}.`;
     }
-    // If same marketplace leads both, simple message
     if (topRevenue.marketplace === bestProfit.marketplace) {
       if (topRevenue.returnRatio < 0.60) {
-        return `${topRevenue.label} leads in revenue (${formatCurrency(topRevenue.totalSales)}) and retains the most at $${topRevenue.returnRatio.toFixed(2)} per $1 — though ${((1 - topRevenue.returnRatio) * 100).toFixed(0)}% is consumed by fees.`;
+        return `${topRevenue.label} leads in revenue (${formatCurrency(topRevenue.totalSales)}) and retains the most at $${topRevenue.returnRatio.toFixed(2)} per $1${shippingNote} — though ${((1 - topRevenue.returnRatio) * 100).toFixed(0)}% is consumed by fees.`;
       }
-      return `${topRevenue.label} leads in both revenue (${formatCurrency(topRevenue.totalSales)}) and efficiency ($${topRevenue.returnRatio.toFixed(2)} per $1).`;
+      return `${topRevenue.label} leads in both revenue (${formatCurrency(topRevenue.totalSales)}) and efficiency ($${topRevenue.returnRatio.toFixed(2)} per $1${shippingNote}).`;
     }
-    return `${topRevenue.label} drives the most revenue (${formatCurrency(topRevenue.totalSales)}), while ${bestProfit.label} retains the most at $${bestProfit.returnRatio.toFixed(2)} per $1 sold.`;
+    return `${topRevenue.label} drives the most revenue (${formatCurrency(topRevenue.totalSales)}), while ${bestProfit.label} retains the most at $${bestProfit.returnRatio.toFixed(2)} per $1 sold${shippingNote}.`;
   }
 
   // Stacked bar segments for $1 breakdown
   function getStackedSegments(s: MarketplaceStats) {
-    if (s.totalSales <= 0) return { net: 0, ads: 0, fees: 0, refunds: 0 };
+    if (s.totalSales <= 0) return { net: 0, ads: 0, fees: 0, refunds: 0, shipping: 0 };
     const refundPct = s.totalRefunds / s.totalSales;
     const feePct = s.feeLoad; // fees only (no refunds)
     const adsPct = s.adSpend / s.totalSales;
-    const netPct = Math.max(0, 1 - feePct - adsPct - refundPct);
-    return { net: netPct * 100, ads: adsPct * 100, fees: feePct * 100, refunds: refundPct * 100 };
+    const shippingPct = s.estimatedShippingCost / s.totalSales;
+    const netPct = Math.max(0, 1 - feePct - adsPct - refundPct - shippingPct);
+    return { net: netPct * 100, ads: adsPct * 100, fees: feePct * 100, refunds: refundPct * 100, shipping: shippingPct * 100 };
   }
 
   return (
@@ -963,7 +971,7 @@ export default function InsightsDashboard() {
           </Card>
           <Card>
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs text-muted-foreground">Net Payout</p>
+              <p className="text-xs text-muted-foreground">Net Payout{anyShippingDeducted ? ' (after shipping)' : ''}</p>
               <p className="text-xl font-bold text-foreground mt-1">{formatCurrency(totalAllNet)}</p>
               <p className="text-xs text-muted-foreground mt-0.5">{netPctOfSales}% of total sales</p>
             </CardContent>
@@ -974,10 +982,12 @@ export default function InsightsDashboard() {
                 <TooltipTrigger asChild>
                   <p className="text-xs text-muted-foreground cursor-help underline decoration-dotted">Return per $1 Sold</p>
                 </TooltipTrigger>
-                <TooltipContent className="text-xs max-w-xs">How much you keep per $1 of sales after marketplace fees. Excludes COGS, shipping & advertising.</TooltipContent>
+                <TooltipContent className="text-xs max-w-xs">
+                  How much you keep per $1 of sales after marketplace fees{anyShippingDeducted ? ' and est. shipping' : ''}. Excludes COGS & advertising.
+                </TooltipContent>
               </Tooltip>
               <p className={`text-xl font-bold mt-1 ${getRatioColor(overallRatio)}`}>${overallRatio.toFixed(2)}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">(after marketplace fees)</p>
+              <p className="text-xs text-muted-foreground mt-0.5">(after fees{anyShippingDeducted ? ' + est. shipping' : ''})</p>
             </CardContent>
           </Card>
           <Card>
@@ -1039,14 +1049,14 @@ export default function InsightsDashboard() {
                 </TooltipTrigger>
                 <TooltipContent side="left" className="max-w-xs text-xs">
                   <p className="font-medium mb-1">Marketplace Payout</p>
-                  <p><strong>Marketplace payout</strong> = Net Settlement ÷ Gross Sales</p>
-                  <p className="mt-1"><strong>After advertising</strong> = (Net Settlement − Ad Spend) ÷ Gross Sales</p>
-                  <p className="mt-1 text-muted-foreground">Excludes COGS, shipping costs & tax.</p>
+                  <p><strong>Marketplace payout</strong> = (Net Settlement − Est. Shipping) ÷ Gross Sales</p>
+                  <p className="mt-1"><strong>After advertising</strong> = (Net Settlement − Ad Spend − Est. Shipping) ÷ Gross Sales</p>
+                  <p className="mt-1 text-muted-foreground">Includes est. shipping for self-ship channels. FBA channels already include fulfilment in fees. Excludes COGS & tax.</p>
                 </TooltipContent>
               </Tooltip>
             </div>
             <CardDescription className="text-xs">
-              For every $1 you sell, here's what you keep after marketplace fees
+              For every $1 you sell, here's what you keep after marketplace fees{anyShippingDeducted ? ' and est. shipping' : ''}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -1108,6 +1118,14 @@ export default function InsightsDashboard() {
                       </TooltipTrigger>
                       <TooltipContent className="text-xs">${(segments.net / 100).toFixed(2)} you keep</TooltipContent>
                     </Tooltip>
+                    {segments.shipping > 0 && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="h-full bg-chart-2 transition-all duration-500" style={{ width: `${segments.shipping}%` }} />
+                        </TooltipTrigger>
+                        <TooltipContent className="text-xs">${(segments.shipping / 100).toFixed(2)} est. shipping</TooltipContent>
+                      </Tooltip>
+                    )}
                     {segments.ads > 0 && (
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -1138,6 +1156,12 @@ export default function InsightsDashboard() {
                       <span className="h-2 w-2 rounded-full bg-primary inline-block" />
                       ${(segments.net / 100).toFixed(2)} you keep
                     </span>
+                    {segments.shipping > 0 && (
+                      <span className="flex items-center gap-1">
+                        <span className="h-2 w-2 rounded-full bg-chart-2 inline-block" />
+                        ${(segments.shipping / 100).toFixed(2)} shipping (est.)
+                      </span>
+                    )}
                     {segments.ads > 0 && (
                       <span className="flex items-center gap-1">
                         <span className="h-2 w-2 rounded-full bg-accent inline-block" />
@@ -1327,17 +1351,23 @@ export default function InsightsDashboard() {
                         <TooltipContent className="text-xs">Total advertising spend (analytics only — not synced to accounting)</TooltipContent>
                       </Tooltip>
                     </th>
+                    <th className="text-right px-3 py-2.5 font-medium text-foreground">
+                      <Tooltip>
+                        <TooltipTrigger className="cursor-help underline decoration-dotted">Est. Shipping</TooltipTrigger>
+                        <TooltipContent className="text-xs">Estimated shipping cost based on configured cost per order × order count. Shows "—" for marketplace-fulfilled channels.</TooltipContent>
+                      </Tooltip>
+                    </th>
                     <th className="text-right px-3 py-2.5 font-medium text-foreground">Net</th>
                     <th className="text-right px-3 py-2.5 font-medium text-foreground">
                       <Tooltip>
                         <TooltipTrigger className="cursor-help underline decoration-dotted">Payout</TooltipTrigger>
-                        <TooltipContent className="text-xs">Net Settlement ÷ Gross Sales (after marketplace fees)</TooltipContent>
+                        <TooltipContent className="text-xs">(Net Settlement − Est. Shipping) ÷ Gross Sales</TooltipContent>
                       </Tooltip>
                     </th>
                     <th className="text-right px-3 py-2.5 font-medium text-foreground">
                       <Tooltip>
                         <TooltipTrigger className="cursor-help underline decoration-dotted">After Ads</TooltipTrigger>
-                        <TooltipContent className="text-xs">(Net Settlement − Ad Spend) ÷ Gross Sales</TooltipContent>
+                        <TooltipContent className="text-xs">(Net Settlement − Ad Spend − Est. Shipping) ÷ Gross Sales</TooltipContent>
                       </Tooltip>
                     </th>
                   </tr>
@@ -1350,6 +1380,12 @@ export default function InsightsDashboard() {
                           <span className="font-medium text-foreground">{s.label}</span>
                           {s.returnRatio === bestRatio && stats.length > 1 && (
                             <Badge variant="outline" className="text-[9px] h-3.5 border-primary/30 text-primary px-1">Best</Badge>
+                          )}
+                          {s.estimatedShippingCost > 0 && (
+                            <Badge variant="outline" className="text-[9px] h-3.5 border-chart-2/50 text-chart-2 px-1">
+                              <Truck className="h-2 w-2 mr-0.5" />
+                              Incl. shipping
+                            </Badge>
                           )}
                           {s.hasMissingFeeData && (
                             <Badge variant="outline" className="text-[9px] h-3.5 border-amber-400/50 text-amber-600 dark:text-amber-400 px-1">
@@ -1374,10 +1410,21 @@ export default function InsightsDashboard() {
                           </Button>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums font-medium text-foreground">{formatCurrency(s.netPayout)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
+                        {s.fulfilmentMethod === 'marketplace_fulfilled' ? (
+                          <span className="text-[10px] text-muted-foreground">—</span>
+                        ) : s.estimatedShippingCost > 0 ? (
+                          formatCurrency(s.estimatedShippingCost)
+                        ) : (
+                          <Button variant="ghost" size="sm" className="h-5 text-[10px] px-1.5 text-primary" onClick={() => openShippingDialog(s.marketplace)}>
+                            <Plus className="h-3 w-3 mr-0.5" /> Add
+                          </Button>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums font-medium text-foreground">{formatCurrency(s.netPayout - s.estimatedShippingCost)}</td>
                       <td className={`px-3 py-2.5 text-right tabular-nums font-bold ${getRatioColor(s.returnRatio)}`}>{formatPct(s.returnRatio)}</td>
-                      <td className={`px-3 py-2.5 text-right tabular-nums font-bold ${s.returnAfterAds !== null && s.adSpend > 0 ? getRatioColor(s.returnAfterAds) : 'text-muted-foreground'}`}>
-                        {s.adSpend > 0 && s.returnAfterAds !== null ? formatPct(s.returnAfterAds) : '—'}
+                      <td className={`px-3 py-2.5 text-right tabular-nums font-bold ${s.returnAfterAdsAndShipping !== null && s.adSpend > 0 ? getRatioColor(s.returnAfterAdsAndShipping) : 'text-muted-foreground'}`}>
+                        {s.adSpend > 0 && s.returnAfterAdsAndShipping !== null ? formatPct(s.returnAfterAdsAndShipping) : '—'}
                       </td>
                     </tr>
                   ))}
@@ -1411,7 +1458,8 @@ export default function InsightsDashboard() {
           <CardContent className="space-y-6">
             {stats.map((s) => {
               if (s.feeBreakdown.length === 0) return null;
-              const keepPct = s.totalSales > 0 ? Math.max(0, s.netPayout / s.totalSales) : 0;
+              const adjustedNet = s.netPayout - s.estimatedShippingCost;
+              const keepPct = s.totalSales > 0 ? Math.max(0, adjustedNet / s.totalSales) : 0;
               return (
                 <div key={s.marketplace} className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -1428,7 +1476,7 @@ export default function InsightsDashboard() {
                         <div className="h-full bg-primary rounded-full transition-all duration-700" style={{ width: `${keepPct * 100}%` }} />
                       </div>
                       <span className="text-xs font-bold tabular-nums text-foreground w-14 text-right">{formatPct(keepPct)}</span>
-                      <span className="text-xs tabular-nums text-muted-foreground w-20 text-right">{formatCurrency(s.netPayout)}</span>
+                      <span className="text-xs tabular-nums text-muted-foreground w-20 text-right">{formatCurrency(adjustedNet)}</span>
                     </div>
                     
                     {/* Fee breakdown rows */}
@@ -1442,6 +1490,18 @@ export default function InsightsDashboard() {
                         <span className="text-xs tabular-nums text-muted-foreground w-20 text-right">{formatCurrency(fee.amount)}</span>
                       </div>
                     ))}
+                    
+                    {/* Est. Shipping row */}
+                    {s.estimatedShippingCost > 0 && (
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground w-28 shrink-0 text-right">Est. Shipping</span>
+                        <div className="flex-1 h-5 bg-muted/20 rounded-full overflow-hidden">
+                          <div className="h-full bg-chart-2/70 rounded-full transition-all duration-500" style={{ width: `${(s.estimatedShippingCost / s.totalSales) * 100}%` }} />
+                        </div>
+                        <span className="text-xs font-semibold tabular-nums text-foreground w-14 text-right">{formatPct(s.estimatedShippingCost / s.totalSales)}</span>
+                        <span className="text-xs tabular-nums text-muted-foreground w-20 text-right">{formatCurrency(s.estimatedShippingCost)}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Total fees summary */}
@@ -1621,6 +1681,9 @@ export default function InsightsDashboard() {
                   {/* Stacked bar in card */}
                   <div className="h-3 rounded-full overflow-hidden flex">
                     <div className="h-full bg-primary transition-all duration-500" style={{ width: `${getStackedSegments(s).net}%` }} />
+                    {getStackedSegments(s).shipping > 0 && (
+                      <div className="h-full bg-chart-2 transition-all duration-500" style={{ width: `${getStackedSegments(s).shipping}%` }} />
+                    )}
                     {s.adSpend > 0 && (
                       <div className="h-full bg-accent transition-all duration-500" style={{ width: `${getStackedSegments(s).ads}%` }} />
                     )}
