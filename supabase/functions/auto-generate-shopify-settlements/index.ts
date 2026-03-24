@@ -433,9 +433,11 @@ Deno.serve(async (req) => {
         order_count: groupOrders.length,
         sample_orders: groupOrders.slice(0, 5).map(o => o.order_name),
         generated_at: new Date().toISOString(),
-        source_version: 'auto-generate-shopify-settlements-v3',
+        source_version: 'auto-generate-shopify-settlements-v4',
         fees_estimated: true,
         commission_rate_applied: commissionRate,
+        first_order_date: firstOrderDate,
+        last_order_date: lastOrderDate,
       },
     };
 
