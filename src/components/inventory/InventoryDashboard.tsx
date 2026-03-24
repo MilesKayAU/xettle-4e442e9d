@@ -142,6 +142,23 @@ export default function InventoryDashboard({ onNavigateToSettings }: { onNavigat
     setRulesOpen(false);
   };
 
+  const handleSaveSkuLink = useCallback(async (link: SkuLink) => {
+    const existing = rules.sku_links ?? [];
+    // Upsert: merge if canonical already exists
+    const idx = existing.findIndex(l => l.canonical === link.canonical);
+    let updated: SkuLink[];
+    if (idx >= 0) {
+      const merged = new Set([...existing[idx].linked, ...link.linked]);
+      updated = [...existing];
+      updated[idx] = { canonical: link.canonical, linked: Array.from(merged) };
+    } else {
+      updated = [...existing, link];
+    }
+    const newRules = { ...rules, sku_links: updated };
+    setRules(newRules);
+    await saveRules(newRules);
+  }, [rules, setRules, saveRules]);
+
   if (!connectionsLoaded || rulesLoading) {
     return <LoadingSpinner size="lg" text="Loading inventory..." />;
   }
