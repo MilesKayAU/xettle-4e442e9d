@@ -122,35 +122,44 @@ export default function InsightsDashboard() {
       // Insights is an analytics view — include pre-boundary (historical) settlements
       // so that all marketplace sales data contributes to trends and totals.
       const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) { setStats([]); return; }
+      const userId = currentUser.id;
       const [settlementsRes, adSpendRes, shippingRes, fulfilmentMethods, postageCosts, profitOrdersRes, observedRatesRes, pacShippingStatsRes, pacQualityRes] = await Promise.all([
         supabase
           .from('settlements')
-          .select('marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start, is_hidden, is_pre_boundary, source, raw_payload')
+          .select('settlement_id, marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start, is_hidden, is_pre_boundary, source, raw_payload')
+          .eq('user_id', userId)
           .eq('is_hidden', false)
           .is('duplicate_of_settlement_id', null)
           .not('status', 'in', '("push_failed_permanent","duplicate_suppressed")')
           .order('period_end', { ascending: false }),
         supabase
           .from('marketplace_ad_spend')
-          .select('marketplace_code, spend_amount'),
+          .select('marketplace_code, spend_amount')
+          .eq('user_id', userId),
         supabase
           .from('marketplace_shipping_costs')
-          .select('marketplace_code, cost_per_order'),
-        currentUser ? loadFulfilmentMethods(currentUser.id) : Promise.resolve({} as Record<string, FulfilmentMethod>),
-        currentUser ? loadPostageCosts(currentUser.id) : Promise.resolve({} as Record<string, number>),
+          .select('marketplace_code, cost_per_order')
+          .eq('user_id', userId),
+        loadFulfilmentMethods(userId),
+        loadPostageCosts(userId),
         supabase
           .from('settlement_profit')
-          .select('marketplace_code, orders_count'),
+          .select('settlement_id, marketplace_code, orders_count')
+          .eq('user_id', userId),
         supabase
           .from('app_settings')
           .select('key, value')
+          .eq('user_id', userId)
           .like('key', 'observed_commission_rate_%'),
         supabase
           .from('marketplace_shipping_stats')
-          .select('marketplace_code, avg_shipping_cost_60, avg_shipping_cost_14, sample_size'),
+          .select('marketplace_code, avg_shipping_cost_60, avg_shipping_cost_14, sample_size')
+          .eq('user_id', userId),
         supabase
           .from('order_shipping_estimates')
-          .select('marketplace_code, estimate_quality'),
+          .select('marketplace_code, estimate_quality')
+          .eq('user_id', userId),
       ]);
 
       if (settlementsRes.error) throw settlementsRes.error;
