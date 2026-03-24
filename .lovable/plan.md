@@ -1,84 +1,68 @@
 
-Problem confirmed: the live Kogan PDF uploads are still being routed through the generic CSV parser path in some save flows, which is why users see “Could not find sales or net payout columns in the file.” That message can only come from `parseGenericCSV`, and the current Kogan handling is incomplete because Kogan PDFs are shown as companion files in the UI but `processAllConfirmed()` still iterates every detected file and calls `processFile()` on the PDF itself.
 
-What I found
-- `detectFile()` correctly classifies `Kogan_3446386.pdf` as `marketplace: 'kogan'`, `fileFormat: 'pdf'`, `dataCompleteness: 'partial'`.
-- The uploaded PDF itself parses structurally fine. The parsed content includes:
-  - `A/P Invoice 344840`
-  - `Monthly Seller Fee`
-  - `Total paid amount: 525.41 AUD`
-- In `SmartUploadFlow.tsx`, `preParseFile()` returns `[]` for Kogan PDFs intentionally.
-- But in `processFile()`, Kogan PDFs are not handled as a special case, so they fall into the generic parser branch and trigger the CSV-column error.
-- `processAllConfirmed()` currently processes every detected/reviewing settlement file, including Kogan PDFs, so bulk upload is guaranteed to hit this bug.
-- The current Kogan merge logic also grabs the first uploaded Kogan PDF globally, not the matched PDF for the specific CSV settlement. That is unsafe for bulk uploads and can merge the wrong remittance into the wrong settlement.
+## Plan: Make Shipping a First-Class Cost in Insights
 
-Implementation plan
+### Problem
 
-1. Make Kogan PDFs canonical companion files, not standalone settlement files in save flow
-- Update `processFile()` so:
-  - Kogan PDF never falls through to `parseGenericCSV` / `parseGenericXLSX`
-  - If user tries to save a Kogan PDF by itself, show a clear status like “Waiting for matching CSV” instead of an error
-- Update `processAllConfirmed()` to skip standalone Kogan PDF files entirely
-- Result: bulk upload no longer throws the misleading generic parser error
+Amazon settlements include fulfillment fees (FBA) in their fee data, so Amazon's "$X per $1 sold" reflects the true cost. But Shopify and other self-ship marketplaces don't include shipping in their settlement — the user pays shipping separately. The system knows the estimated shipping cost ($9/order for Shopify) and calculates it, but only shows it as a small footnote. The primary metrics, charts, rankings, and hero text all use `returnRatio` (net payout / sales) which ignores shipping entirely.
 
-2. Make Kogan pairing the single source of truth for bulk and single saves
-- Use the existing `koganPairings` grouping as the canonical matching model
-- When saving a Kogan CSV, locate its matched PDF by doc number from the pairing map, not by “first Kogan PDF found”
-- If no matched PDF exists:
-  - save CSV-only with `metadata.missingPdf = true`
-  - preserve explicit warning that reconciliation is incomplete
-- If a matched PDF exists:
-  - merge only that PDF’s remittance values into that CSV settlement
+Result: Shopify shows "$0.93 per $1 sold" while Amazon shows "$0.66" — making Shopify look 40% more profitable when in reality shipping closes that gap significantly.
 
-3. Tighten Kogan PDF parsing and pairing reliability
-- Extend doc-number extraction to support the real Kogan remittance layout consistently:
-  - `A/P Invoice`
-  - `A/P Credit note`
-  - `Journal Entry`
-  - remittance header number vs invoice doc number
-- Ensure pairing uses invoice doc numbers from paid documents table, not the remittance number in the filename/title
-- Add a fallback pairing rule when one CSV settlement and one PDF clearly overlap by date/period but doc number extraction is imperfect
+### Fix
 
-4. Improve UX so the system is explicit about what is accurate vs incomplete
-- In the Kogan pairing card:
-  - clearly label each row as `Ready to save`, `Missing PDF`, or `Missing CSV`
-  - suppress any generic “sales/net payout column” errors for PDFs
-  - show PDF-only rows as informational, not failed
-- For CSV-only Kogan saves:
-  - show “Saved with warning — bank deposit may be wrong until PDF is added”
-- For PDF-only uploads:
-  - show “Recognised remittance advice — upload the matching CSV to complete this settlement”
+Include estimated shipping as a cost layer in all primary metrics when the user has configured shipping costs. This makes the comparison fair across FBA vs self-ship marketplaces.
 
-5. Make downstream analytics respect Kogan completeness status
-- Audit all insights loaders that use settlement totals so CSV-only Kogan settlements are visibly treated as incomplete where relevant
-- Specifically:
-  - keep saved revenue/order detail from CSV
-  - ensure net payout / fee-sensitive views can surface that `missingPdf` is present
-  - add subtle warnings in Insights where Kogan figures are based on incomplete settlement data
-- This keeps charts usable without pretending incomplete Kogan data is final
+**1. Add shipping to the primary `returnRatio` when shipping data exists**
 
-Files to update
-- `src/components/admin/accounting/SmartUploadFlow.tsx`
-  - skip Kogan PDFs in save loops
-  - handle Kogan PDF as companion-only file
-  - save via matched pair, not first-PDF-wins
-  - improve user-facing statuses/messages
-- `src/utils/kogan-remittance-parser.ts`
-  - harden paid-doc extraction and invoice doc-number matching
-- Potentially small follow-up touches in:
-  - `src/components/admin/accounting/InsightsDashboard.tsx`
-  - `src/components/insights/MarketplaceProfitComparison.tsx`
-  if incomplete Kogan settlements need an explicit warning state in analytics UI
+File: `src/components/admin/accounting/InsightsDashboard.tsx`
 
-Expected outcome
-- Bulk uploading many Kogan PDFs will no longer fail with the generic CSV parser message
-- The uploader will accurately tell the user:
-  - which settlements are complete
-  - which are missing a PDF
-  - which are missing a CSV
-- Only matched CSV+PDF pairs will be merged
-- Insights and downstream profit views will use the right source state and flag incomplete Kogan settlements instead of silently treating them as fully reconciled
+When `shouldDeductShipping && estimatedShippingCost > 0`:
+- Adjust `effectiveNetPayout` to subtract `estimatedShippingCost`
+- Recalculate `effectiveReturnRatio` from adjusted net
+- This flows through to hero, sort, bars, and all downstream metrics automatically
 
-Technical note
-- The live issue is real and reproducible from code inspection: the error text originates from `generic-csv-parser.ts`, and the only path that explains the screenshot is Kogan PDFs being incorrectly processed through the generic parser during bulk save.
-- The biggest correctness fix is not just “parse PDFs better”; it is making Kogan PDFs non-saveable standalone companions and binding merge logic to the exact pair instead of any uploaded Kogan PDF.
+**2. Add shipping segment to $1 Sale Breakdown stacked bar**
+
+Update `getStackedSegments()` to include a 5th segment for shipping:
+```text
+Before: net + ads + refunds + fees = 100%
+After:  net + ads + refunds + fees + shipping = 100%
+```
+
+Add a shipping bar (e.g., `bg-blue-400`) with tooltip showing the deduction. Only shown when `estimatedShippingCost > 0`.
+
+**3. Add shipping row to Profit Leak Breakdown**
+
+Add "Est. Shipping" as a waterfall row between fee rows and the total, using a distinct color and "(est.)" label. Shows the total shipping deduction and its percentage of sales.
+
+**4. Add "Est. Shipping" column to Fee Intelligence table**
+
+New column after "Refunds" showing the estimated shipping cost. Shows "—" for FBA/marketplace-fulfilled channels, and the shipping total for self-ship channels. Add a column for "After Shipping" or fold it into the existing "Payout" to show the adjusted ratio.
+
+**5. Update hero insight text**
+
+`getHeroInsight()` already uses `returnRatio` — since we're adjusting the primary ratio, the hero text will automatically reflect shipping-adjusted figures. Add "(incl. est. shipping)" qualifier when any marketplace has shipping deductions.
+
+**6. Add "Est. Shipping" badge to $1 bar legend**
+
+When shipping is deducted, show badge on the marketplace row indicating the figure includes estimated shipping so users understand it's not from settlement data.
+
+**7. Sort remains fair**
+
+Since `returnRatio` now includes shipping for self-ship channels and already includes FBA fees for Amazon, the sort order becomes a true apples-to-apples comparison.
+
+### What stays the same
+
+- Shipping is still estimated (from user-configured `postage_cost` or `marketplace_shipping_costs`)
+- When no shipping cost is configured, nothing changes — the metric remains payout-only with the existing "Add Shipping" prompt
+- FBA channels are unaffected — their shipping is already in settlement fees
+- The tooltip on "Return per $1 Sold" summary card will update to say "after marketplace fees and est. shipping" instead of "excludes shipping"
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `src/components/admin/accounting/InsightsDashboard.tsx` | Deduct shipping from `effectiveNetPayout`/`effectiveReturnRatio`; add shipping segment to stacked bar; add shipping row to Profit Leak; add column to Fee Intelligence table; update hero/tooltip copy |
+
+### No database changes needed
+
