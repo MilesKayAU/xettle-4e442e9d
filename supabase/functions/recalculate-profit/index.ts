@@ -147,9 +147,8 @@ Deno.serve(async (req) => {
             orderIdsInAuto.add(l.order_id);
           }
         }
-        // Extract marketplace from settlement_id: shopify_auto_bunnings_2026-01 → bunnings
-        const parts = s.settlement_id.replace("shopify_auto_", "").split("_");
-        const mpKey = parts.slice(0, -1).join("_") || parts[0]; // everything before the last _YYYY-MM
+        // Use the marketplace column directly (e.g. "bunnings", "kogan")
+        const mpKey = (s.marketplace || "").toLowerCase();
         const monthKey = s.period_end?.substring(0, 7) || "";
         if (mpKey && monthKey && orderIdsInAuto.size > 0) {
           if (!autoOrderCounts.has(mpKey)) autoOrderCounts.set(mpKey, new Map());
