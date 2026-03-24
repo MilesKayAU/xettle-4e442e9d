@@ -39,6 +39,7 @@ interface ConnectionSummary {
   shopify: boolean;
   ebay: boolean;
   mirakl: boolean;
+  kogan: boolean;
 }
 
 interface SubChannelPref {
