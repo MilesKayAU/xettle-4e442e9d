@@ -6,7 +6,7 @@
  * or Xero push logic. Only allowed shared deps: marketplace_connections,
  * token tables, connection-status, UI components, auth helpers.
  */
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
 import { Badge } from '@/components/ui/badge';
