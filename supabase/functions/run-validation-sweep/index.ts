@@ -9,7 +9,8 @@ function monthKey(date: string): string {
 
 function monthLabel(ym: string): string {
   const [y, m] = ym.split('-')
-  return `${y}-${m}-01 → ${y}-${m}-28`
+  const lastDay = new Date(parseInt(y), parseInt(m), 0).getDate()
+  return `${y}-${m}-01 → ${y}-${m}-${String(lastDay).padStart(2, '0')}`
 }
 
 async function refreshXeroToken(supabase: any, userId: string, clientId: string, clientSecret: string) {
