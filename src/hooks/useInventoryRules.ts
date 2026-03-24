@@ -52,6 +52,7 @@ export function useInventoryRules() {
             physical_sources: parsed.physical_sources ?? DEFAULT_INVENTORY_RULES.physical_sources,
             fbm_from_shopify: parsed.fbm_from_shopify ?? DEFAULT_INVENTORY_RULES.fbm_from_shopify,
             mirror_platforms: parsed.mirror_platforms ?? DEFAULT_INVENTORY_RULES.mirror_platforms,
+            sku_links: parsed.sku_links ?? DEFAULT_INVENTORY_RULES.sku_links,
           });
         } catch {
           // keep defaults
