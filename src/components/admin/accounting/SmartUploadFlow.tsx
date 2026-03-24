@@ -261,6 +261,15 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         if (!result.success) return [];
         return [result.settlement];
       }
+
+      // Kogan PDF — parse remittance and store for later merge
+      if (marketplace === 'kogan' && file.name.toLowerCase().endsWith('.pdf')) {
+        const result = await parseKoganRemittancePdf(file);
+        if (!result.success) return [];
+        // Store the remittance data — it will be merged with CSV settlements in post-processing
+        // Return empty settlements; the merge happens after all files are detected
+        return [];
+      }
       
       if (marketplace === 'shopify_payments') {
         const text = await file.text();
