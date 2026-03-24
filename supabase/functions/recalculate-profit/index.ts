@@ -160,6 +160,23 @@ Deno.serve(async (req) => {
 
     console.log(`[profit] autoOrderCounts: ${JSON.stringify([...autoOrderCounts.entries()].map(([k, v]) => [k, Object.fromEntries(v)]))}`);
 
+    // Count how many CSV settlements exist per marketplace+month so we can
+    // split the auto order count proportionally (e.g. 2 fortnightly CSVs in Feb → each gets half)
+    const csvSettlementCounts = new Map<string, Map<string, number>>();
+    for (const s of settlements || []) {
+      if (s.settlement_id?.startsWith("shopify_auto_")) continue;
+      const mpLower = (s.marketplace || "").toLowerCase();
+      const monthKey = s.period_end?.substring(0, 7) || "";
+      if (!mpLower || !monthKey) continue;
+      // Only count if this settlement has no order_ids (i.e. summary CSV)
+      const lines = linesBySettlement.get(s.settlement_id) || [];
+      const hasOrderIds = lines.some(l => l.order_id);
+      if (hasOrderIds) continue;
+      if (!csvSettlementCounts.has(mpLower)) csvSettlementCounts.set(mpLower, new Map());
+      const existing = csvSettlementCounts.get(mpLower)!.get(monthKey) || 0;
+      csvSettlementCounts.get(mpLower)!.set(monthKey, existing + 1);
+    }
+
     const AMAZON_PREFIXES = ["amazon"];
     function isAmazonCode(code: string): boolean {
       return AMAZON_PREFIXES.some((p) => code.toLowerCase().startsWith(p));
