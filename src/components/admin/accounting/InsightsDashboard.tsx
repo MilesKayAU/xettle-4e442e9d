@@ -982,10 +982,12 @@ export default function InsightsDashboard() {
                 <TooltipTrigger asChild>
                   <p className="text-xs text-muted-foreground cursor-help underline decoration-dotted">Return per $1 Sold</p>
                 </TooltipTrigger>
-                <TooltipContent className="text-xs max-w-xs">How much you keep per $1 of sales after marketplace fees. Excludes COGS, shipping & advertising.</TooltipContent>
+                <TooltipContent className="text-xs max-w-xs">
+                  How much you keep per $1 of sales after marketplace fees{anyShippingDeducted ? ' and est. shipping' : ''}. Excludes COGS & advertising.
+                </TooltipContent>
               </Tooltip>
               <p className={`text-xl font-bold mt-1 ${getRatioColor(overallRatio)}`}>${overallRatio.toFixed(2)}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">(after marketplace fees)</p>
+              <p className="text-xs text-muted-foreground mt-0.5">(after fees{anyShippingDeducted ? ' + est. shipping' : ''})</p>
             </CardContent>
           </Card>
           <Card>
