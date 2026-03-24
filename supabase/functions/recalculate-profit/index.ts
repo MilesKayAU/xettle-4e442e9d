@@ -133,12 +133,28 @@ Deno.serve(async (req) => {
     // (e.g. shopify_auto_bunnings, shopify_auto_kogan). These orders also
     // appear in the parent Shopify payout CSV, so we must exclude them from
     // the Shopify payout's shipping count to avoid double-counting.
+    // Also build a map of marketplace → month → order_count for cross-referencing
+    // CSV settlements that lack per-order data (e.g. Mirakl summary CSVs).
     const subChannelOrderIds = new Set<string>();
+    const autoOrderCounts = new Map<string, Map<string, number>>();
     for (const s of settlements || []) {
       if (s.settlement_id?.startsWith("shopify_auto_")) {
         const lines = linesBySettlement.get(s.settlement_id) || [];
+        const orderIdsInAuto = new Set<string>();
         for (const l of lines) {
-          if (l.order_id) subChannelOrderIds.add(l.order_id);
+          if (l.order_id) {
+            subChannelOrderIds.add(l.order_id);
+            orderIdsInAuto.add(l.order_id);
+          }
+        }
+        // Extract marketplace from settlement_id: shopify_auto_bunnings_2026-01 → bunnings
+        const parts = s.settlement_id.replace("shopify_auto_", "").split("_");
+        const mpKey = parts.slice(0, -1).join("_") || parts[0]; // everything before the last _YYYY-MM
+        const monthKey = s.period_end?.substring(0, 7) || "";
+        if (mpKey && monthKey && orderIdsInAuto.size > 0) {
+          if (!autoOrderCounts.has(mpKey)) autoOrderCounts.set(mpKey, new Map());
+          const existing = autoOrderCounts.get(mpKey)!.get(monthKey) || 0;
+          autoOrderCounts.get(mpKey)!.set(monthKey, existing + orderIdsInAuto.size);
         }
       }
     }
