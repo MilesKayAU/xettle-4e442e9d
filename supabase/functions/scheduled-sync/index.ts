@@ -414,6 +414,37 @@ Deno.serve(async (req) => {
   // 6. Shopify orders fetch (always 90-day window for marketplace discovery — unchanged)
   // This is handled by fetch-shopify-orders which already uses its own 90-day window
 
+  // 6.5. Refresh inventory caches (background sync — non-critical)
+  if (Date.now() - startTime < MAX_ELAPSED_MS) {
+    console.log("[scheduled-sync] Step 6.5: Inventory cache refresh...");
+    const inventoryFunctions = [
+      { fn: 'fetch-shopify-inventory', rail: 'shopify', userIds: shopifyUserIds },
+      { fn: 'fetch-ebay-inventory', rail: 'ebay', userIds: ebayUserIds },
+      { fn: 'fetch-amazon-inventory', rail: 'amazon', userIds: amazonUserIds },
+      { fn: 'fetch-mirakl-inventory', rail: 'mirakl', userIds: [...new Set((miraklTokens || []).map(t => t.user_id))] },
+    ];
+    results.inventory_cache = { refreshed: 0, skipped: 0, errors: 0 };
+    for (const inv of inventoryFunctions) {
+      if (Date.now() - startTime >= MAX_ELAPSED_MS) break;
+      for (const uid of inv.userIds) {
+        if (!isAutoSyncEnabled(uid, inv.rail)) {
+          (results.inventory_cache as any).skipped++;
+          continue;
+        }
+        // Call the inventory function as service role (it will write-through to cache)
+        const invResult = await callFunction(inv.fn, { "Authorization": `Bearer ${serviceRoleKey}` }, { limit: 500 }, 15000);
+        if (invResult?.error) {
+          (results.inventory_cache as any).errors++;
+        } else {
+          (results.inventory_cache as any).refreshed++;
+        }
+      }
+    }
+    console.log(`[scheduled-sync] Inventory cache: ${(results.inventory_cache as any).refreshed} refreshed, ${(results.inventory_cache as any).skipped} skipped, ${(results.inventory_cache as any).errors} errors`);
+  } else {
+    results.inventory_cache = { skipped: true, reason: 'elapsed_timeout' };
+  }
+
   // 7. Run validation sweep (skip if elapsed > 4 minutes)
   if (Date.now() - startTime < MAX_ELAPSED_MS) {
     console.log("[scheduled-sync] Step 7: Validation sweep...");
