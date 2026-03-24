@@ -229,6 +229,22 @@ export default function FulfilmentMethodsPanel() {
     }
   };
 
+  const handleThresholdSave = async (code: string, value: string) => {
+    const trimmed = value.trim();
+    const num = trimmed === '' ? 0 : parseFloat(trimmed);
+    if (isNaN(num) || num < 0) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      await saveFreeShippingThreshold(user.id, code, num);
+      setFreeShippingThresholds(prev => ({ ...prev, [code]: num > 0 ? String(num) : '' }));
+      toast.success(num > 0 ? `Free shipping threshold saved for ${code}` : `Free shipping threshold cleared for ${code}`);
+      recalcInBackground();
+    } catch {
+      toast.error('Failed to save free shipping threshold');
+    }
+  };
   const handleMcfSave = async (code: string, value: string) => {
     const num = parseFloat(value);
     if (isNaN(num) || num < 0) return;
