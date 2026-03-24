@@ -1,6 +1,6 @@
 /**
  * Shared hook for fetching inventory from edge functions.
- * Handles loading, partial results, pagination, and errors.
+ * Handles loading, partial results, pagination, errors, and cache-first reads.
  * 
  * ISOLATION: This file must NOT import any settlement, validation, or Xero push logic.
  */
@@ -15,6 +15,14 @@ interface FetchResult<T> {
   error?: string;
 }
 
+interface CachedPlatformData {
+  items: any[];
+  has_more: boolean;
+  partial: boolean;
+  error: string | null;
+  fetched_at: string;
+}
+
 interface UseInventoryFetchReturn<T> {
   data: T[];
   loading: boolean;
@@ -25,6 +33,7 @@ interface UseInventoryFetchReturn<T> {
   lastFetched: Date | null;
   fetch: () => Promise<void>;
   loadMore: () => Promise<void>;
+  loadFromCache: (cached: CachedPlatformData) => void;
 }
 
 export function useInventoryFetch<T = any>(functionName: string): UseInventoryFetchReturn<T> {
@@ -36,6 +45,15 @@ export function useInventoryFetch<T = any>(functionName: string): UseInventoryFe
   const [error, setError] = useState<string | null>(null);
   const [lastFetched, setLastFetched] = useState<Date | null>(null);
   const cursorRef = useRef<string | undefined>(undefined);
+
+  const loadFromCache = useCallback((cached: CachedPlatformData) => {
+    setData((cached.items || []) as T[]);
+    setHasMore(cached.has_more || false);
+    setPartial(cached.partial || false);
+    setError(cached.error || null);
+    setLastFetched(cached.fetched_at ? new Date(cached.fetched_at) : null);
+    cursorRef.current = undefined;
+  }, []);
 
   const fetch = useCallback(async () => {
     setLoading(true);
@@ -95,5 +113,5 @@ export function useInventoryFetch<T = any>(functionName: string): UseInventoryFe
     }
   }, [functionName, loadingMore]);
 
-  return { data, loading, loadingMore, hasMore, partial, error, lastFetched, fetch, loadMore };
+  return { data, loading, loadingMore, hasMore, partial, error, lastFetched, fetch, loadMore, loadFromCache };
 }

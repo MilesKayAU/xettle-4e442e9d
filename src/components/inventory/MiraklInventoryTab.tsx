@@ -2,7 +2,7 @@
  * Mirakl (Bunnings / Baby Bunting / JB Hi-Fi etc.) Inventory Tab.
  * ISOLATION: No settlement, validation, or Xero push imports.
  */
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useInventoryFetch } from './useInventoryFetch';
 import InventoryTable, { type InventoryColumn } from './InventoryTable';
 import InventoryRefreshBar from './InventoryRefreshBar';
@@ -38,10 +38,19 @@ const columns: InventoryColumn[] = [
   { key: 'updated_at', label: 'Last Updated' },
 ];
 
-export default function MiraklInventoryTab({ connected, onNavigateToSettings }: { connected: boolean; onNavigateToSettings: () => void }) {
-  const { data, loading, loadingMore, hasMore, partial, error, lastFetched, fetch, loadMore } = useInventoryFetch<MiraklOffer>('fetch-mirakl-inventory');
+export default function MiraklInventoryTab({ connected, onNavigateToSettings, initialData, lastFetched: initialLastFetched }: { connected: boolean; onNavigateToSettings: () => void; initialData?: any[]; lastFetched?: Date | null }) {
+  const { data, loading, loadingMore, hasMore, partial, error, lastFetched, fetch, loadMore, loadFromCache } = useInventoryFetch<MiraklOffer>('fetch-mirakl-inventory');
+  const [seeded, setSeeded] = useState(false);
 
-  useEffect(() => { if (connected) fetch(); }, [connected]);
+  useEffect(() => {
+    if (!connected || seeded) return;
+    if (initialData && initialData.length > 0) {
+      loadFromCache({ items: initialData, has_more: false, partial: false, error: null, fetched_at: initialLastFetched?.toISOString() || new Date().toISOString() });
+    } else {
+      fetch();
+    }
+    setSeeded(true);
+  }, [connected, seeded]);
 
   if (!connected) {
     return (
@@ -52,12 +61,15 @@ export default function MiraklInventoryTab({ connected, onNavigateToSettings }: 
     );
   }
 
+  const displayData = data.length > 0 ? data : (initialData as MiraklOffer[] || []);
+  const displayLastFetched = lastFetched || initialLastFetched || null;
+
   return (
     <div className="space-y-4">
-      <InventoryRefreshBar lastFetched={lastFetched} loading={loading} partial={partial} error={error} onRefresh={fetch} />
+      <InventoryRefreshBar lastFetched={displayLastFetched} loading={loading} partial={partial} error={error} onRefresh={fetch} />
       <InventoryTable
         columns={columns}
-        data={data}
+        data={displayData}
         loading={loading}
         hasMore={hasMore}
         onLoadMore={loadMore}
