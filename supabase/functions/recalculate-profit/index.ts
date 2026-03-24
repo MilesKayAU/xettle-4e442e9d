@@ -356,7 +356,7 @@ Deno.serve(async (req) => {
         postage_deduction: round(postageDeduction),
         gross_profit: round(grossProfit),
         margin_percent: round(marginPercent),
-        orders_count: ordersCount,
+        orders_count: shippingOrderCount,
         units_sold: unitsSold,
         uncosted_sku_count: uncostedSkus.size,
         uncosted_revenue: round(uncostedRevenue),
