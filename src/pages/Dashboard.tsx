@@ -130,6 +130,7 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
     payment_verification: { completionWarnings: [] },
     fulfilment_methods: { completionWarnings: ['fulfilment_methods_incomplete'] },
     data_quality: { completionWarnings: [] },
+    active_marketplaces: { completionWarnings: [] },
   };
 
   const getStatus = (sectionKey: string): 'complete' | 'incomplete' | 'warning' | 'none' => {
