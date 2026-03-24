@@ -690,6 +690,34 @@ export default function Dashboard() {
     }
   }, [user, loadMarketplaces]);
 
+  // Auto-sweep marketplace_validation if empty but active connections exist
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const [valRes, connRes] = await Promise.all([
+          supabase.from('marketplace_validation').select('id', { count: 'exact', head: true }),
+          supabase.from('marketplace_connections').select('id', { count: 'exact', head: true })
+            .in('connection_status', ['active', 'connected']),
+        ]);
+        if ((valRes.count ?? 0) === 0 && (connRes.count ?? 0) > 0) {
+          await triggerValidationSweep();
+          // Re-fetch badge counts after sweep
+          const [readyRes, outstandingRes] = await Promise.all([
+            supabase.from('marketplace_validation').select('id', { count: 'exact', head: true })
+              .eq('overall_status', 'ready_to_push'),
+            supabase.from('marketplace_validation').select('id', { count: 'exact', head: true })
+              .in('overall_status', ['settlement_needed', 'missing']),
+          ]);
+          setReadyToPushCount(readyRes.count ?? 0);
+          setOutstandingCount(outstandingRes.count ?? 0);
+        }
+      } catch (err) {
+        console.warn('[dashboard] auto-sweep failed:', err);
+      }
+    })();
+  }, [user]);
+
   // First-load heavy bootstrap scan removed to avoid duplicate API storms.
   // PostSetupBanner owns adaptive scanning and retry UX.
 
