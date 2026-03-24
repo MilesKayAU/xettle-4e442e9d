@@ -954,6 +954,15 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
             console.warn('Kogan PDF merge failed:', err.message);
             toast.warning('Kogan PDF merge failed — saving CSV data only. You can re-upload later.');
           }
+        } else {
+          // No PDF found — flag settlements as missing PDF for later correction
+          for (const s of settlements) {
+            s.metadata = { ...s.metadata, missingPdf: true };
+          }
+          toast.warning(
+            'Kogan CSV saved without Remittance PDF — net payout may not match your bank deposit. Upload the PDF later to correct.',
+            { duration: 8000 }
+          );
         }
       }
 
