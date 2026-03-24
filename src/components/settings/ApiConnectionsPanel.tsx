@@ -256,13 +256,14 @@ export default function ApiConnectionsPanel({
 
           {/* Quick status strip */}
           <div className="flex flex-wrap gap-2 mt-3">
-            {([
+             {([
               { key: 'xero', label: 'Xero' },
               { key: 'amazon', label: 'Amazon' },
               { key: 'shopify', label: 'Shopify' },
               { key: 'ebay', label: 'eBay' },
               { key: 'mirakl', label: 'Bunnings' },
-            ] as const).map(({ key, label }) => (
+              { key: 'kogan', label: 'Kogan' },
+             ] as const).map(({ key, label }) => (
               <div key={key} className="flex items-center gap-1 text-xs">
                 {summary[key] ? (
                   <CheckCircle2 className="h-3 w-3 text-emerald-500" />
