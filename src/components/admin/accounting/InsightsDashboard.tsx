@@ -1049,14 +1049,14 @@ export default function InsightsDashboard() {
                 </TooltipTrigger>
                 <TooltipContent side="left" className="max-w-xs text-xs">
                   <p className="font-medium mb-1">Marketplace Payout</p>
-                  <p><strong>Marketplace payout</strong> = Net Settlement ÷ Gross Sales</p>
-                  <p className="mt-1"><strong>After advertising</strong> = (Net Settlement − Ad Spend) ÷ Gross Sales</p>
-                  <p className="mt-1 text-muted-foreground">Excludes COGS, shipping costs & tax.</p>
+                  <p><strong>Marketplace payout</strong> = (Net Settlement − Est. Shipping) ÷ Gross Sales</p>
+                  <p className="mt-1"><strong>After advertising</strong> = (Net Settlement − Ad Spend − Est. Shipping) ÷ Gross Sales</p>
+                  <p className="mt-1 text-muted-foreground">Includes est. shipping for self-ship channels. FBA channels already include fulfilment in fees. Excludes COGS & tax.</p>
                 </TooltipContent>
               </Tooltip>
             </div>
             <CardDescription className="text-xs">
-              For every $1 you sell, here's what you keep after marketplace fees
+              For every $1 you sell, here's what you keep after marketplace fees{anyShippingDeducted ? ' and est. shipping' : ''}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
