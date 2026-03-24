@@ -1,0 +1,164 @@
+/**
+ * Unified Inventory Dashboard — read-only, Phase 1.
+ * Shows per-platform tabs based on active connections.
+ * 
+ * ISOLATION: This module must NOT import any settlement, validation,
+ * or Xero push logic. Only allowed shared deps: marketplace_connections,
+ * token tables, connection-status, UI components, auth helpers.
+ */
+import { useEffect, useState, useMemo, lazy, Suspense } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
+import { Badge } from '@/components/ui/badge';
+import { PackageOpen } from 'lucide-react';
+import LoadingSpinner from '@/components/ui/loading-spinner';
+
+import UniversalInventoryTab from './UniversalInventoryTab';
+import ShopifyInventoryTab from './ShopifyInventoryTab';
+import AmazonInventoryTab from './AmazonInventoryTab';
+import KoganInventoryTab from './KoganInventoryTab';
+import EbayInventoryTab from './EbayInventoryTab';
+import MiraklInventoryTab from './MiraklInventoryTab';
+
+interface ConnectionInfo {
+  marketplace_code: string;
+  marketplace_name: string;
+  connection_status: string;
+  connection_type: string;
+}
+
+type TabKey = 'universal' | 'shopify' | 'amazon' | 'kogan' | 'ebay' | 'mirakl';
+
+interface TabDef {
+  key: TabKey;
+  label: string;
+  requiresCode?: string[];
+}
+
+const ALL_TABS: TabDef[] = [
+  { key: 'universal', label: 'Universal' },
+  { key: 'shopify', label: 'Shopify', requiresCode: ['shopify_payments', 'shopify_orders'] },
+  { key: 'amazon', label: 'Amazon', requiresCode: ['amazon_au', 'amazon_us', 'amazon_uk', 'amazon_ca'] },
+  { key: 'kogan', label: 'Kogan', requiresCode: ['kogan'] },
+  { key: 'ebay', label: 'eBay', requiresCode: ['ebay_au'] },
+  { key: 'mirakl', label: 'Bunnings / Mirakl', requiresCode: ['bunnings_marketplace', 'baby_bunting', 'jb_hi_fi'] },
+];
+
+export default function InventoryDashboard({ onNavigateToSettings }: { onNavigateToSettings: () => void }) {
+  const [connections, setConnections] = useState<ConnectionInfo[]>([]);
+  const [connectionsLoaded, setConnectionsLoaded] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabKey>('universal');
+
+  // Also check for Kogan API creds in app_settings and direct token tables
+  const [hasKoganCreds, setHasKoganCreds] = useState(false);
+  const [hasAmazonToken, setHasAmazonToken] = useState(false);
+  const [hasShopifyToken, setHasShopifyToken] = useState(false);
+  const [hasEbayToken, setHasEbayToken] = useState(false);
+  const [hasMiraklToken, setHasMiraklToken] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const [connRes, koganRes, amazonRes, shopifyRes, ebayRes, miraklRes] = await Promise.all([
+        supabase.from('marketplace_connections').select('marketplace_code, marketplace_name, connection_status, connection_type'),
+        supabase.from('app_settings').select('value').eq('user_id', user.id).eq('key', 'kogan_api_seller_token').maybeSingle(),
+        supabase.from('amazon_tokens').select('id').eq('user_id', user.id).limit(1),
+        supabase.from('shopify_tokens').select('id').eq('user_id', user.id).limit(1),
+        supabase.from('ebay_tokens').select('id').eq('user_id', user.id).limit(1),
+        supabase.from('mirakl_tokens').select('id').eq('user_id', user.id).limit(1),
+      ]);
+
+      setConnections((connRes.data || []) as ConnectionInfo[]);
+      setHasKoganCreds(!!(koganRes.data?.value));
+      setHasAmazonToken(!!(amazonRes.data && amazonRes.data.length > 0));
+      setHasShopifyToken(!!(shopifyRes.data && shopifyRes.data.length > 0));
+      setHasEbayToken(!!(ebayRes.data && ebayRes.data.length > 0));
+      setHasMiraklToken(!!(miraklRes.data && miraklRes.data.length > 0));
+      setConnectionsLoaded(true);
+    })();
+  }, []);
+
+  const activeCodes = useMemo(() => new Set(
+    connections
+      .filter(c => (ACTIVE_CONNECTION_STATUSES as readonly string[]).includes(c.connection_status))
+      .map(c => c.marketplace_code)
+  ), [connections]);
+
+  const hasConnection = (tab: TabDef): boolean => {
+    if (!tab.requiresCode) return true; // universal always
+    // Check connection table
+    if (tab.requiresCode.some(code => activeCodes.has(code))) return true;
+    // Fallback to token tables
+    if (tab.key === 'shopify') return hasShopifyToken;
+    if (tab.key === 'amazon') return hasAmazonToken;
+    if (tab.key === 'ebay') return hasEbayToken;
+    if (tab.key === 'mirakl') return hasMiraklToken;
+    if (tab.key === 'kogan') return hasKoganCreds || activeCodes.has('kogan');
+    return false;
+  };
+
+  const visibleTabs = ALL_TABS.filter(t => t.key === 'universal' || hasConnection(t));
+
+  if (!connectionsLoaded) {
+    return <LoadingSpinner size="lg" text="Loading inventory..." />;
+  }
+
+  // No marketplace connections at all
+  if (connections.length === 0 && !hasShopifyToken && !hasAmazonToken && !hasEbayToken && !hasMiraklToken) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-12 text-center space-y-4">
+        <PackageOpen className="h-12 w-12 text-muted-foreground/40 mx-auto" />
+        <h3 className="text-lg font-semibold text-foreground">No Marketplaces Connected</h3>
+        <p className="text-sm text-muted-foreground max-w-md mx-auto">
+          Connect your marketplaces in Settings to see your inventory here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <div className="flex items-center gap-2">
+          <h2 className="text-2xl font-bold text-foreground">Inventory</h2>
+          <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">Beta</Badge>
+        </div>
+        <p className="text-sm text-muted-foreground mt-1">
+          Live read-only view of your product inventory across all connected platforms.
+        </p>
+      </div>
+
+      {/* Tab bar */}
+      <div className="flex gap-1 flex-wrap border-b border-border pb-0">
+        {visibleTabs.map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
+              activeTab === tab.key
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      {activeTab === 'universal' && (
+        <UniversalInventoryTab
+          platformData={{ shopify: [], amazon: [], kogan: [], ebay: [], mirakl: [] }}
+          loading={false}
+        />
+      )}
+      {activeTab === 'shopify' && <ShopifyInventoryTab />}
+      {activeTab === 'amazon' && <AmazonInventoryTab connected={hasAmazonToken} />}
+      {activeTab === 'kogan' && <KoganInventoryTab connected={hasKoganCreds} onNavigateToSettings={onNavigateToSettings} />}
+      {activeTab === 'ebay' && <EbayInventoryTab connected={hasEbayToken} onNavigateToSettings={onNavigateToSettings} />}
+      {activeTab === 'mirakl' && <MiraklInventoryTab connected={hasMiraklToken} onNavigateToSettings={onNavigateToSettings} />}
+    </div>
+  );
+}
