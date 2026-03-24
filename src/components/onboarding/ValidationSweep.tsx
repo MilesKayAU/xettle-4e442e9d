@@ -723,7 +723,7 @@ export default function ValidationSweep({
                     <tr key={row.id} className={cn("border-b hover:bg-muted/20 transition-colors group", selectedIds.has(row.id) && "bg-primary/5")}>
 
                       <td className="px-2 py-2 text-center w-8">
-                        {!isReconciliationOnly('api_sync', row.marketplace_code, row.settlement_id) && row.overall_status === 'ready_to_push' && row.settlement_id ? (
+                        {!isReconciliationOnly(row.settlement_source, row.marketplace_code, row.settlement_id) && row.overall_status === 'ready_to_push' && row.settlement_id ? (
                           <Checkbox
                             checked={selectedIds.has(row.id)}
                             onCheckedChange={() => toggleSelectRow(row.id)}
