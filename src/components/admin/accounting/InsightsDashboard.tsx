@@ -381,16 +381,21 @@ export default function InsightsDashboard() {
         const fulfilmentUnknown = fulfilmentMethod === 'not_sure';
 
         // Shipping cost estimation — only applied for self_ship / third_party_logistics
-        // Use marketplace_shipping_costs table first, fall back to app_settings postage_cost
         const shippingCostPerOrder = shippingCostByMp[mp] || postageCosts[mp] || 0;
-        // Use real order counts from settlement_profit — do NOT fall back to rows.length
         const estimatedOrderCount = (() => {
           const profitOrderCount = profitOrderCounts[mp];
           if (profitOrderCount && profitOrderCount > 0) return profitOrderCount;
-          return 0; // No real order count available — don't fabricate
+          return 0;
         })();
         const shouldDeductShipping = fulfilmentMethod === 'self_ship' || fulfilmentMethod === 'third_party_logistics';
         const estimatedShippingCost = shouldDeductShipping ? shippingCostPerOrder * estimatedOrderCount : 0;
+        
+        // Primary returnRatio now includes shipping when configured — this makes
+        // FBA vs self-ship comparisons fair (FBA fees already include fulfilment)
+        const returnRatio = totalSales > 0 
+          ? Math.min(Math.max((netPayout - estimatedShippingCost) / totalSales, -1), 1) 
+          : 0;
+        
         const returnAfterShipping = totalSales > 0 && shouldDeductShipping && shippingCostPerOrder > 0 && estimatedOrderCount > 0
           ? Math.max(Math.min((netPayout - estimatedShippingCost) / totalSales, 1), -1) 
           : null;
