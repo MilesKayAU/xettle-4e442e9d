@@ -58,6 +58,7 @@ function getMarginColor(margin: number): string {
 export default function MarketplaceProfitComparison() {
   const [data, setData] = useState<AggregatedMarketplace[]>([]);
   const [loading, setLoading] = useState(true);
+  const [recalculating, setRecalculating] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
   const [accessChecked, setAccessChecked] = useState(false);
   const navigate = useNavigate();
