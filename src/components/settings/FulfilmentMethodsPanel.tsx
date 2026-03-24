@@ -108,7 +108,11 @@ export default function FulfilmentMethodsPanel() {
           mcfStrings[code] = val > 0 ? String(val) : '';
         }
         setMcfCosts(mcfStrings);
-
+        const thresholdStrings: Record<string, string> = {};
+        for (const [code, val] of Object.entries(thresholds)) {
+          thresholdStrings[code] = val > 0 ? String(val) : '';
+        }
+        setFreeShippingThresholds(thresholdStrings);
         // Check if mixed mode prompt was dismissed
         const { data: dismissed } = await supabase
           .from('app_settings')
