@@ -1647,9 +1647,12 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
     for (const csv of csvFiles) {
       const settlementId = csv.settlements?.[0]?.settlement_id || '';
-      const docMatch = settlementId.match(/(\d{5,})/);
-      const docNumber = docMatch?.[1] || csv.file.name.replace(/\.[^.]+$/, '');
-      const csvMonth = getCsvPeriodMonth(csv);
+      // Extract AP invoice doc number: try kogan_NNNN format first, then last 5+ digit group, then first 5+ digit group
+      const koganIdMatch = settlementId.match(/^kogan_(\d+)$/);
+      const lastDigitMatch = settlementId.match(/_(\d{5,})(?:\s|$)/);
+      const firstDigitMatch = settlementId.match(/(\d{5,})/);
+      const docNumber = koganIdMatch?.[1] || lastDigitMatch?.[1] || firstDigitMatch?.[1] || csv.file.name.replace(/\.[^.]+$/, '');
+      const csvMonth = getCsvPeriodMonth(csv) || csv.settlements?.[0]?.metadata?.periodMonth;
 
       // Try matching PDF: first by doc number, then by period month
       let matchedPdf: (typeof pdfFiles)[0] | null = null;
