@@ -3,7 +3,7 @@
  * Returns null if detection is inconclusive.
  */
 
-export type DetectedMarketplace = 'amazon_au' | 'bunnings' | 'shopify_payments' | 'shopify_orders' | 'woolworths_marketplus' | 'ebay_au' | null;
+export type DetectedMarketplace = 'amazon_au' | 'bunnings' | 'kogan' | 'shopify_payments' | 'shopify_orders' | 'woolworths_marketplus' | 'ebay_au' | null;
 
 /** Sniff a file and return the detected marketplace */
 export async function detectFileMarketplace(file: File): Promise<DetectedMarketplace> {
