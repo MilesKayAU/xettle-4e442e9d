@@ -172,6 +172,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
   const [shopifyShopDomain, setShopifyShopDomain] = useState<string | null>(null);
   const [firstContactIdx, setFirstContactIdx] = useState<number | null>(null);
   const [showNewFormatBanner, setShowNewFormatBanner] = useState(false);
+  const [existingKoganSettlements, setExistingKoganSettlements] = useState<Record<string, { id: string; settlement_id: string; net_payout: number; metadata: any }>>({});
+  const [mergingPdfDoc, setMergingPdfDoc] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<DetectedFile[]>([]);
   filesRef.current = files;
