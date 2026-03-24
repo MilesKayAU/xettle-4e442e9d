@@ -1,57 +1,64 @@
 
 
-## Plan: Unify Homepage and Overview Data Sources
+## Plan: Fix Overly Aggressive Recon-Only Gating
 
 ### Root Cause
 
-The homepage and the Settlements Overview pull counts from **different tables**:
+The `ValidationSweep` component hardcodes `'api_sync'` as the source in every `isReconciliationOnly()` call (lines 303, 326, 328, 334, 372, 427, 725, 767, 795). Since `api_sync` is not in `PUSHABLE_SOURCES`, **every single row** is treated as "Recon Only" — including real CSV-uploaded Bunnings, BigW, MyDeal, and Kogan settlements that bookkeepers need to push.
 
-| Component | Data Source | What it counts |
-|-----------|-----------|----------------|
-| Homepage badge (Settlements tab) | `settlements` table → `status = 'ready_to_push'` | Settlement records |
-| Homepage `ActionCentre` | `marketplace_validation` table | Validation periods |
-| Homepage `RecentSettlements` | `settlements` table (+ synthetic validation rows) | Settlement records |
-| Overview `ValidationSweep` | `marketplace_validation` table | Validation periods |
+The only settlements that should be "Recon Only" are Shopify auto-generated summaries (`settlement_id` starting with `shopify_auto_`). Everything uploaded via CSV or fetched from a payout API (eBay, Mirakl, Amazon) is a real settlement and must be pushable.
 
-When `marketplace_validation` is empty or stale (hasn't been re-swept), the Overview shows all zeros — even though `settlements` might have data. The homepage may show counts from `settlements` that don't match.
+### Fix
 
-### Fix: Single Source of Truth
+**Step 1 — Add `settlement_source` to `marketplace_validation` table**
 
-Make `marketplace_validation` the canonical source everywhere, and ensure it's always populated.
+Migration to add a `settlement_source text` column. This stores the actual source (`csv_upload`, `api_sync`, `manual`, etc.) so the UI can gate correctly without joining to the `settlements` table.
 
-**1. Auto-trigger validation sweep when Overview tab is opened with stale/empty data**
+**Step 2 — Backfill `settlement_source` from `settlements`**
 
-**File: `src/components/onboarding/ValidationSweep.tsx`**
-- After `loadData()` completes, if `rows.length === 0` and there are active marketplace connections, auto-trigger `triggerValidationSweep()` then reload
-- Add a `lastSweptAt` check: if the most recent `last_checked_at` is older than 1 hour, show a "Data may be outdated" banner with a re-scan button (already exists as "Re-scan")
+In the same migration, backfill existing rows:
+```sql
+UPDATE marketplace_validation mv
+SET settlement_source = s.source
+FROM settlements s
+WHERE mv.settlement_id = s.settlement_id
+  AND mv.settlement_source IS NULL;
+```
 
-**2. Align homepage badge counts to use `marketplace_validation`**
+**Step 3 — Update `run-validation-sweep` edge function**
 
-**File: `src/pages/Dashboard.tsx`** (lines 619-633)
-- Replace the `settlements`-table badge count queries with `marketplace_validation` counts:
-  - `readyToPushCount` = count where `overall_status = 'ready_to_push'`
-  - `outstandingCount` = count where `overall_status IN ('settlement_needed', 'missing')`
-- This ensures the Settlements tab badge matches the Overview summary cards exactly
+When the sweep upserts validation rows, include `settlement_source` from the matched settlement's `source` field.
 
-**3. Align `ActionCentre` ready-to-push section with Overview**
+**Step 4 — Update `ValidationSweep.tsx`**
 
-**File: `src/components/dashboard/ActionCentre.tsx`**
-- Already queries `marketplace_validation` — verify its count logic matches `ValidationSweep.statusCounts` exactly (same active-connection filtering, same recon-only exclusions)
-- Add the same `activeCodes` and `pausedCodes` filtering that `ValidationSweep` uses
+- Add `settlement_source` to the `ValidationRow` interface
+- Replace all `isReconciliationOnly('api_sync', ...)` calls with `isReconciliationOnly(row.settlement_source, ...)` — using the actual source
+- This means CSV-uploaded Bunnings/BigW/MyDeal/Kogan rows will correctly show as pushable (source = `csv_upload`), while Shopify auto-summaries (source = `api_sync`, settlement_id = `shopify_auto_*`) remain Recon Only
 
-**4. Auto-sweep on first settlement ingest**
+**Step 5 — Update `Dashboard.tsx` badge counts**
 
-**File: `src/pages/Dashboard.tsx`**
-- After `loadMarketplaces()` completes and finds active connections, check if `marketplace_validation` has any rows; if not, trigger `triggerValidationSweep()` once
-- This ensures new users who just uploaded their first settlement see data in Overview immediately
+The badge count queries already use `marketplace_validation.overall_status` which is correct. No change needed — the trigger `calculate_validation_status` already sets `ready_to_push` based on reconciliation status, not source. The Recon Only badge was purely a UI-layer problem in `ValidationSweep`.
 
-### Files Modified
+### What Changes
 
 | File | Changes |
 |------|---------|
-| `src/pages/Dashboard.tsx` | Badge counts from `marketplace_validation`; auto-sweep if empty |
-| `src/components/onboarding/ValidationSweep.tsx` | Auto-sweep when opened with 0 rows + active connections |
-| `src/components/dashboard/ActionCentre.tsx` | Align filtering logic with ValidationSweep |
+| Migration | Add `settlement_source text` column + backfill from `settlements` |
+| `supabase/functions/run-validation-sweep/index.ts` | Include `settlement_source` in upsert |
+| `src/components/onboarding/ValidationSweep.tsx` | Use `row.settlement_source` instead of hardcoded `'api_sync'` |
 
-### No database changes needed
+### What Stays Recon Only
+
+- Shopify auto-generated summaries (`source = 'api_sync'` + `settlement_id` starts with `shopify_auto_`)
+- Any future order-level-only sources not in the `PUSHABLE_SOURCES` allowlist
+
+### What Becomes Pushable (correctly)
+
+- Bunnings CSV uploads → `source = 'csv_upload'` ✓
+- BigW CSV uploads → `source = 'csv_upload'` ✓
+- MyDeal CSV uploads → `source = 'csv_upload'` ✓
+- Kogan CSV uploads → `source = 'csv_upload'` ✓
+- Everyday Market CSV uploads → `source = 'csv_upload'` ✓
+- eBay API settlements → `source = 'ebay_api'` ✓
+- Mirakl API settlements → `source = 'mirakl_api'` ✓
 
