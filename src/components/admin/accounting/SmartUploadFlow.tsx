@@ -896,10 +896,26 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
       // ── Kogan PDF + CSV merge: augment CSV settlement with PDF deductions ──
       if (marketplace === 'kogan' && !df.file.name.toLowerCase().endsWith('.pdf')) {
-        // Find a Kogan PDF in the uploaded files
-        const koganPdfFile = filesRef.current.find(
-          f => f.detection?.marketplace === 'kogan' && f.file.name.toLowerCase().endsWith('.pdf')
-        );
+        // Find the PAIRED Kogan PDF via koganPairings (not first-found)
+        let koganPdfFile: DetectedFile | null = null;
+        
+        // Extract doc number from this CSV's settlement
+        const csvSettlementId = settlements[0]?.settlement_id || '';
+        const csvDocMatch = csvSettlementId.match(/(\d{5,})/);
+        const csvDocNumber = csvDocMatch?.[1] || '';
+        
+        // Search for matching PDF by doc number
+        if (csvDocNumber) {
+          for (const f of filesRef.current) {
+            if (f.detection?.marketplace !== 'kogan' || !f.file.name.toLowerCase().endsWith('.pdf')) continue;
+            const pdfDocNums = f.koganDocNumbers || [];
+            if (pdfDocNums.includes(csvDocNumber)) {
+              koganPdfFile = f;
+              break;
+            }
+          }
+        }
+        
         if (koganPdfFile) {
           try {
             const pdfResult = await parseKoganRemittancePdf(koganPdfFile.file);
