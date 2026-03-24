@@ -75,6 +75,24 @@ function parseDateToISO(raw: string): string {
 /**
  * Parse a Kogan Remittance Advice PDF and extract financial summary.
  */
+/**
+ * Lightweight extraction of AP Invoice doc numbers from a Kogan PDF.
+ * Used for pairing CSVs with PDFs without full parsing.
+ */
+export async function extractKoganPdfDocNumbers(file: File): Promise<string[]> {
+  try {
+    const rawText = await extractPdfText(file);
+    const docNumbers: string[] = [];
+    const invoiceMatches = rawText.matchAll(/A\/P\s+Invoice\s+(\d+)/gi);
+    for (const m of invoiceMatches) {
+      if (!docNumbers.includes(m[1])) docNumbers.push(m[1]);
+    }
+    return docNumbers;
+  } catch {
+    return [];
+  }
+}
+
 export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittanceResult> {
   try {
     const rawText = await extractPdfText(file);
