@@ -324,7 +324,7 @@ export default function ValidationSweep({
     // Apply manual/api/recon sub-tab when settlement_needed filter is active
     if (filter === 'settlement_needed') {
       if (uploadSubTab === 'manual') {
-        result = result.filter(r => !apiSyncedCodes.has(r.marketplace_code) && !isReconciliationOnly('api_sync', r.marketplace_code, r.settlement_id));
+        result = result.filter(r => !apiSyncedCodes.has(r.marketplace_code) && !isReconciliationOnly(r.settlement_source, r.marketplace_code, r.settlement_id));
       } else if (uploadSubTab === 'api') {
         result = result.filter(r => apiSyncedCodes.has(r.marketplace_code) && !isReconciliationOnly('api_sync', r.marketplace_code, r.settlement_id));
       } else if (uploadSubTab === 'recon') {
