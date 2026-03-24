@@ -11,6 +11,7 @@ import { provisionAllMarketplaceConnections } from '@/utils/marketplace-token-ma
 import { ACTIVE_CONNECTION_STATUSES, isApiConnectionType } from '@/constants/connection-status';
 import { useDashboardTaskCounts } from '@/hooks/useDashboardTaskCounts';
 import { toast } from 'sonner';
+import { triggerValidationSweep } from '@/utils/settlement-engine';
 
 import ValidationSweep from '@/components/onboarding/ValidationSweep';
 import RecentSettlements from '@/components/dashboard/RecentSettlements';
