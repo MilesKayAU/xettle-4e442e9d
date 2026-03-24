@@ -31,6 +31,8 @@ export interface KoganRemittanceResult {
   remittanceNumber?: string;       // e.g. '3599603'
   transferDate?: string;           // ISO date
   paymentDate?: string;            // ISO date
+  /** Period month derived from transfer date or line item dates, e.g. "2026-02" */
+  periodMonth?: string;
   lineItems: KoganRemittanceLineItem[];
   totalPaidAmount?: number;        // Bank deposit amount
   /** Breakdown of adjustments */
@@ -77,18 +79,52 @@ function parseDateToISO(raw: string): string {
  * Lightweight extraction of AP Invoice doc numbers from a Kogan PDF.
  * Used for pairing CSVs with PDFs without full parsing.
  */
+export interface KoganPdfDocInfo {
+  docNumbers: string[];
+  /** Period month derived from PDF dates, e.g. "2026-02" */
+  periodMonth?: string;
+}
+
+/**
+ * Lightweight extraction of AP Invoice doc numbers + period month from a Kogan PDF.
+ * Used for pairing CSVs with PDFs without full parsing.
+ */
 export async function extractKoganPdfDocNumbers(file: File): Promise<string[]> {
+  const info = await extractKoganPdfInfo(file);
+  return info.docNumbers;
+}
+
+export async function extractKoganPdfInfo(file: File): Promise<KoganPdfDocInfo> {
   try {
     const rawText = await extractPdfText(file);
     const docNumbers: string[] = [];
-    // Use [\s\S] to handle newlines between text items
     const invoiceMatches = rawText.matchAll(/A\/P\s+Invoice\s+(\d+)/gi);
     for (const m of invoiceMatches) {
       if (!docNumbers.includes(m[1])) docNumbers.push(m[1]);
     }
-    return docNumbers;
+
+    // Extract period month from Transfer Date (DD/MM/YYYY) or line item dates (M/D/YYYY)
+    const norm = rawText.replace(/\s+/g, ' ');
+    let periodMonth: string | undefined;
+
+    // Try Transfer Date first (DD/MM/YYYY)
+    const transferMatch = norm.match(/Transfer\s+Date:\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/i);
+    if (transferMatch) {
+      periodMonth = `${transferMatch[3]}-${transferMatch[2].padStart(2, '0')}`;
+    }
+
+    // Fallback: use first line item date (M/D/YYYY — US format in table)
+    if (!periodMonth) {
+      const dateMatch = norm.match(/(?:A\/P\s+(?:Invoice|Credit\s+note)|Journal\s+Entry)\s+\d+\s+(\d{1,2})\/(\d{1,2})\/(\d{4})/i);
+      if (dateMatch) {
+        // In table dates, month is first field (US format)
+        periodMonth = `${dateMatch[3]}-${dateMatch[1].padStart(2, '0')}`;
+      }
+    }
+
+    return { docNumbers, periodMonth };
   } catch {
-    return [];
+    return { docNumbers: [] };
   }
 }
 
@@ -216,11 +252,22 @@ export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittan
     console.log('[Kogan PDF] Parsed', lineItems.length, 'line items. Total paid:', totalPaidAmount, 
       'Invoice total:', invoiceTotal, 'Credits:', creditNoteTotal, 'Ad fees:', advertisingFees);
 
+    // Derive periodMonth from transferDate or first line item date
+    let periodMonth: string | undefined;
+    if (transferDate) {
+      // transferDate is ISO: YYYY-MM-DD
+      periodMonth = transferDate.substring(0, 7);
+    } else if (lineItems.length > 0 && lineItems[0].date) {
+      const isoDate = parseDateToISO(lineItems[0].date);
+      if (isoDate) periodMonth = isoDate.substring(0, 7);
+    }
+
     return {
       success: lineItems.length > 0,
       remittanceNumber,
       transferDate,
       paymentDate,
+      periodMonth,
       lineItems,
       totalPaidAmount,
       invoiceTotal,

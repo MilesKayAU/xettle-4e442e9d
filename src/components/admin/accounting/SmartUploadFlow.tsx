@@ -44,7 +44,7 @@ import { parseGenericCSV, parseGenericXLSX } from '@/utils/generic-csv-parser';
 import { parseShopifyPayoutCSV } from '@/utils/shopify-payments-parser';
 import { parseShopifyOrdersCSV } from '@/utils/shopify-orders-parser';
 import { parseBunningsSummaryPdf } from '@/utils/bunnings-summary-parser';
-import { parseKoganRemittancePdf, extractKoganPdfDocNumbers, type KoganRemittanceResult } from '@/utils/kogan-remittance-parser';
+import { parseKoganRemittancePdf, extractKoganPdfInfo, type KoganRemittanceResult } from '@/utils/kogan-remittance-parser';
 import { parseWoolworthsMarketPlusCSV, isTransactionFee } from '@/utils/woolworths-marketplus-parser';
 import { saveSettlement, validateSettlementSanity, MARKETPLACE_LABELS as ENGINE_LABELS, type StandardSettlement } from '@/utils/settlement-engine';
 import { createDraftFingerprint } from '@/utils/fingerprint-lifecycle';
@@ -92,6 +92,8 @@ interface DetectedFile {
   xeroReadiness?: XeroReadinessResult;
   /** Kogan PDF doc numbers for pairing */
   koganDocNumbers?: string[];
+  /** Kogan PDF period month for period-based pairing (e.g. "2026-02") */
+  koganPdfPeriodMonth?: string;
   /** Kogan remittance parse result (cached for merge) */
   koganRemittanceResult?: KoganRemittanceResult;
 }
@@ -469,15 +471,18 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
         // Extract Kogan PDF doc numbers + remittance result for pairing
         let koganDocNumbers: string[] | undefined;
+        let koganPdfPeriodMonth: string | undefined;
         let koganRemittanceResult: KoganRemittanceResult | undefined;
         if (result?.marketplace === 'kogan' && file.name.toLowerCase().endsWith('.pdf')) {
-          koganDocNumbers = await extractKoganPdfDocNumbers(file);
+          const pdfInfo = await extractKoganPdfInfo(file);
+          koganDocNumbers = pdfInfo.docNumbers;
+          koganPdfPeriodMonth = pdfInfo.periodMonth;
           try {
             koganRemittanceResult = await parseKoganRemittancePdf(file);
           } catch { /* silent */ }
         }
 
-        return { idx, result, settlements, dbDupeIds, splitResult: undefined as MultiMarketplaceSplitResult | undefined, csvHeaders: fileHeaders, sampleRows, koganDocNumbers, koganRemittanceResult };
+        return { idx, result, settlements, dbDupeIds, splitResult: undefined as MultiMarketplaceSplitResult | undefined, csvHeaders: fileHeaders, sampleRows, koganDocNumbers, koganPdfPeriodMonth, koganRemittanceResult };
       })
     );
 
@@ -486,7 +491,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       const offset = prev.length - uniqueFiles.length;
       for (const r of results) {
         if (r.status === 'fulfilled') {
-          const { idx, result, settlements, dbDupeIds, splitResult, csvHeaders, sampleRows, koganDocNumbers, koganRemittanceResult } = r.value;
+          const { idx, result, settlements, dbDupeIds, splitResult, csvHeaders, sampleRows, koganDocNumbers, koganPdfPeriodMonth, koganRemittanceResult } = r.value;
           const fileIdx = offset + idx;
           if (fileIdx < updated.length) {
             // If multi-marketplace split detected, show confirmation card
@@ -541,6 +546,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               sampleRows: sampleRows || undefined,
               wasLowConfidence: isFirstContact || false,
               koganDocNumbers: koganDocNumbers || undefined,
+              koganPdfPeriodMonth: koganPdfPeriodMonth || undefined,
               koganRemittanceResult: koganRemittanceResult || undefined,
             };
 
@@ -898,16 +904,38 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
       // ── Kogan PDF + CSV merge: augment CSV settlement with PDF deductions ──
       if (marketplace === 'kogan' && !df.file.name.toLowerCase().endsWith('.pdf')) {
-        // Find the PAIRED Kogan PDF via koganPairings (not first-found)
+        // Find the PAIRED Kogan PDF via period-based matching (primary) or doc number (fallback)
         let koganPdfFile: DetectedFile | null = null;
         
-        // Extract doc number from this CSV's settlement
+        // Extract CSV period month
+        const csvPeriodStart = settlements[0]?.period_start;
+        let csvPeriodMonth: string | undefined;
+        if (csvPeriodStart) {
+          const d = new Date(csvPeriodStart);
+          if (!isNaN(d.getTime())) {
+            csvPeriodMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          }
+        }
+        
+        // Extract doc number from this CSV's settlement (fallback)
         const csvSettlementId = settlements[0]?.settlement_id || '';
         const csvDocMatch = csvSettlementId.match(/(\d{5,})/);
         const csvDocNumber = csvDocMatch?.[1] || '';
         
-        // Search for matching PDF by doc number
-        if (csvDocNumber) {
+        // Pass 1: period-based match
+        if (csvPeriodMonth) {
+          for (const f of filesRef.current) {
+            if (f.detection?.marketplace !== 'kogan' || !f.file.name.toLowerCase().endsWith('.pdf')) continue;
+            const pdfMonth = f.koganPdfPeriodMonth || f.koganRemittanceResult?.periodMonth;
+            if (pdfMonth && pdfMonth === csvPeriodMonth) {
+              koganPdfFile = f;
+              break;
+            }
+          }
+        }
+        
+        // Pass 2: doc number match (fallback)
+        if (!koganPdfFile && csvDocNumber) {
           for (const f of filesRef.current) {
             if (f.detection?.marketplace !== 'kogan' || !f.file.name.toLowerCase().endsWith('.pdf')) continue;
             const pdfDocNums = f.koganDocNumbers || [];
@@ -1566,16 +1594,30 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
     if (csvFiles.length === 0 && pdfFiles.length === 0) return null;
 
-    // Build settlement groups by doc number
+    // Helper: extract period month from a CSV settlement's dates
+    const getCsvPeriodMonth = (csv: typeof csvFiles[0]): string | undefined => {
+      const s = csv.settlements?.[0];
+      if (!s) return undefined;
+      // Try period_start first, fall back to settlement_id date patterns
+      const dateStr = s.period_start || s.period_end;
+      if (dateStr) {
+        const d = new Date(dateStr);
+        if (!isNaN(d.getTime())) {
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        }
+      }
+      return undefined;
+    };
+
     type KoganPair = {
       docNumber: string;
+      periodMonth?: string;
       csvIdx: number | null;
       pdfIdx: number | null;
       csvFile: DetectedFile | null;
       pdfFile: DetectedFile | null;
       netPayout: number | null;
       hasPdf: boolean;
-      /** Existing settlement in DB (for late PDF merge) */
       existingDbSettlement?: { id: string; settlement_id: string; net_payout: number; metadata: any } | null;
     };
 
@@ -1583,13 +1625,15 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
     const usedPdfIndices = new Set<number>();
 
     for (const csv of csvFiles) {
-      // Extract doc number from settlement_id
       const settlementId = csv.settlements?.[0]?.settlement_id || '';
       const docMatch = settlementId.match(/(\d{5,})/);
       const docNumber = docMatch?.[1] || csv.file.name.replace(/\.[^.]+$/, '');
+      const csvMonth = getCsvPeriodMonth(csv);
 
-      // Find matching PDF by doc number
+      // Try matching PDF: first by doc number, then by period month
       let matchedPdf: (typeof pdfFiles)[0] | null = null;
+      
+      // Pass 1: doc number match (legacy, still works for exact matches)
       for (const pdf of pdfFiles) {
         if (usedPdfIndices.has(pdf.originalIdx)) continue;
         const pdfDocNums = pdf.koganDocNumbers || [];
@@ -1600,12 +1644,26 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         }
       }
 
+      // Pass 2: period-based match (primary strategy)
+      if (!matchedPdf && csvMonth) {
+        for (const pdf of pdfFiles) {
+          if (usedPdfIndices.has(pdf.originalIdx)) continue;
+          const pdfMonth = pdf.koganPdfPeriodMonth || pdf.koganRemittanceResult?.periodMonth;
+          if (pdfMonth && pdfMonth === csvMonth) {
+            matchedPdf = pdf;
+            usedPdfIndices.add(pdf.originalIdx);
+            break;
+          }
+        }
+      }
+
       const netPayout = matchedPdf?.koganRemittanceResult?.totalPaidAmount
         ?? csv.settlements?.[0]?.net_payout
         ?? null;
 
       groups.push({
         docNumber,
+        periodMonth: csvMonth,
         csvIdx: csv.originalIdx,
         pdfIdx: matchedPdf?.originalIdx ?? null,
         csvFile: csv,
@@ -1620,10 +1678,27 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       if (usedPdfIndices.has(pdf.originalIdx)) continue;
       const docNums = pdf.koganDocNumbers || [];
       const docNumber = docNums[0] || pdf.file.name.replace(/\.[^.]+$/, '');
-      const dbMatch = existingKoganSettlements[docNumber] || null;
+      const pdfMonth = pdf.koganPdfPeriodMonth || pdf.koganRemittanceResult?.periodMonth;
+      
+      // Try DB match by doc number first, then by period month
+      let dbMatch = existingKoganSettlements[docNumber] || null;
+      if (!dbMatch && pdfMonth) {
+        // Search existing settlements by period overlap
+        for (const key of Object.keys(existingKoganSettlements)) {
+          const s = existingKoganSettlements[key];
+          if (s.metadata?.period_start) {
+            const sMonth = s.metadata.period_start.substring(0, 7);
+            if (sMonth === pdfMonth) {
+              dbMatch = s;
+              break;
+            }
+          }
+        }
+      }
       
       groups.push({
         docNumber,
+        periodMonth: pdfMonth,
         csvIdx: null,
         pdfIdx: pdf.originalIdx,
         csvFile: null,
