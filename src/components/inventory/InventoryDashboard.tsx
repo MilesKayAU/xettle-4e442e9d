@@ -6,7 +6,7 @@
  * or Xero push logic. Only allowed shared deps: marketplace_connections,
  * token tables, connection-status, UI components, auth helpers.
  */
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { PackageOpen, Settings2, AlertTriangle } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
-import { useInventoryRules } from '@/hooks/useInventoryRules';
+import { useInventoryRules, type SkuLink } from '@/hooks/useInventoryRules';
 import { useInventoryFetch } from './useInventoryFetch';
 
 import UniversalInventoryTab from './UniversalInventoryTab';
@@ -142,6 +142,23 @@ export default function InventoryDashboard({ onNavigateToSettings }: { onNavigat
     setRulesOpen(false);
   };
 
+  const handleSaveSkuLink = useCallback(async (link: SkuLink) => {
+    const existing = rules.sku_links ?? [];
+    // Upsert: merge if canonical already exists
+    const idx = existing.findIndex(l => l.canonical === link.canonical);
+    let updated: SkuLink[];
+    if (idx >= 0) {
+      const merged = new Set([...existing[idx].linked, ...link.linked]);
+      updated = [...existing];
+      updated[idx] = { canonical: link.canonical, linked: Array.from(merged) };
+    } else {
+      updated = [...existing, link];
+    }
+    const newRules = { ...rules, sku_links: updated };
+    setRules(newRules);
+    await saveRules(newRules);
+  }, [rules, setRules, saveRules]);
+
   if (!connectionsLoaded || rulesLoading) {
     return <LoadingSpinner size="lg" text="Loading inventory..." />;
   }
@@ -240,6 +257,7 @@ export default function InventoryDashboard({ onNavigateToSettings }: { onNavigat
           }}
           loading={universalLoading}
           inventoryRules={rules}
+          onSaveSkuLink={handleSaveSkuLink}
         />
       )}
       {activeTab === 'shopify' && <ShopifyInventoryTab />}

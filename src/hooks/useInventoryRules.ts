@@ -5,10 +5,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
+export interface SkuLink {
+  canonical: string;
+  linked: string[];
+}
+
 export interface InventoryRules {
   physical_sources: string[];
   fbm_from_shopify: boolean;
   mirror_platforms: Record<string, string>;
+  sku_links: SkuLink[];
 }
 
 export const DEFAULT_INVENTORY_RULES: InventoryRules = {
@@ -19,6 +25,7 @@ export const DEFAULT_INVENTORY_RULES: InventoryRules = {
     ebay: 'shopify',
     mirakl: 'shopify',
   },
+  sku_links: [],
 };
 
 export function useInventoryRules() {
@@ -45,6 +52,7 @@ export function useInventoryRules() {
             physical_sources: parsed.physical_sources ?? DEFAULT_INVENTORY_RULES.physical_sources,
             fbm_from_shopify: parsed.fbm_from_shopify ?? DEFAULT_INVENTORY_RULES.fbm_from_shopify,
             mirror_platforms: parsed.mirror_platforms ?? DEFAULT_INVENTORY_RULES.mirror_platforms,
+            sku_links: parsed.sku_links ?? DEFAULT_INVENTORY_RULES.sku_links,
           });
         } catch {
           // keep defaults
