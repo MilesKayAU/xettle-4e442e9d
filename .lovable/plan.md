@@ -1,83 +1,110 @@
 
 
-## Audit: Data Integrity Issues in Settlements Overview
+## Plan: Insights Page Data Accuracy Audit and Fixes
 
 ### Issues Found
 
-**Issue 1 — `saved` → `ingested` backfill never ran**
+**Issue 1 (Critical) — Refunds double-counted in "Total fees + refunds" line**
 
-The earlier plan to backfill `status = 'saved'` to `'ingested'` was approved but the migration only cleaned up orphaned validation rows — it didn't include the status backfill. Result: 11 settlements (5 CSV, 6 eBay API) are stuck at `saved` status. The reconciliation engine's auto-promotion only works on `ingested` status rows, so these can never auto-promote to `ready_to_push`.
+In `InsightsDashboard.tsx`, the `feeBreakdown` array includes refunds as a segment (line 468). The `breakdownTotal` (line 475) sums ALL breakdown items including refunds. Then `s.feeLoad` = `breakdownTotal / totalSales` — already includes refunds. But line 1410 adds refunds AGAIN:
 
-Fix: Migration to update `saved` → `ingested`.
-
-**Issue 2 — eBay API uses source `api`, not `ebay_api`**
-
-The `fetch-ebay-settlements` function saves with `source: 'api'` (not `'ebay_api'`). Both `api` and `ebay_api` are in `PUSHABLE_SOURCES` so this doesn't break push gating — but it creates inconsistent data. The validation sweep backfill also set `settlement_source = 'api'` from the settlements table. This is cosmetic but worth normalising.
-
-Not blocking — no code change needed now, but worth noting.
-
-**Issue 3 — Kogan validation row `344840` references a non-existent settlement**
-
-The validation table has a Kogan row with `settlement_id = '344840'`, `settlement_source = NULL`, `overall_status = 'ready_to_push'`, `settlement_net = 730.65`. But **no settlement with ID `344840` exists in the `settlements` table**. This is a ghost row — likely a Shopify order ID that was written to the validation table by an older sweep version, before the source-tracking fix.
-
-Because `settlement_source` is NULL, `isReconciliationOnly(null, ...)` returns `false`, so this ghost row appears as a pushable "Ready to Push" item. Attempting to push it would fail because no settlement data exists.
-
-Fix: Delete orphaned validation rows where `settlement_id` doesn't exist in `settlements` AND is not a placeholder (not null).
-
-**Issue 4 — "All Periods" count excludes recon rows but "Ready to Push" count of 10 includes the ghost Kogan row**
-
-The summary card "Ready to Push: 10" includes the ghost Kogan `344840` row. The actual pushable count should be 9. After cleanup it will be correct.
-
-**Issue 5 — Latest eBay payout `ebay_payout_7391507591` (Mar 18-20) has no validation row**
-
-There's an eBay settlement with `status: 'saved'` that was never picked up by the validation sweep because it's stuck at `saved` and the sweep may not have matched it. After fixing Issue 1 (saved → ingested), the next sweep will pick it up.
-
-**Issue 6 — Bunnings `mirakl-bunnings-ungrouped` shows as "Sync Needed" with $0 net**
-
-This is a Mirakl API placeholder for ungrouped pending payouts. It correctly shows `settlement_needed` but with `$0` net — which means the Mirakl API returned pending orders but no completed payout yet. This is correct behavior, not a bug.
-
-### Fix Plan
-
-**Single migration to clean all data issues:**
-
-```sql
--- 1. Backfill saved → ingested (was missed from earlier plan)
-UPDATE public.settlements
-SET status = 'ingested', updated_at = now()
-WHERE status = 'saved';
-
--- 2. Delete orphaned validation rows referencing non-existent settlements
-DELETE FROM public.marketplace_validation mv
-WHERE mv.settlement_id IS NOT NULL
-  AND mv.settlement_id NOT LIKE 'shopify_auto_%'
-  AND NOT EXISTS (
-    SELECT 1 FROM public.settlements s
-    WHERE s.settlement_id = mv.settlement_id
-  );
-
--- 3. Re-backfill settlement_source for any validation rows still NULL
-UPDATE public.marketplace_validation mv
-SET settlement_source = s.source
-FROM public.settlements s
-WHERE mv.settlement_id = s.settlement_id
-  AND mv.settlement_source IS NULL;
+```typescript
+// Line 1410 — DOUBLE COUNTS refunds
+formatPct(s.feeLoad + (s.totalSales > 0 ? s.totalRefunds / s.totalSales : 0))
 ```
 
-**No frontend code changes needed** — once the data is cleaned, the existing UI will show correct counts.
+Result: If refunds are 5% and fees are 10%, it shows "15% + 5% = 20%" instead of the correct 15%.
 
-### After Fix
+Fix: Remove the `+ totalRefunds/totalSales` from line 1410 since `feeLoad` already includes refunds.
 
-| What | Before | After |
-|------|--------|-------|
-| Ghost Kogan "Ready to Push" | Shows as pushable | Deleted |
-| eBay settlements stuck at `saved` | 6 rows stuck | Promoted to `ingested`, eligible for sweep |
-| CSV settlements stuck at `saved` | 5 rows stuck | Promoted to `ingested` |
-| Ready to Push count | 10 (includes ghost) | 9 (accurate) |
-| Next sweep picks up eBay Mar 18-20 | No | Yes |
+---
 
-### Files
+**Issue 2 (Critical) — "Marketplace Fees Paid" summary card includes refunds**
 
-| File | Action |
-|------|--------|
-| Migration | Backfill statuses + delete orphans + fill NULL sources |
+The top-level card at line 940 shows `totalAllFees` which is derived from `breakdownTotal` — which includes refunds. A card labelled "Marketplace Fees Paid" should not include refund amounts. This inflates the perceived fee burden.
+
+Fix: Separate `totalAllFees` into fees-only (commission + FBA + storage + other) and show refunds separately, OR rename the card to "Fees & Refunds".
+
+---
+
+**Issue 3 (Medium) — MarketplaceProfitComparison uses completely separate data loading**
+
+`InsightsDashboard` loads settlements directly (no user_id filter — relies on RLS). `MarketplaceProfitComparison` loads both `settlement_profit` AND `settlements` with explicit `user_id` filter. These two components on the same page can show conflicting numbers because:
+- Different filtering logic (profit engine skips "suspicious" margins)
+- Different fee calculation (profit uses `settlement_profit` table, insights uses raw settlements)
+- `settlement_profit` table may be stale or have different row counts
+
+This means the "Marketplace Profit Ranking" table and the "$1 Sale Breakdown" chart could show different margins for the same marketplace.
+
+Fix: Add a note in the Profit Ranking card clarifying it uses SKU-level cost data (different from the payout-based metrics above). This is actually correct behavior — two different views of profitability — but the UX doesn't explain this.
+
+---
+
+**Issue 4 (Medium) — `useInsightsData` hook exists but appears unused on the Insights dashboard**
+
+The hook at `src/hooks/useInsightsData.ts` calls 4 RPC functions (`get_marketplace_fee_analysis`, `get_gst_liability_by_quarter`, `get_rolling_12_month_trend`, `get_channel_comparison`). But `InsightsDashboard.tsx` never imports or uses this hook — it builds its own data from raw settlements. This means:
+- If those RPC functions exist, they're wasted
+- If they don't exist, the hook silently fails
+- A third data source that could diverge from the other two
+
+Fix: Remove `useInsightsData` if it's truly unused, or integrate it to replace the manual aggregation.
+
+---
+
+**Issue 5 (Low) — Fee Comparison table shows refunds as a "Fee Source"**
+
+The cross-marketplace fee comparison table (line 1426) pulls labels from `feeBreakdown` which includes "Refunds". Refunds aren't a fee source — they're a separate financial event. Showing them alongside "Commission" and "FBA Fulfilment" is misleading.
+
+Fix: Exclude "Refunds" from the fee comparison table rows, or add it as a separate summary row below the total.
+
+---
+
+**Issue 6 (Low) — Stacked bar segments don't account for refunds separately**
+
+The `getStackedSegments` function (line 857) calculates: `net = 1 - fees - ads`. But `feeLoad` already includes refunds (from Issue 1), so the bar shows refunds as part of fees, not as a distinct segment. This makes it look like fees are higher than they are.
+
+Fix: Break refunds out as a 4th segment in the stacked bar (distinct color from fees and ads).
+
+---
+
+**Issue 7 (UX) — Page is extremely long with repetitive data**
+
+The screenshot shows the same data presented in 6+ different formats on one page:
+1. Summary cards (top)
+2. Profit Ranking table
+3. SKU comparison
+4. $1 Sale Breakdown bars
+5. Fee Intelligence table
+6. Profit Leak Breakdown bars
+7. Fee Comparison table
+8. Revenue Concentration bars
+9. Biggest Cost Driver card
+10. Marketplace Overview cards
+
+Many show the same numbers in different layouts. A bookkeeper scanning this page sees the same marketplace data repeated 6+ times. This increases cognitive load and the risk of spotting inconsistencies.
+
+Fix: Group into tabs (Overview / Fee Analysis / Profit Breakdown) to reduce scrolling and repetition.
+
+---
+
+### Implementation Priority
+
+| # | Issue | Impact | Fix Complexity |
+|---|-------|--------|---------------|
+| 1 | Refunds double-counted in total | Wrong numbers shown | 1 line change |
+| 2 | "Fees Paid" includes refunds | Misleading label | Label rename or split |
+| 5 | Refunds in Fee Comparison table | Minor confusion | Filter 1 array |
+| 6 | Stacked bar lacks refund segment | Visual inaccuracy | Add 4th segment |
+| 3 | Dual data sources show different values | Confusing discrepancies | Add explanatory note |
+| 4 | Unused `useInsightsData` hook | Dead code | Delete or integrate |
+| 7 | Page too long / repetitive | Poor UX | Tab restructure |
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `src/components/admin/accounting/InsightsDashboard.tsx` | Fix double-count (line 1410), rename "Fees Paid" card, exclude refunds from fee comparison, add 4th bar segment, add tabs |
+| `src/hooks/useInsightsData.ts` | Evaluate removal if unused |
+
+### No database changes needed
 
