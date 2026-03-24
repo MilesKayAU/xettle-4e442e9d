@@ -422,7 +422,7 @@ Deno.serve(async (req) => {
       source: 'api_sync',
       status: 'ingested',
       connection_id: connectionId,
-      period_start: periodStart.toISOString().split('T')[0],
+      period_start: periodStart,
       period_end: periodEnd.toISOString().split('T')[0],
       sales_principal: Math.round(salesPrincipal * 100) / 100,
       gst_on_income: Math.round(gstOnIncome * 100) / 100,
