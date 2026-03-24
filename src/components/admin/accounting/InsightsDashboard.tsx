@@ -1118,6 +1118,14 @@ export default function InsightsDashboard() {
                       </TooltipTrigger>
                       <TooltipContent className="text-xs">${(segments.net / 100).toFixed(2)} you keep</TooltipContent>
                     </Tooltip>
+                    {segments.shipping > 0 && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="h-full bg-chart-2 transition-all duration-500" style={{ width: `${segments.shipping}%` }} />
+                        </TooltipTrigger>
+                        <TooltipContent className="text-xs">${(segments.shipping / 100).toFixed(2)} est. shipping</TooltipContent>
+                      </Tooltip>
+                    )}
                     {segments.ads > 0 && (
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -1148,6 +1156,12 @@ export default function InsightsDashboard() {
                       <span className="h-2 w-2 rounded-full bg-primary inline-block" />
                       ${(segments.net / 100).toFixed(2)} you keep
                     </span>
+                    {segments.shipping > 0 && (
+                      <span className="flex items-center gap-1">
+                        <span className="h-2 w-2 rounded-full bg-chart-2 inline-block" />
+                        ${(segments.shipping / 100).toFixed(2)} shipping (est.)
+                      </span>
+                    )}
                     {segments.ads > 0 && (
                       <span className="flex items-center gap-1">
                         <span className="h-2 w-2 rounded-full bg-accent inline-block" />
