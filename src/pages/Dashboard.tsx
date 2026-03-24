@@ -46,6 +46,7 @@ import AccountingBoundarySettings from '@/components/onboarding/AccountingBounda
 import ApiConnectionsPanel from '@/components/settings/ApiConnectionsPanel';
 import DataQualityPanel from '@/components/settings/DataQualityPanel';
 import FulfilmentMethodsPanel from '@/components/settings/FulfilmentMethodsPanel';
+import MarketplaceManagerPanel from '@/components/settings/MarketplaceManagerPanel';
 
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
 const ShopifyOrdersDashboard = lazy(() => import('@/components/admin/accounting/ShopifyOrdersDashboard'));
@@ -109,6 +110,7 @@ const SETTINGS_HELP: Record<string, string> = {
   payment_verification: 'Configure how Xettle matches marketplace payouts to your actual bank deposits. When enabled, we’ll cross-check settlement amounts against your Xero bank feed to confirm the money actually arrived. This adds a verification layer before marking settlements as fully reconciled.',
   fulfilment_methods: 'Tell Xettle how each marketplace fulfils orders — FBA (marketplace ships it), self-ship, or mixed. This affects profit calculations because shipping costs differ. If you self-ship, you can also enter your average postage cost per order.',
   data_quality: 'Tools to fix historical data issues — re-sync marketplace labels, correct misclassified settlements, and clean up any data that was imported incorrectly. Use this if you notice wrong marketplace names or categories on older records.',
+  active_marketplaces: 'Toggle marketplaces on or off site-wide. Deactivated marketplaces are hidden from all scoring, syncs, posting, and reconciliation views across the entire app.',
 };
 
 function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConnected: boolean; onConnectXero: () => void; onGoToUpload: () => void }) {
@@ -128,6 +130,7 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
     payment_verification: { completionWarnings: [] },
     fulfilment_methods: { completionWarnings: ['fulfilment_methods_incomplete'] },
     data_quality: { completionWarnings: [] },
+    active_marketplaces: { completionWarnings: [] },
   };
 
   const getStatus = (sectionKey: string): 'complete' | 'incomplete' | 'warning' | 'none' => {
@@ -142,7 +145,7 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
     return 'warning';
   };
 
-  const sectionOrder = ['api_connections', 'destination_accounts', 'account_mapper', 'posting_mode', 'accounting_boundary', 'payment_verification', 'fulfilment_methods', 'data_quality'] as const;
+  const sectionOrder = ['api_connections', 'active_marketplaces', 'destination_accounts', 'account_mapper', 'posting_mode', 'accounting_boundary', 'payment_verification', 'fulfilment_methods', 'data_quality'] as const;
   const statusPriority: Record<'incomplete' | 'warning' | 'none' | 'complete', number> = {
     incomplete: 0,
     warning: 1,
@@ -175,6 +178,11 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
             onFetchStateChange={() => {}}
           />
         </Suspense>
+      </SettingsAccordion>
+    ),
+    active_marketplaces: (
+      <SettingsAccordion title="Active Marketplaces" description="Site-wide on/off switch for each marketplace" defaultOpen={false} status={getStatus('active_marketplaces')} helpText={SETTINGS_HELP.active_marketplaces}>
+        <ErrorBoundary><MarketplaceManagerPanel /></ErrorBoundary>
       </SettingsAccordion>
     ),
     destination_accounts: (
