@@ -357,7 +357,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
   // ── File detection ──
   const detectFiles = useCallback(async (newFiles: File[]) => {
-    // Dedup 1: skip files already in the current list (by name + size) — but allow re-upload if previous attempt was an error
+    // Dedup 1: if the same file is re-uploaded, replace the in-memory entry and re-parse it.
+    // Only block files that are already saved or currently saving.
     const currentFiles = filesRef.current;
     const replaceableIndices: number[] = [];
     const uniqueFiles = newFiles.filter(f => {
@@ -366,18 +367,19 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       );
       if (existingIdx >= 0) {
         const existing = currentFiles[existingIdx];
-        // Allow re-upload if previous was error (e.g. stale duplicate check)
-        if (existing.status === 'error') {
+        const canReplace = existing.status !== 'saved' && existing.status !== 'saving';
+        if (canReplace) {
           replaceableIndices.push(existingIdx);
+          toast.info(`Reprocessing "${f.name}" with the latest parser.`, { duration: 3000 });
           return true;
         }
-        toast.warning(`"${f.name}" is already in the upload list — skipped.`, { duration: 4000 });
+        toast.warning(`"${f.name}" is already saved — skipped.`, { duration: 4000 });
         return false;
       }
       return true;
     });
 
-    // Remove stale error entries that are being re-uploaded
+    // Remove stale in-memory entries that are being re-uploaded
     if (replaceableIndices.length > 0) {
       setFiles(prev => prev.filter((_, i) => !replaceableIndices.includes(i)));
     }
