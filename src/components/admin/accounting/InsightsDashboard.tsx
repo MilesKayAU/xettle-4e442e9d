@@ -69,6 +69,9 @@ interface MarketplaceStats {
   pacShippingAvg14: number | null;
   pacShippingSample: number;
   pacEstimateQuality: string | null;
+  // Shipping revenue & threshold
+  salesShipping: number;
+  freeShippingThreshold: number;
 }
 
 interface AdSpendRecord {
