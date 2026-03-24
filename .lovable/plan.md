@@ -1,70 +1,83 @@
 
 
-## Plan: Fix Overlapping Kogan Period Rows in Validation Sweep
+## Audit: Data Integrity Issues in Settlements Overview
 
-### Root Cause
+### Issues Found
 
-The `auto-generate-shopify-settlements` function creates ONE settlement per marketplace per month (deterministic ID: `shopify_auto_kogan_2026-01_abc12345`). But it calculates `period_start` and `period_end` from the actual min/max order dates:
+**Issue 1 — `saved` → `ingested` backfill never ran**
 
-```text
-Run on Jan 15: period_start = Jan 13, period_end = Jan 15
-Run on Jan 20: period_start = Jan 13, period_end = Jan 20  (updates same record)
-Run on Jan 31: period_start = Jan 13, period_end = Jan 31  (updates same record)
-```
+The earlier plan to backfill `status = 'saved'` to `'ingested'` was approved but the migration only cleaned up orphaned validation rows — it didn't include the status backfill. Result: 11 settlements (5 CSV, 6 eBay API) are stuck at `saved` status. The reconciliation engine's auto-promotion only works on `ingested` status rows, so these can never auto-promote to `ready_to_push`.
 
-The settlement record itself is updated each time (same deterministic ID). But the **validation table** keys rows by `period_label` (e.g., `2026-01-13 → 2026-01-31`). Each time the period boundaries shift, a new validation row is created with a new `period_label`, and the old one is never cleaned up. This produces the 8 overlapping rows seen in the screenshot.
+Fix: Migration to update `saved` → `ingested`.
 
-### Fix (Two Parts)
+**Issue 2 — eBay API uses source `api`, not `ebay_api`**
 
-**Part 1 — Use fixed calendar month boundaries for auto-generated settlements**
+The `fetch-ebay-settlements` function saves with `source: 'api'` (not `'ebay_api'`). Both `api` and `ebay_api` are in `PUSHABLE_SOURCES` so this doesn't break push gating — but it creates inconsistent data. The validation sweep backfill also set `settlement_source = 'api'` from the settlements table. This is cosmetic but worth normalising.
 
-File: `supabase/functions/auto-generate-shopify-settlements/index.ts`
+Not blocking — no code change needed now, but worth noting.
 
-Instead of calculating period boundaries from actual order dates:
-```typescript
-// Before (dynamic — shifts every run)
-const periodStart = new Date(Math.min(...dates.map(d => d.getTime())));
-const periodEnd = new Date(Math.max(...dates.map(d => d.getTime())));
-```
+**Issue 3 — Kogan validation row `344840` references a non-existent settlement**
 
-Use fixed calendar month boundaries:
-```typescript
-// After (stable — never shifts)
-const [year, month] = monthStr.split('-').map(Number);
-const periodStart = `${monthStr}-01`;
-const lastDay = new Date(year, month, 0).getDate();
-const periodEnd = `${monthStr}-${String(lastDay).padStart(2, '0')}`;
-```
+The validation table has a Kogan row with `settlement_id = '344840'`, `settlement_source = NULL`, `overall_status = 'ready_to_push'`, `settlement_net = 730.65`. But **no settlement with ID `344840` exists in the `settlements` table**. This is a ghost row — likely a Shopify order ID that was written to the validation table by an older sweep version, before the source-tracking fix.
 
-This means the `period_label` in the validation table will always be `2026-01-01 → 2026-01-31` regardless of when the auto-generate runs. No more orphaned rows.
+Because `settlement_source` is NULL, `isReconciliationOnly(null, ...)` returns `false`, so this ghost row appears as a pushable "Ready to Push" item. Attempting to push it would fail because no settlement data exists.
 
-Store actual order date range in `raw_payload` for reference (e.g., `first_order_date`, `last_order_date`).
+Fix: Delete orphaned validation rows where `settlement_id` doesn't exist in `settlements` AND is not a placeholder (not null).
 
-**Part 2 — Clean up orphaned validation rows for auto-generated settlements**
+**Issue 4 — "All Periods" count excludes recon rows but "Ready to Push" count of 10 includes the ghost Kogan row**
 
-File: `supabase/functions/run-validation-sweep/index.ts`
+The summary card "Ready to Push: 10" includes the ghost Kogan `344840` row. The actual pushable count should be 9. After cleanup it will be correct.
 
-After the main sweep loop, delete any validation rows whose `settlement_id` starts with `shopify_auto_` but whose `period_label` doesn't match the current settlement's actual `period_start → period_end`. This catches any legacy orphans from before the fix.
+**Issue 5 — Latest eBay payout `ebay_payout_7391507591` (Mar 18-20) has no validation row**
 
-Also add this as a one-time migration cleanup:
+There's an eBay settlement with `status: 'saved'` that was never picked up by the validation sweep because it's stuck at `saved` and the sweep may not have matched it. After fixing Issue 1 (saved → ingested), the next sweep will pick it up.
+
+**Issue 6 — Bunnings `mirakl-bunnings-ungrouped` shows as "Sync Needed" with $0 net**
+
+This is a Mirakl API placeholder for ungrouped pending payouts. It correctly shows `settlement_needed` but with `$0` net — which means the Mirakl API returned pending orders but no completed payout yet. This is correct behavior, not a bug.
+
+### Fix Plan
+
+**Single migration to clean all data issues:**
+
 ```sql
--- Delete orphaned validation rows for shopify_auto settlements
--- where the period_label doesn't match the current settlement boundaries
-DELETE FROM marketplace_validation mv
-WHERE mv.settlement_id LIKE 'shopify_auto_%'
+-- 1. Backfill saved → ingested (was missed from earlier plan)
+UPDATE public.settlements
+SET status = 'ingested', updated_at = now()
+WHERE status = 'saved';
+
+-- 2. Delete orphaned validation rows referencing non-existent settlements
+DELETE FROM public.marketplace_validation mv
+WHERE mv.settlement_id IS NOT NULL
+  AND mv.settlement_id NOT LIKE 'shopify_auto_%'
   AND NOT EXISTS (
-    SELECT 1 FROM settlements s
+    SELECT 1 FROM public.settlements s
     WHERE s.settlement_id = mv.settlement_id
-      AND s.user_id = mv.user_id
-      AND mv.period_label = (s.period_start || ' → ' || s.period_end)
   );
+
+-- 3. Re-backfill settlement_source for any validation rows still NULL
+UPDATE public.marketplace_validation mv
+SET settlement_source = s.source
+FROM public.settlements s
+WHERE mv.settlement_id = s.settlement_id
+  AND mv.settlement_source IS NULL;
 ```
 
-### Files Modified
+**No frontend code changes needed** — once the data is cleaned, the existing UI will show correct counts.
 
-| File | Changes |
-|------|---------|
-| Migration | Clean up orphaned validation rows |
-| `supabase/functions/auto-generate-shopify-settlements/index.ts` | Use fixed calendar month boundaries |
-| `supabase/functions/run-validation-sweep/index.ts` | Add orphan cleanup after sweep |
+### After Fix
+
+| What | Before | After |
+|------|--------|-------|
+| Ghost Kogan "Ready to Push" | Shows as pushable | Deleted |
+| eBay settlements stuck at `saved` | 6 rows stuck | Promoted to `ingested`, eligible for sweep |
+| CSV settlements stuck at `saved` | 5 rows stuck | Promoted to `ingested` |
+| Ready to Push count | 10 (includes ghost) | 9 (accurate) |
+| Next sweep picks up eBay Mar 18-20 | No | Yes |
+
+### Files
+
+| File | Action |
+|------|--------|
+| Migration | Backfill statuses + delete orphans + fill NULL sources |
 
