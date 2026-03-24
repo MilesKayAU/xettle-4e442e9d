@@ -1095,6 +1095,14 @@ export default function InsightsDashboard() {
                         <TooltipContent className="text-xs">${(segments.ads / 100).toFixed(2)} advertising</TooltipContent>
                       </Tooltip>
                     )}
+                    {segments.refunds > 0 && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="h-full bg-chart-4 transition-all duration-500" style={{ width: `${segments.refunds}%` }} />
+                        </TooltipTrigger>
+                        <TooltipContent className="text-xs">${(segments.refunds / 100).toFixed(2)} refunds</TooltipContent>
+                      </Tooltip>
+                    )}
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <div className="h-full bg-muted-foreground/50 rounded-r-full transition-all duration-500" style={{ width: `${segments.fees}%` }} />
@@ -1104,7 +1112,7 @@ export default function InsightsDashboard() {
                   </div>
 
                   {/* Legend */}
-                  <div className="flex gap-3 text-[10px] text-muted-foreground">
+                  <div className="flex gap-3 text-[10px] text-muted-foreground flex-wrap">
                     <span className="flex items-center gap-1">
                       <span className="h-2 w-2 rounded-full bg-primary inline-block" />
                       ${(segments.net / 100).toFixed(2)} you keep
@@ -1113,6 +1121,12 @@ export default function InsightsDashboard() {
                       <span className="flex items-center gap-1">
                         <span className="h-2 w-2 rounded-full bg-accent inline-block" />
                         ${(segments.ads / 100).toFixed(2)} ads
+                      </span>
+                    )}
+                    {segments.refunds > 0 && (
+                      <span className="flex items-center gap-1">
+                        <span className="h-2 w-2 rounded-full bg-chart-4 inline-block" />
+                        ${(segments.refunds / 100).toFixed(2)} refunds
                       </span>
                     )}
                     <span className="flex items-center gap-1">
