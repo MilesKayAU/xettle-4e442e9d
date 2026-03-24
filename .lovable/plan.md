@@ -1,73 +1,92 @@
 
 
-## Plan: Fix Bunnings (and All Mirakl) Shipping Undercount
+## Analysis: Kogan CSV + PDF Upload Support
 
-### Root Cause
+### What Works Now
 
-Bunnings/Mirakl CSV settlements contain **summary-level lines** (1 revenue line, no order_ids). The `recalculate-profit` function calculates order count as `orderIds.size || revenueLines.length || 1`, which gives **1** for every Bunnings settlement. Shipping deduction = 1 × $9 = $9 per settlement.
+**The CSV will be detected and parsed correctly.** The fingerprint engine has a Kogan entry matching on `APInvoice`, `InvoiceRef`, `Commission (Inc GST)`, `Remitted` columns. The column mapping uses partial matching, so `Total` in the CSV matches `Total (AUD)` in the mapping. Each row becomes a settlement line item, grouped by `APInvoice` number (e.g., 360140). The result: a settlement showing gross sales, commission fees, and net remitted per order.
 
-Reality: A $1,257 Bunnings settlement contains ~30 orders. Correct shipping = ~$270, not $9.
+**The PDF will NOT be understood.** The system currently only parses Bunnings Mirakl PDFs. For all other PDFs, the fingerprint engine returns `null`. The Kogan PDF would be silently ignored or trigger an "unknown file" error.
 
+### Why the PDF Matters
+
+The Kogan PDF is a **Remittance Advice** containing data NOT in the CSV:
+
+| Item | Source | In CSV? |
+|------|--------|---------|
+| Sales + commission per order | CSV rows | Yes |
+| **Returns / credit notes** | PDF line "A/P Credit note" | No — $49.44 + $8.36 |
+| **Monthly seller fee** | PDF line "Monthly Seller Fee" | No — $55.00 |
+| **Advertising fees** | PDF line "Journal Entry - Advertising fees" | No — $100.10 |
+| **Actual bank deposit** | PDF "Total paid amount" | No — $753.86 |
+
+From the Feb 2026 PDF:
 ```text
-Current:   $1,131 revenue - $151 fees - $9 shipping  = $971 profit (85% margin)
-Corrected: $1,131 revenue - $151 fees - $270 shipping = $710 profit (63% margin)
+A/P Invoice 360140 (CSV total):     $966.76
+- Credit note (returns):             -$49.44
+- Credit note (per-order fee):        -$8.36
+- Monthly seller fee:                -$55.00
+- Advertising fees:                 -$100.10
+= Bank deposit:                     $753.86
 ```
 
-This same issue applies to all Mirakl-sourced CSV settlements (Bunnings, BigW, Everyday Market, MyDeal) which use summary lines.
+Without the PDF, the settlement shows $966.76 net payout (from CSV `Remitted` column sum). The actual bank deposit is $753.86 — a $212.90 difference. This means reconciliation against the bank feed will fail, and the Xero invoice will be wrong.
 
-**Shopify data IS correct** — Shopify payout settlements (source: `api`) contain only pure Shopify store orders. No sub-channel order IDs overlap. The $1,663 revenue and 65.9% margin for Shopify accurately reflects only direct Shopify store sales.
+### Fix Plan
 
-### Fix
+**Add a Kogan PDF parser** that extracts the remittance advice table, then merges the data with the CSV settlement.
 
-**Cross-reference order counts from `shopify_auto_*` settlements**
+**1. Parse Kogan PDF (server-side)**
 
-File: `supabase/functions/recalculate-profit/index.ts`
+File: `supabase/functions/ai-file-interpreter/index.ts` (or new `parse-kogan-pdf` function)
 
-When the order count from settlement_lines is 0 or 1 for a CSV settlement, look up the matching `shopify_auto_[marketplace]` settlements for the same period and use their order count instead. These auto-settlements have accurate per-order data from Shopify.
+Use the existing AI file interpreter to extract the structured table from the Kogan remittance PDF. The format is consistent:
+- Line items with type (Journal Entry, A/P Invoice, A/P Credit note)
+- Doc number matching the CSV's `APInvoice` 
+- Amounts with AUD suffix
+- Total paid amount = bank deposit
 
-Implementation:
-1. Build a map of `marketplace → month → order_count` from `shopify_auto_*` settlement_profit rows
-2. When processing a CSV settlement where `orderIds.size <= 1`, look up the auto-settlement order count for the same marketplace and overlapping period
-3. Use that count for shipping calculation: `shippingOrderCount = autoOrderCount || ordersCount`
+**2. Add Kogan PDF fingerprint detection**
 
+File: `src/utils/file-marketplace-detector.ts`
+
+Add detection for Kogan PDFs by checking for "Remittance Advice" + "Kogan Australia" or "kogan.com" in the first 8KB of the PDF.
+
+**3. Create Kogan-specific upload flow**
+
+File: `src/components/admin/accounting/GenericMarketplaceDashboard.tsx` (or new Kogan component)
+
+Similar to how Bunnings handles PDF + CSV:
+- Accept both PDF and CSV uploads
+- CSV provides order-level detail (line items)
+- PDF provides the settlement summary (returns, fees, ad spend, bank deposit)
+- Merge: use CSV for line items, override net payout with PDF's "Total paid amount", add credit notes and fees as additional settlement components
+
+**4. Update settlement save to include PDF-sourced deductions**
+
+When both files are present:
 ```text
-// Pseudocode
-const autoOrderCounts: Map<string, Map<string, number>> = new Map();
-// key: marketplace, value: Map<month_str, order_count>
-
-for (const s of settlements) {
-  if (s.settlement_id.startsWith('shopify_auto_')) {
-    const lines = linesBySettlement.get(s.settlement_id) || [];
-    const count = new Set(lines.filter(l => l.order_id).map(l => l.order_id)).size;
-    // Store by marketplace + month
-  }
-}
-
-// When processing CSV settlement with orderIds.size <= 1:
-const monthKey = s.period_end?.substring(0, 7); // e.g. "2026-01"
-const autoCount = autoOrderCounts.get(mp)?.get(monthKey);
-if (autoCount && autoCount > ordersCount) {
-  shippingOrderCount = autoCount;
-}
+gross_sales = Sum of CSV "Total" column          = $1,131.96
+fees        = Sum of CSV "Commission (Inc GST)"  = $149.72
+refunds     = Sum of PDF credit notes            = $57.80
+ad_spend    = Sum of PDF "Journal Entry" amounts  = $100.10
+monthly_fee = Sum of PDF "Monthly Seller Fee"     = $55.00
+net_payout  = PDF "Total paid amount"             = $753.86
 ```
 
-This gives Bunnings Jan: 36 orders × $9 = $324 shipping instead of $9.
+This gives accurate reconciliation against the bank feed.
 
-### Expected Result
-
-| Marketplace | Before | After |
-|---|---|---|
-| Bunnings margin | 73.3% (shipping undercounted) | ~58-63% (realistic) |
-| Shopify margin | 65.9% (correct) | 65.9% (unchanged) |
-| Kogan margin | 56.2% (correct — already uses auto data) | 56.2% (unchanged) |
-
-### Files Modified
+### Files to Modify
 
 | File | Changes |
-|---|---|
-| `supabase/functions/recalculate-profit/index.ts` | Cross-reference auto-settlement order counts for CSV settlements with missing order IDs |
+|------|---------|
+| `src/utils/file-marketplace-detector.ts` | Add Kogan PDF detection |
+| `src/utils/file-fingerprint-engine.ts` | Add Kogan PDF fingerprint entry |
+| `src/components/admin/accounting/GenericMarketplaceDashboard.tsx` | Add PDF+CSV upload flow for Kogan |
+| `supabase/functions/ai-file-interpreter/index.ts` | Add Kogan remittance PDF extraction logic |
+| `src/utils/generic-csv-parser.ts` | No changes needed — CSV parsing already works |
 
-### No database changes needed
+### No database schema changes needed
 
-After deploying, click "Recalculate" on the Insights page to refresh profit data.
+The existing `settlements` and `settlement_lines` tables can store the additional fee components. Ad spend and monthly fees go into existing fee/adjustment fields.
 
