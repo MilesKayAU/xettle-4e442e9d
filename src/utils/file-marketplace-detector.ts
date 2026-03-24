@@ -80,6 +80,9 @@ export async function detectFileMarketplace(file: File): Promise<DetectedMarketp
       const text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
       const lower = text.toLowerCase();
 
+      if (lower.includes('kogan') || lower.includes('kogan australia') || lower.includes('kogan.com')) {
+        return 'kogan';
+      }
       if (lower.includes('bunnings') || lower.includes('payable orders') || lower.includes('summary of transactions')) {
         return 'bunnings';
       }
