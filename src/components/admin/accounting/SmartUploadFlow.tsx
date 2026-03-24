@@ -546,6 +546,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               sampleRows: sampleRows || undefined,
               wasLowConfidence: isFirstContact || false,
               koganDocNumbers: koganDocNumbers || undefined,
+              koganPdfPeriodMonth: koganPdfPeriodMonth || undefined,
               koganRemittanceResult: koganRemittanceResult || undefined,
             };
 
