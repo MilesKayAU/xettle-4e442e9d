@@ -51,6 +51,7 @@ async function extractPdfText(file: File): Promise<string> {
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
+    // Join items with spaces — pdfjs text items represent individual text spans
     const pageText = content.items.map((item: any) => item.str).join(' ');
     fullText += pageText + '\n';
   }
@@ -73,9 +74,6 @@ function parseDateToISO(raw: string): string {
 }
 
 /**
- * Parse a Kogan Remittance Advice PDF and extract financial summary.
- */
-/**
  * Lightweight extraction of AP Invoice doc numbers from a Kogan PDF.
  * Used for pairing CSVs with PDFs without full parsing.
  */
@@ -83,6 +81,7 @@ export async function extractKoganPdfDocNumbers(file: File): Promise<string[]> {
   try {
     const rawText = await extractPdfText(file);
     const docNumbers: string[] = [];
+    // Use [\s\S] to handle newlines between text items
     const invoiceMatches = rawText.matchAll(/A\/P\s+Invoice\s+(\d+)/gi);
     for (const m of invoiceMatches) {
       if (!docNumbers.includes(m[1])) docNumbers.push(m[1]);
@@ -93,66 +92,102 @@ export async function extractKoganPdfDocNumbers(file: File): Promise<string[]> {
   }
 }
 
+/**
+ * Parse a Kogan Remittance Advice PDF and extract financial summary.
+ *
+ * pdfjs-dist extracts text as space-separated tokens. The Kogan PDF table
+ * has line breaks between columns (reference wraps, amount on next line).
+ * We normalise the text first, then use a line-by-line approach to parse
+ * the paid documents table.
+ */
 export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittanceResult> {
+  const empty: Omit<KoganRemittanceResult, 'success' | 'error'> = {
+    lineItems: [], invoiceTotal: 0, creditNoteTotal: 0,
+    advertisingFees: 0, monthlySellerFee: 0, returnsCreditNotes: 0,
+  };
+
   try {
     const rawText = await extractPdfText(file);
 
     if (!rawText || rawText.trim().length < 30) {
-      return { success: false, error: 'Could not extract text from PDF.', rawText, lineItems: [], invoiceTotal: 0, creditNoteTotal: 0, advertisingFees: 0, monthlySellerFee: 0, returnsCreditNotes: 0 };
+      return { ...empty, success: false, error: 'Could not extract text from PDF.', rawText };
     }
+
+    // Normalise: collapse whitespace (including newlines) to single spaces for regex matching
+    const norm = rawText.replace(/\s+/g, ' ');
 
     // Extract remittance number from title
-    const remittanceMatch = rawText.match(/Remittance\s+Advice\s*-?\s*#?\s*(\d+)/i);
+    const remittanceMatch = norm.match(/Remittance\s+Advice\s*-?\s*#?\s*(\d+)/i);
     const remittanceNumber = remittanceMatch?.[1] || '';
 
-    // Extract dates
-    const transferMatch = rawText.match(/Transfer\s+Date:\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
-    const paymentMatch = rawText.match(/Payment\s+Date:\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
-    const transferDate = transferMatch ? parseDateToISO(transferMatch[1]) : '';
-    const paymentDate = paymentMatch ? parseDateToISO(paymentMatch[1]) : '';
+    // Extract dates — Kogan uses DD/MM/YYYY in header
+    const transferMatch = norm.match(/Transfer\s+Date:\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
+    const paymentMatch = norm.match(/Payment\s+Date:\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
+    // These header dates are DD/MM/YYYY — convert directly
+    const transferDate = transferMatch ? (() => {
+      const p = transferMatch[1].split('/');
+      return `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
+    })() : '';
+    const paymentDate = paymentMatch ? (() => {
+      const p = paymentMatch[1].split('/');
+      return `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
+    })() : '';
 
-    // Extract total paid amount
-    const totalMatch = rawText.match(/Total\s+paid\s+amount:\s*([\d,]+\.?\d*)\s*AUD/i);
+    // Extract total paid amount — may or may not have colon
+    const totalMatch = norm.match(/Total\s+paid\s+amount:?\s*([\d,]+\.?\d*)\s*AUD/i);
     const totalPaidAmount = totalMatch ? parseAmount(totalMatch[1]) : undefined;
 
-    // Parse line items from the paid documents table
-    // Pattern: # | Type | Doc No | Date | Reference | Amount
+    // ── Parse paid documents table ──
+    // Strategy: find each document type marker and capture doc number, date, then
+    // scan forward for the amount. The text is normalised to single line.
     const lineItems: KoganRemittanceLineItem[] = [];
 
-    // Match Journal Entry lines (advertising fees etc.)
-    const journalMatches = rawText.matchAll(/Journal\s+Entry\s+(\d+)\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+(.*?)\s+(-?[\d,]+\.?\d*)/gi);
-    for (const m of journalMatches) {
-      lineItems.push({
-        type: 'Journal Entry',
-        docNumber: m[1],
-        date: m[2],
-        reference: m[3].trim(),
-        amount: -Math.abs(parseAmount(m[4])), // Journal entries are deductions
-      });
-    }
+    // Match all document entries: Journal Entry, A/P Invoice, A/P Credit note
+    // Pattern captures: type, doc number, date, then everything up to the amount
+    const docPattern = /(?:(\d+)\s+)?(Journal\s+Entry|A\/P\s+Invoice|A\/P\s+Credit\s+note)\s+(\d+)\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+(.*?)(-?[\d,]+\.?\d*)\s*(?:AUD)?/gi;
+    
+    // We need to be more careful — the reference field can contain anything.
+    // Let's find document entries by splitting on the known markers.
+    const markers = [
+      ...norm.matchAll(/(?:^|\s)(\d+)\s+(Journal\s+Entry|A\/P\s+Invoice|A\/P\s+Credit\s+note)\s+(\d+)\s+(\d{1,2}\/\d{1,2}\/\d{4})/gi)
+    ];
 
-    // Match A/P Invoice lines
-    const invoiceMatches = rawText.matchAll(/A\/P\s+Invoice\s+(\d+)\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+(.*?)\s+([\d,]+\.?\d*)\s*AUD/gi);
-    for (const m of invoiceMatches) {
-      lineItems.push({
-        type: 'A/P Invoice',
-        docNumber: m[1],
-        date: m[2],
-        reference: m[3].trim(),
-        amount: parseAmount(m[4]), // Invoices are positive
-      });
-    }
+    for (let i = 0; i < markers.length; i++) {
+      const m = markers[i];
+      const type = m[2].replace(/\s+/g, ' ');
+      const docNumber = m[3];
+      const date = m[4];
+      
+      // Get text between this match end and next match start (or Total paid amount)
+      const startIdx = m.index! + m[0].length;
+      const endIdx = i + 1 < markers.length 
+        ? markers[i + 1].index! 
+        : norm.indexOf('Total paid amount', startIdx);
+      const segment = (endIdx > startIdx ? norm.substring(startIdx, endIdx) : norm.substring(startIdx)).trim();
+      
+      // Extract amount from the segment — it's the last number (possibly with AUD)
+      const amountMatch = segment.match(/(-?[\d,]+\.?\d*)\s*(?:AUD)?\s*$/);
+      const rawAmount = amountMatch ? parseAmount(amountMatch[1]) : 0;
+      
+      // Reference is everything before the amount
+      let reference = amountMatch 
+        ? segment.substring(0, segment.lastIndexOf(amountMatch[0])).trim()
+        : segment.trim();
+      
+      // Clean up reference
+      reference = reference.replace(/\s+/g, ' ').trim();
+      
+      // Determine sign
+      let amount: number;
+      if (type.toLowerCase() === 'journal entry') {
+        amount = -Math.abs(rawAmount); // Journal entries are deductions
+      } else if (type.toLowerCase().includes('credit note')) {
+        amount = -Math.abs(rawAmount); // Credit notes are deductions
+      } else {
+        amount = Math.abs(rawAmount); // Invoices are positive
+      }
 
-    // Match A/P Credit note lines
-    const creditMatches = rawText.matchAll(/A\/P\s+Credit\s+note\s+(\d+)\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+(.*?)\s+([\d,]+\.?\d*)\s*AUD/gi);
-    for (const m of creditMatches) {
-      lineItems.push({
-        type: 'A/P Credit note',
-        docNumber: m[1],
-        date: m[2],
-        reference: m[3].trim(),
-        amount: -Math.abs(parseAmount(m[4])), // Credit notes are deductions
-      });
+      lineItems.push({ type, docNumber, date, reference, amount });
     }
 
     // Categorise amounts
@@ -163,19 +198,23 @@ export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittan
     let returnsCreditNotes = 0;
 
     for (const item of lineItems) {
-      if (item.type === 'A/P Invoice') {
+      if (item.type.toLowerCase().includes('invoice')) {
         invoiceTotal += item.amount;
-      } else if (item.type === 'Journal Entry') {
+      } else if (item.type.toLowerCase().includes('journal')) {
         advertisingFees += item.amount; // negative
-      } else if (item.type === 'A/P Credit note') {
+      } else if (item.type.toLowerCase().includes('credit note')) {
         creditNoteTotal += item.amount; // negative
-        if (item.reference.toLowerCase().includes('monthly seller fee') || item.reference.toLowerCase().includes('monthly fee')) {
+        if (item.reference.toLowerCase().includes('monthly seller fee') || 
+            item.reference.toLowerCase().includes('monthly fee')) {
           monthlySellerFee += Math.abs(item.amount);
         } else {
           returnsCreditNotes += Math.abs(item.amount);
         }
       }
     }
+
+    console.log('[Kogan PDF] Parsed', lineItems.length, 'line items. Total paid:', totalPaidAmount, 
+      'Invoice total:', invoiceTotal, 'Credits:', creditNoteTotal, 'Ad fees:', advertisingFees);
 
     return {
       success: lineItems.length > 0,
@@ -193,14 +232,9 @@ export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittan
     };
   } catch (err: any) {
     return {
+      ...empty,
       success: false,
       error: `Kogan PDF parsing failed: ${err.message || 'Unknown error'}`,
-      lineItems: [],
-      invoiceTotal: 0,
-      creditNoteTotal: 0,
-      advertisingFees: 0,
-      monthlySellerFee: 0,
-      returnsCreditNotes: 0,
     };
   }
 }
