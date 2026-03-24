@@ -56,7 +56,7 @@ const OutstandingTab = lazy(() => import('@/components/dashboard/OutstandingTab'
 import { ReconciliationSummaryCard } from '@/components/admin/accounting/ReconciliationHub';
 const ReconciliationHub = lazy(() => import('@/components/admin/accounting/ReconciliationHub'));
 
-type DashboardView = 'home' | 'settlements' | 'insights' | 'settings';
+type DashboardView = 'home' | 'settlements' | 'insights' | 'inventory' | 'settings';
 type SettlementsSubTab = 'overview' | 'all' | 'outstanding' | 'reconciliation';
 type InsightsSubTab = 'overview' | 'reconciliation' | 'profit' | 'sku';
 
