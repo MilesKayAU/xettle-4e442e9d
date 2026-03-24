@@ -129,6 +129,20 @@ Deno.serve(async (req) => {
       linesBySettlement.get(sid)!.push(line);
     }
 
+    // Build set of order IDs that belong to sub-channel auto-settlements
+    // (e.g. shopify_auto_bunnings, shopify_auto_kogan). These orders also
+    // appear in the parent Shopify payout CSV, so we must exclude them from
+    // the Shopify payout's shipping count to avoid double-counting.
+    const subChannelOrderIds = new Set<string>();
+    for (const s of settlements || []) {
+      if (s.settlement_id?.startsWith("shopify_auto_")) {
+        const lines = linesBySettlement.get(s.settlement_id) || [];
+        for (const l of lines) {
+          if (l.order_id) subChannelOrderIds.add(l.order_id);
+        }
+      }
+    }
+
     const AMAZON_PREFIXES = ["amazon"];
     function isAmazonCode(code: string): boolean {
       return AMAZON_PREFIXES.some((p) => code.toLowerCase().startsWith(p));
@@ -193,6 +207,20 @@ Deno.serve(async (req) => {
       const postageCostPerOrder = postageCosts[mp] || 0;
       const mcfCostPerOrder = mcfCosts[mp] || 0;
 
+      // For Shopify payout settlements (not shopify_auto_ or shopify_orders_),
+      // exclude orders that belong to sub-channel auto-settlements to prevent
+      // double-counting shipping costs.
+      const isShopifyPayout = mp.toLowerCase() === "shopify" || 
+        (mp.toLowerCase().startsWith("shopify") && !mp.startsWith("shopify_auto_") && !mp.startsWith("shopify_orders_"));
+      
+      let shippingOrderCount: number;
+      if (isShopifyPayout && subChannelOrderIds.size > 0) {
+        const pureShopifyOrders = [...orderIds].filter(id => !subChannelOrderIds.has(id));
+        shippingOrderCount = pureShopifyOrders.length || 1;
+      } else {
+        shippingOrderCount = ordersCount;
+      }
+
       // Calculate postage deduction using canonical shared function
       let postageDeduction = 0;
       let fulfilmentDataIncomplete = false;
@@ -218,7 +246,7 @@ Deno.serve(async (req) => {
         }
       } else {
         // Non-mixed: canonical function owns the multiplication via orderCount
-        postageDeduction = getPostageDeductionForOrder(fulfilmentMethod, null, postageCostPerOrder, ordersCount, mcfCostPerOrder);
+        postageDeduction = getPostageDeductionForOrder(fulfilmentMethod, null, postageCostPerOrder, shippingOrderCount, mcfCostPerOrder);
       }
 
       const grossProfit = salesExGst - totalCogs - feesAmount - postageDeduction;
