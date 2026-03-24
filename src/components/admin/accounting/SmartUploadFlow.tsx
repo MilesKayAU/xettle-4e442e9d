@@ -172,6 +172,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
   const [shopifyShopDomain, setShopifyShopDomain] = useState<string | null>(null);
   const [firstContactIdx, setFirstContactIdx] = useState<number | null>(null);
   const [showNewFormatBanner, setShowNewFormatBanner] = useState(false);
+  const [existingKoganSettlements, setExistingKoganSettlements] = useState<Record<string, { id: string; settlement_id: string; net_payout: number; metadata: any }>>({});
+  const [mergingPdfDoc, setMergingPdfDoc] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<DetectedFile[]>([]);
   filesRef.current = files;
@@ -1419,6 +1421,139 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
   const allMissingUploaded = hasMissingChecklist && checkedItems.size === missingSettlements!.length;
 
+  // ── Look up existing Kogan settlements from DB when orphaned PDFs are detected ──
+  useEffect(() => {
+    const koganPdfFiles = files.filter(
+      f => f.detection?.marketplace === 'kogan' && f.file.name.toLowerCase().endsWith('.pdf') && f.status !== 'error'
+    );
+    const koganCsvFiles = files.filter(
+      f => f.detection?.marketplace === 'kogan' && !f.file.name.toLowerCase().endsWith('.pdf') && f.status !== 'error'
+    );
+    
+    // Only query DB if we have PDFs but few/no CSVs
+    if (koganPdfFiles.length === 0) return;
+    
+    // Collect all doc numbers from PDFs
+    const allPdfDocNums = koganPdfFiles.flatMap(f => f.koganDocNumbers || []);
+    if (allPdfDocNums.length === 0) return;
+    
+    // Check which doc numbers already have CSVs in this batch
+    const batchCsvDocNums = new Set<string>();
+    for (const csv of koganCsvFiles) {
+      const sid = csv.settlements?.[0]?.settlement_id || '';
+      const m = sid.match(/(\d{5,})/);
+      if (m) batchCsvDocNums.add(m[1]);
+    }
+    
+    const orphanedDocNums = allPdfDocNums.filter(d => !batchCsvDocNums.has(d));
+    if (orphanedDocNums.length === 0) return;
+    
+    // Query DB for existing settlements with these doc numbers
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      
+      // Search for Kogan settlements matching these doc numbers
+      const { data: existing } = await supabase
+        .from('settlements')
+        .select('id, settlement_id, bank_deposit, marketplace, status')
+        .eq('user_id', user.id)
+        .eq('marketplace', 'kogan')
+        .neq('status', 'duplicate_suppressed');
+      
+      if (!existing || existing.length === 0) return;
+      
+      const matched: Record<string, { id: string; settlement_id: string; net_payout: number; metadata: any }> = {};
+      for (const row of existing) {
+        const docMatch = (row.settlement_id || '').match(/(\d{5,})/);
+        const docNum = docMatch?.[1];
+        if (docNum && orphanedDocNums.includes(docNum)) {
+          matched[docNum] = { id: row.id, settlement_id: row.settlement_id, net_payout: row.bank_deposit || 0, metadata: {} };
+        }
+      }
+      
+      if (Object.keys(matched).length > 0) {
+        setExistingKoganSettlements(matched);
+      }
+    })();
+  }, [files]);
+
+  // ── Merge a Kogan PDF into an existing DB settlement ──
+  const mergeKoganPdfToExisting = useCallback(async (docNumber: string, pdfFileIdx: number) => {
+    const pdfFile = filesRef.current[pdfFileIdx];
+    if (!pdfFile) return;
+    
+    const existing = existingKoganSettlements[docNumber];
+    if (!existing) {
+      toast.error('No existing settlement found to merge with.');
+      return;
+    }
+    
+    setMergingPdfDoc(docNumber);
+    try {
+      const pdfResult = await parseKoganRemittancePdf(pdfFile.file);
+      if (!pdfResult.success || pdfResult.totalPaidAmount === undefined) {
+        toast.error('Could not parse Kogan PDF. Please check the file.');
+        return;
+      }
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      
+      // Calculate deductions from PDF
+      const refundsExGst = Math.round(pdfResult.returnsCreditNotes / 1.1 * 100) / 100;
+      const adSpendExGst = Math.round(Math.abs(pdfResult.advertisingFees) / 1.1 * 100) / 100;
+      const sellerFeeExGst = Math.round(pdfResult.monthlySellerFee / 1.1 * 100) / 100;
+      
+      // Update the existing settlement with PDF data
+      const updatedMetadata = {
+        ...(existing.metadata || {}),
+        koganPdfMerged: true,
+        koganRemittanceNumber: pdfResult.remittanceNumber,
+        koganAdvertisingFees: pdfResult.advertisingFees,
+        koganMonthlySellerFee: pdfResult.monthlySellerFee,
+        koganReturnsCreditNotes: pdfResult.returnsCreditNotes,
+        koganPdfBankDeposit: pdfResult.totalPaidAmount,
+        missingPdf: false,
+        refundsInclGst: -pdfResult.returnsCreditNotes,
+        refundsExGst: -refundsExGst,
+      };
+      
+      const { error } = await supabase
+        .from('settlements')
+        .update({
+          bank_deposit: pdfResult.totalPaidAmount,
+        } as any)
+        .eq('id', existing.id)
+        .eq('user_id', user.id);
+      
+      if (error) {
+        toast.error('Failed to merge PDF: ' + error.message);
+        return;
+      }
+      
+      // Mark PDF file as saved
+      setFiles(prev => {
+        const updated = [...prev];
+        updated[pdfFileIdx] = { ...updated[pdfFileIdx], status: 'saved', savedCount: 0 };
+        return updated;
+      });
+      
+      // Update existing settlements cache to reflect merge
+      setExistingKoganSettlements(prev => ({
+        ...prev,
+        [docNumber]: { ...prev[docNumber], net_payout: pdfResult.totalPaidAmount, metadata: updatedMetadata },
+      }));
+      
+      toast.success(`Kogan PDF merged into Settlement ${docNumber} — net payout updated to ${formatAUD(pdfResult.totalPaidAmount)}.`);
+      onSettlementsSaved?.();
+    } catch (err: any) {
+      toast.error('PDF merge failed: ' + (err.message || 'Unknown error'));
+    } finally {
+      setMergingPdfDoc(null);
+    }
+  }, [existingKoganSettlements, onSettlementsSaved]);
+
   // ── Kogan file pairing ──
   const koganPairings = useMemo(() => {
     const koganFiles = files.map((f, i) => ({ ...f, originalIdx: i })).filter(
@@ -1440,6 +1575,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       pdfFile: DetectedFile | null;
       netPayout: number | null;
       hasPdf: boolean;
+      /** Existing settlement in DB (for late PDF merge) */
+      existingDbSettlement?: { id: string; settlement_id: string; net_payout: number; metadata: any } | null;
     };
 
     const groups: KoganPair[] = [];
@@ -1478,18 +1615,22 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       });
     }
 
-    // Orphaned PDFs (no matching CSV)
+    // Orphaned PDFs (no matching CSV in batch) — check DB for existing settlements
     for (const pdf of pdfFiles) {
       if (usedPdfIndices.has(pdf.originalIdx)) continue;
       const docNums = pdf.koganDocNumbers || [];
+      const docNumber = docNums[0] || pdf.file.name.replace(/\.[^.]+$/, '');
+      const dbMatch = existingKoganSettlements[docNumber] || null;
+      
       groups.push({
-        docNumber: docNums[0] || pdf.file.name.replace(/\.[^.]+$/, ''),
+        docNumber,
         csvIdx: null,
         pdfIdx: pdf.originalIdx,
         csvFile: null,
         pdfFile: pdf,
-        netPayout: pdf.koganRemittanceResult?.totalPaidAmount ?? null,
+        netPayout: pdf.koganRemittanceResult?.totalPaidAmount ?? dbMatch?.net_payout ?? null,
         hasPdf: true,
+        existingDbSettlement: dbMatch,
       });
     }
 
@@ -1497,7 +1638,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
     const koganIndices = new Set(koganFiles.map(f => f.originalIdx));
     return { groups, koganIndices };
-  }, [files]);
+  }, [files, existingKoganSettlements]);
 
   return (
     <div className="space-y-4">
@@ -1769,22 +1910,25 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                   {koganPairings.groups.map((pair) => {
                     const csvStatus = pair.csvFile ? pair.csvFile.status : null;
                     const isSaved = csvStatus === 'saved' || (pair.pdfFile?.status === 'saved' && !pair.csvFile);
+                    const hasDbCsv = !pair.csvFile && !!pair.existingDbSettlement;
+                    const pdfMerged = isSaved || (hasDbCsv && pair.pdfFile?.status === 'saved');
+                    const isComplete = (pair.hasPdf && pair.csvFile) || (hasDbCsv && pair.hasPdf);
                     return (
                       <div
                         key={pair.docNumber}
                         className={`rounded-md border px-3 py-2.5 space-y-1 ${
-                          isSaved
+                          pdfMerged
                             ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-950/20'
-                            : pair.hasPdf && pair.csvFile
+                            : isComplete
                               ? 'border-blue-200 dark:border-blue-800 bg-background'
                               : 'border-amber-300 dark:border-amber-700 bg-amber-50/30 dark:bg-amber-950/10'
                         }`}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            {isSaved ? (
+                            {pdfMerged ? (
                               <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                            ) : pair.hasPdf && pair.csvFile ? (
+                            ) : isComplete ? (
                               <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                             ) : (
                               <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
@@ -1792,9 +1936,9 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                             <span className="text-sm font-medium text-foreground">
                               Settlement {pair.docNumber}
                             </span>
-                            {isSaved && (
+                            {pdfMerged && (
                               <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 text-[10px] h-5">
-                                Saved
+                                {hasDbCsv ? 'PDF Merged' : 'Saved'}
                               </Badge>
                             )}
                           </div>
@@ -1812,6 +1956,12 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                               <FileSpreadsheet className="h-3 w-3" />
                               <span className="truncate max-w-[200px]">{pair.csvFile.file.name}</span>
                               <span className="text-emerald-600 dark:text-emerald-400">✓</span>
+                            </div>
+                          ) : hasDbCsv ? (
+                            <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                              <FileSpreadsheet className="h-3 w-3" />
+                              <span>CSV already saved ✓</span>
+                              <span className="text-muted-foreground text-[10px]">({pair.existingDbSettlement!.settlement_id})</span>
                             </div>
                           ) : (
                             <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
@@ -1840,8 +1990,31 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                           </div>
                         )}
 
-                        {/* Save button per pair */}
-                        {!isSaved && pair.csvFile && (pair.csvFile.status === 'detected' || pair.csvFile.status === 'reviewing') && (
+                        {/* Merge PDF into existing DB settlement */}
+                        {hasDbCsv && pair.hasPdf && pair.pdfFile?.status !== 'saved' && !pdfMerged && (
+                          <div className="flex items-center gap-2 pl-6 pt-1">
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs gap-1.5"
+                              disabled={mergingPdfDoc === pair.docNumber}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                mergeKoganPdfToExisting(pair.docNumber, pair.pdfIdx!);
+                              }}
+                            >
+                              {mergingPdfDoc === pair.docNumber ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Link2 className="h-3 w-3" />
+                              )}
+                              Merge PDF into Saved Settlement
+                            </Button>
+                            <span className="text-[10px] text-muted-foreground">Updates net payout with returns, fees & ad spend</span>
+                          </div>
+                        )}
+
+                        {/* Save button per pair (new CSV upload) */}
+                        {!isSaved && !hasDbCsv && pair.csvFile && (pair.csvFile.status === 'detected' || pair.csvFile.status === 'reviewing') && (
                           <div className="flex items-center gap-2 pl-6 pt-1">
                             <Button
                               size="sm"
@@ -1864,8 +2037,34 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                   })}
                 </div>
 
+                {/* Merge All PDFs button when multiple DB matches exist */}
+                {(() => {
+                  const mergeablePairs = koganPairings.groups.filter(
+                    g => !g.csvFile && g.existingDbSettlement && g.hasPdf && g.pdfFile?.status !== 'saved'
+                  );
+                  if (mergeablePairs.length > 1) {
+                    return (
+                      <Button
+                        size="sm"
+                        className="gap-2 text-xs"
+                        disabled={!!mergingPdfDoc}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          for (const p of mergeablePairs) {
+                            await mergeKoganPdfToExisting(p.docNumber, p.pdfIdx!);
+                          }
+                        }}
+                      >
+                        {mergingPdfDoc ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
+                        Merge All {mergeablePairs.length} PDFs into Saved Settlements
+                      </Button>
+                    );
+                  }
+                  return null;
+                })()}
+
                 {/* Upload missing files button */}
-                {koganPairings.groups.some(g => !g.hasPdf || !g.csvFile) && (
+                {koganPairings.groups.some(g => (!g.hasPdf && !g.existingDbSettlement) || (!g.csvFile && !g.existingDbSettlement)) && (
                   <Button
                     variant="outline"
                     size="sm"
