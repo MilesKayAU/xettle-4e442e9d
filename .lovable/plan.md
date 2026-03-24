@@ -1,70 +1,71 @@
 
 
+## Audit: Canonical Rule Compliance Across Loaders and Insights
 
-## Plan: Fix Bunnings (and All Mirakl) Shipping Undercount
+### Verdict: 90% Compliant — 4 Gaps Found
 
-### Status: ✅ Implemented
+The SmartUploadFlow correctly routes through `saveSettlement()` → `saveSettlementCanonical()` for all settlement inserts. Source priority, sanity validation, and push gating are enforced. The Insights charts correctly exclude `api_sync` rows when CSV data exists, and `isReconciliationOnly()` is applied at all push surfaces.
 
-Cross-reference order counts from `shopify_auto_*` settlements applied to `recalculate-profit/index.ts`.
+However, 4 gaps exist:
 
 ---
 
-## Plan: Kogan CSV + PDF Upload Support
+### Gap 1: InsightsDashboard `settlement_profit` query has no `user_id` filter
 
-### Status: ✅ Implemented
+**File:** `src/components/admin/accounting/InsightsDashboard.tsx` (line 141-143)
 
-Added Kogan Remittance Advice PDF parser and merge flow.
-
-### What Was Done
-
-1. **Created `src/utils/kogan-remittance-parser.ts`** — Extracts line items (Journal Entry, A/P Invoice, A/P Credit note), total paid amount, advertising fees, monthly seller fees, and returns from Kogan PDFs.
-
-2. **Updated `src/utils/file-marketplace-detector.ts`** — Added Kogan PDF and filename detection (`kogan`, `kgn-` prefix).
-
-3. **Updated `src/utils/file-fingerprint-engine.ts`** — Added Kogan PDF fingerprint detection with content-based fallback.
-
-4. **Updated `src/components/admin/accounting/SmartUploadFlow.tsx`**:
-   - Kogan PDF parsed during pre-parse (returns empty settlements — it's a companion file)
-   - On save of Kogan CSV, checks for a Kogan PDF in the upload list
-   - Merges PDF data: overrides net_payout with bank deposit, adds returns/refunds, ad spend, monthly seller fee to fees
-   - Marks PDF as "saved" after merge
-   - Updated source hint to instruct users to upload both files
-
-### How It Works
-
-Upload both files together:
-- **CSV** provides order-level detail (gross sales, commission per order)
-- **PDF** provides settlement-level adjustments (returns, ad spend, seller fees, bank deposit)
-
-Result:
-```text
-gross_sales = Sum of CSV "Total" column          = $1,131.96
-fees        = CSV commission + PDF ad spend + fee = $149.72 + $100.10 + $55.00
-refunds     = PDF credit notes (returns)          = $57.80
-net_payout  = PDF "Total paid amount"             = $753.86
+```typescript
+// CURRENT — relies solely on RLS
+supabase.from('settlement_profit').select('marketplace_code, orders_count')
 ```
+
+Compare with `MarketplaceProfitComparison.tsx` (line 110-112) which correctly adds `.eq('user_id', user.id)`. While RLS protects the data, the InsightsDashboard query is inconsistent and could silently return empty results if the RLS policy changes or auth state is stale.
+
+**Fix:** Add `.eq('user_id', currentUser.id)` to `settlement_profit`, `marketplace_ad_spend`, `marketplace_shipping_costs`, `marketplace_shipping_stats`, and `order_shipping_estimates` queries. The `settlements` query also lacks it (line 126-132).
+
+---
+
+### Gap 2: InsightsDashboard doesn't filter `settlement_profit` by active settlement IDs
+
+**File:** `src/components/admin/accounting/InsightsDashboard.tsx` (line 183-189)
+
+The `profitOrderCounts` aggregation sums ALL `settlement_profit` rows for the user — including rows from `duplicate_suppressed` or `shopify_auto_*` settlements that the settlements query (line 130-131) excludes. This means order counts may be inflated, leading to over-estimated shipping deductions.
+
+**Fix:** After loading both datasets, filter `profitOrderCounts` to only include `settlement_id`s that exist in the filtered settlements result set. Same pattern `MarketplaceProfitComparison` uses with `activeSettlementIds`.
+
+---
+
+### Gap 3: `MarketplaceProfitComparison` doesn't filter PAC/shipping queries for suppressed settlements
+
+**File:** `src/components/insights/MarketplaceProfitComparison.tsx` (line 122-127)
+
+The `settlement_lines` query fetches ALL lines for the user including those belonging to suppressed settlements. When counting distinct order IDs for shipping calculation, this inflates the count.
+
+**Fix:** After building `activeSettlementIds`, filter `orderCountsRes` rows to only those whose `settlement_id` (via a join or post-filter) is in the active set.
+
+---
+
+### Gap 4: `settlement_lines` inserts in SmartUploadFlow are not part of canonical action
+
+**File:** `src/components/admin/accounting/SmartUploadFlow.tsx` (lines 998-1152)
+
+Settlement line inserts happen directly via `supabase.from('settlement_lines').insert()` in 6+ places across SmartUploadFlow, ShopifyOrdersDashboard, and AccountingDashboard. These bypass the canonical layer. While `settlement_lines` writes don't have the same invariants as `settlements` (no source priority, no sanity check), this fragmentation means:
+- No consistent error handling
+- No audit logging
+- Settlement lines could be inserted without their parent settlement succeeding
+
+**Fix (lower priority):** Extract a `saveSettlementLines()` function into `src/actions/settlements.ts` that validates the parent settlement exists before inserting lines. Migrate all 6 call sites.
+
+---
+
+### Files to Modify
+
+| File | Change | Priority |
+|------|--------|----------|
+| `src/components/admin/accounting/InsightsDashboard.tsx` | Add `user_id` filter to all queries; filter `profitOrderCounts` by active settlement IDs | High |
+| `src/components/insights/MarketplaceProfitComparison.tsx` | Filter order count query by active settlement IDs | Medium |
+| `src/actions/settlements.ts` | Add `saveSettlementLines()` canonical function | Low |
+| `src/components/admin/accounting/SmartUploadFlow.tsx` | Migrate line inserts to canonical function | Low |
 
 ### No database changes needed
 
----
-
-## Plan: Kogan Multi-File Pairing with Missing File Warnings
-
-### Status: ✅ Implemented
-
-### What Was Done
-
-1. **Added `extractKoganPdfDocNumbers`** to `src/utils/kogan-remittance-parser.ts` — lightweight doc number extraction for pairing CSVs with PDFs.
-
-2. **Added Kogan pairing logic** to `SmartUploadFlow.tsx` — `koganPairings` memo groups Kogan CSVs and PDFs by AP Invoice doc number, tracking paired/unpaired status.
-
-3. **Added KoganPairingCard UI** — replaces individual file cards for Kogan uploads with a grouped settlement view showing:
-   - ✅ Paired settlements (CSV + PDF matched)
-   - ⚠️ Missing PDF warnings with clear explanation of inaccuracy
-   - ⚠️ Missing CSV warnings (orphaned PDFs)
-   - Per-settlement save buttons with pairing status
-   - "Upload missing files" button
-
-4. **Added missing PDF metadata flag** — when saving a Kogan CSV without its PDF, settlements get `missingPdf: true` in metadata and user sees an amber warning toast.
-
-5. **Individual Kogan file cards hidden** — when pairing card is shown, individual Kogan file cards are suppressed to avoid confusion.
