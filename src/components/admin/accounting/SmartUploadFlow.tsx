@@ -44,7 +44,7 @@ import { parseGenericCSV, parseGenericXLSX } from '@/utils/generic-csv-parser';
 import { parseShopifyPayoutCSV } from '@/utils/shopify-payments-parser';
 import { parseShopifyOrdersCSV } from '@/utils/shopify-orders-parser';
 import { parseBunningsSummaryPdf } from '@/utils/bunnings-summary-parser';
-import { parseKoganRemittancePdf, type KoganRemittanceResult } from '@/utils/kogan-remittance-parser';
+import { parseKoganRemittancePdf, extractKoganPdfDocNumbers, type KoganRemittanceResult } from '@/utils/kogan-remittance-parser';
 import { parseWoolworthsMarketPlusCSV, isTransactionFee } from '@/utils/woolworths-marketplus-parser';
 import { saveSettlement, validateSettlementSanity, MARKETPLACE_LABELS as ENGINE_LABELS, type StandardSettlement } from '@/utils/settlement-engine';
 import { createDraftFingerprint } from '@/utils/fingerprint-lifecycle';
