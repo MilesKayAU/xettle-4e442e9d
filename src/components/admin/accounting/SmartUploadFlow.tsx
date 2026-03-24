@@ -465,7 +465,17 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           }
         } catch {}
 
-        return { idx, result, settlements, dbDupeIds, splitResult: undefined as MultiMarketplaceSplitResult | undefined, csvHeaders: fileHeaders, sampleRows };
+        // Extract Kogan PDF doc numbers + remittance result for pairing
+        let koganDocNumbers: string[] | undefined;
+        let koganRemittanceResult: KoganRemittanceResult | undefined;
+        if (result?.marketplace === 'kogan' && file.name.toLowerCase().endsWith('.pdf')) {
+          koganDocNumbers = await extractKoganPdfDocNumbers(file);
+          try {
+            koganRemittanceResult = await parseKoganRemittancePdf(file);
+          } catch { /* silent */ }
+        }
+
+        return { idx, result, settlements, dbDupeIds, splitResult: undefined as MultiMarketplaceSplitResult | undefined, csvHeaders: fileHeaders, sampleRows, koganDocNumbers, koganRemittanceResult };
       })
     );
 
