@@ -878,12 +878,13 @@ export default function InsightsDashboard() {
 
   // Stacked bar segments for $1 breakdown
   function getStackedSegments(s: MarketplaceStats) {
-    if (s.totalSales <= 0) return { net: 0, ads: 0, fees: 0, refunds: 0 };
+    if (s.totalSales <= 0) return { net: 0, ads: 0, fees: 0, refunds: 0, shipping: 0 };
     const refundPct = s.totalRefunds / s.totalSales;
     const feePct = s.feeLoad; // fees only (no refunds)
     const adsPct = s.adSpend / s.totalSales;
-    const netPct = Math.max(0, 1 - feePct - adsPct - refundPct);
-    return { net: netPct * 100, ads: adsPct * 100, fees: feePct * 100, refunds: refundPct * 100 };
+    const shippingPct = s.estimatedShippingCost / s.totalSales;
+    const netPct = Math.max(0, 1 - feePct - adsPct - refundPct - shippingPct);
+    return { net: netPct * 100, ads: adsPct * 100, fees: feePct * 100, refunds: refundPct * 100, shipping: shippingPct * 100 };
   }
 
   return (
