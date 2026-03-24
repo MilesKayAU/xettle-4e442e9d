@@ -146,7 +146,7 @@ const MARKETPLACE_SOURCE_HINTS: Record<string, string> = {
   everyday_market: 'Provided by Everyday Market via email or marketplace portal',
   mydeal: 'Provided by MyDeal via email or marketplace portal',
   bunnings: 'Upload the "Summary of Transactions" PDF from Bunnings Marketplace portal. Optionally include the "Billing Cycle Orders" CSV for order-level detail.',
-  kogan: 'Provided by Kogan via email or marketplace portal',
+  kogan: 'Upload the Kogan CSV payout file AND the Remittance Advice PDF together. The CSV has order details; the PDF has returns, seller fees, ad spend, and the actual bank deposit amount.',
   catch: 'Provided by Catch via email or marketplace portal',
   ebay_au: 'eBay Seller Hub → Payments → Reports → Download CSV',
   woolworths_marketplus: 'Woolworths MarketPlus portal → Reports → Download CSV',
