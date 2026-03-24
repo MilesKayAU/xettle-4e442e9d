@@ -514,7 +514,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
         );
         let ready = 0, readyTotal = 0, uploadNeeded = 0, uploadNeededManual = 0, uploadNeededApi = 0, gaps = 0;
         for (const r of valRes.data) {
-          if ((r as any).settlement_id?.startsWith('shopify_auto_')) continue;
+          if (isReconciliationOnly(undefined, undefined, (r as any).settlement_id)) continue;
           if (r.overall_status === 'ready_to_push') {
             ready++;
             readyTotal += (r as any).settlement_net || 0;

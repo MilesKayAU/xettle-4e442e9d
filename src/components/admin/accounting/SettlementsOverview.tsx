@@ -172,7 +172,7 @@ export default function SettlementsOverview({
         .eq('status', 'ready_to_push')
         .eq('is_hidden', false)
         .eq('is_pre_boundary', false)
-        .neq('source', 'api_sync')
+        .in('source', ['csv_upload', 'manual', 'api', 'ebay_api', 'mirakl_api', 'amazon_api'])
         .is('duplicate_of_settlement_id', null)
         .or('reconciliation_status.is.null,reconciliation_status.in.(reconciled,matched)')
         .order('period_end');

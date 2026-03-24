@@ -275,7 +275,7 @@ export default function ValidationSweep({
   ), [allConnections]);
 
   const isUsefulRecon = useCallback((r: ValidationRow) => {
-    return !!r.settlement_id?.startsWith('shopify_auto_')
+    return isReconciliationOnly('api_sync', r.marketplace_code, r.settlement_id)
       && !directApiCodes.has(r.marketplace_code)
       && r.overall_status !== 'duplicate_suppressed';
   }, [directApiCodes]);
