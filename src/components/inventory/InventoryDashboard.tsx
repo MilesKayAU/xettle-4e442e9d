@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { PackageOpen, Settings2, AlertTriangle } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
-import { useInventoryRules } from '@/hooks/useInventoryRules';
+import { useInventoryRules, type SkuLink } from '@/hooks/useInventoryRules';
 import { useInventoryFetch } from './useInventoryFetch';
 
 import UniversalInventoryTab from './UniversalInventoryTab';
