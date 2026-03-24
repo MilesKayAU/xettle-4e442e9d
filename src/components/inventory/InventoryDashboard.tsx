@@ -6,12 +6,15 @@
  * or Xero push logic. Only allowed shared deps: marketplace_connections,
  * token tables, connection-status, UI components, auth helpers.
  */
-import { useEffect, useState, useMemo, lazy, Suspense } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
 import { Badge } from '@/components/ui/badge';
-import { PackageOpen } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { PackageOpen, Settings2 } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/loading-spinner';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useInventoryRules } from '@/hooks/useInventoryRules';
 
 import UniversalInventoryTab from './UniversalInventoryTab';
 import ShopifyInventoryTab from './ShopifyInventoryTab';
@@ -19,6 +22,7 @@ import AmazonInventoryTab from './AmazonInventoryTab';
 import KoganInventoryTab from './KoganInventoryTab';
 import EbayInventoryTab from './EbayInventoryTab';
 import MiraklInventoryTab from './MiraklInventoryTab';
+import InventoryRulesPanel from './InventoryRulesPanel';
 
 interface ConnectionInfo {
   marketplace_code: string;
@@ -48,6 +52,10 @@ export default function InventoryDashboard({ onNavigateToSettings }: { onNavigat
   const [connections, setConnections] = useState<ConnectionInfo[]>([]);
   const [connectionsLoaded, setConnectionsLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>('universal');
+  const [rulesOpen, setRulesOpen] = useState(false);
+
+  // Inventory rules (live state for preview, save persists)
+  const { rules, setRules, saveRules, loading: rulesLoading, saving } = useInventoryRules();
 
   // Also check for Kogan API creds in app_settings and direct token tables
   const [hasKoganCreds, setHasKoganCreds] = useState(false);
@@ -87,10 +95,8 @@ export default function InventoryDashboard({ onNavigateToSettings }: { onNavigat
   ), [connections]);
 
   const hasConnection = (tab: TabDef): boolean => {
-    if (!tab.requiresCode) return true; // universal always
-    // Check connection table
+    if (!tab.requiresCode) return true;
     if (tab.requiresCode.some(code => activeCodes.has(code))) return true;
-    // Fallback to token tables
     if (tab.key === 'shopify') return hasShopifyToken;
     if (tab.key === 'amazon') return hasAmazonToken;
     if (tab.key === 'ebay') return hasEbayToken;
@@ -101,11 +107,10 @@ export default function InventoryDashboard({ onNavigateToSettings }: { onNavigat
 
   const visibleTabs = ALL_TABS.filter(t => t.key === 'universal' || hasConnection(t));
 
-  if (!connectionsLoaded) {
+  if (!connectionsLoaded || rulesLoading) {
     return <LoadingSpinner size="lg" text="Loading inventory..." />;
   }
 
-  // No marketplace connections at all
   if (connections.length === 0 && !hasShopifyToken && !hasAmazonToken && !hasEbayToken && !hasMiraklToken) {
     return (
       <div className="rounded-xl border border-border bg-card p-12 text-center space-y-4">
@@ -120,15 +125,42 @@ export default function InventoryDashboard({ onNavigateToSettings }: { onNavigat
 
   return (
     <div className="space-y-4">
-      <div>
-        <div className="flex items-center gap-2">
-          <h2 className="text-2xl font-bold text-foreground">Inventory</h2>
-          <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">Beta</Badge>
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-2xl font-bold text-foreground">Inventory</h2>
+            <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">Beta</Badge>
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">
+            Live read-only view of your product inventory across all connected platforms.
+          </p>
         </div>
-        <p className="text-sm text-muted-foreground mt-1">
-          Live read-only view of your product inventory across all connected platforms.
-        </p>
+        {activeTab === 'universal' && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setRulesOpen(o => !o)}
+            className="text-xs gap-1.5"
+          >
+            <Settings2 className="h-3.5 w-3.5" />
+            Rules
+          </Button>
+        )}
       </div>
+
+      {/* Rules panel — collapsible, only on Universal tab */}
+      {activeTab === 'universal' && (
+        <Collapsible open={rulesOpen} onOpenChange={setRulesOpen}>
+          <CollapsibleContent className="pt-1">
+            <InventoryRulesPanel
+              rules={rules}
+              onChange={setRules}
+              onSave={saveRules}
+              saving={saving}
+            />
+          </CollapsibleContent>
+        </Collapsible>
+      )}
 
       {/* Tab bar */}
       <div className="flex gap-1 flex-wrap border-b border-border pb-0">
@@ -152,6 +184,7 @@ export default function InventoryDashboard({ onNavigateToSettings }: { onNavigat
         <UniversalInventoryTab
           platformData={{ shopify: [], amazon: [], kogan: [], ebay: [], mirakl: [] }}
           loading={false}
+          inventoryRules={rules}
         />
       )}
       {activeTab === 'shopify' && <ShopifyInventoryTab />}

@@ -1,6 +1,7 @@
 /**
- * Universal Inventory Tab — cross-channel SKU view.
- * Total Real Stock = Shopify Qty + Amazon FBA Qty only (prevents double-counting).
+ * Universal Inventory Tab — cross-channel SKU view with configurable rules.
+ * Total Real Stock = sum(qty from physical_sources only).
+ * Smart SKU matching: exact → normalised → title fallback (>20 chars).
  * ISOLATION: No settlement, validation, or Xero push imports.
  */
 import { useMemo } from 'react';
@@ -9,6 +10,8 @@ import { Info, PackageOpen, AlertTriangle, ShoppingBag, Tag } from 'lucide-react
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import InventoryTable, { type InventoryColumn } from './InventoryTable';
 import PriceVarianceTooltip from './PriceVarianceTooltip';
+import type { InventoryRules } from '@/hooks/useInventoryRules';
+import { DEFAULT_INVENTORY_RULES } from '@/hooks/useInventoryRules';
 
 interface PlatformData {
   shopify: any[];
@@ -21,6 +24,7 @@ interface PlatformData {
 interface UniversalInventoryTabProps {
   platformData: PlatformData;
   loading: boolean;
+  inventoryRules?: InventoryRules;
 }
 
 interface UnifiedSku {
@@ -38,6 +42,9 @@ interface UnifiedSku {
   _muted: boolean;
 }
 
+/** Normalise SKU for fuzzy matching — applied to BOTH sides */
+const normalise = (sku: string) => sku.toLowerCase().replace(/[-\s_]/g, '');
+
 function StatusDot({ active }: { active: boolean | null }) {
   if (active === null) return <span className="h-2 w-2 rounded-full bg-muted-foreground/30 inline-block" title="Not listed" />;
   return active
@@ -45,42 +52,82 @@ function StatusDot({ active }: { active: boolean | null }) {
     : <span className="h-2 w-2 rounded-full bg-destructive inline-block" title="Inactive" />;
 }
 
-export default function UniversalInventoryTab({ platformData, loading }: UniversalInventoryTabProps) {
+export default function UniversalInventoryTab({ platformData, loading, inventoryRules }: UniversalInventoryTabProps) {
+  const rules = inventoryRules ?? DEFAULT_INVENTORY_RULES;
+
   const unified = useMemo(() => {
     const skuMap = new Map<string, UnifiedSku>();
+    // Lookup indices for smart matching
+    const normSkuIndex = new Map<string, string>(); // normalised sku → canonical sku key
+    const titleIndex = new Map<string, string>();    // lowercase title → canonical sku key (only >20 chars)
 
-    const getOrCreate = (sku: string, title: string): UnifiedSku => {
-      if (!skuMap.has(sku)) {
-        skuMap.set(sku, {
-          sku,
-          title,
-          shopify_qty: null,
-          amazon_fba_qty: null,
-          amazon_fbm_qty: null,
-          kogan_qty: null,
-          ebay_qty: null,
-          bunnings_qty: null,
-          total_real_stock: 0,
-          prices: [],
-          has_variance: false,
-          _muted: false,
-        });
+    const makeEntry = (key: string, title: string): UnifiedSku => ({
+      sku: key,
+      title,
+      shopify_qty: null,
+      amazon_fba_qty: null,
+      amazon_fbm_qty: null,
+      kogan_qty: null,
+      ebay_qty: null,
+      bunnings_qty: null,
+      total_real_stock: 0,
+      prices: [],
+      has_variance: false,
+      _muted: false,
+    });
+
+    /**
+     * Smart resolve: find existing entry by (1) exact SKU, (2) normalised SKU, (3) title >20 chars.
+     * Returns the canonical key or creates a new entry.
+     */
+    const resolve = (sku: string, title: string): UnifiedSku => {
+      // 1. Exact SKU match
+      if (sku && skuMap.has(sku)) return skuMap.get(sku)!;
+
+      // 2. Normalised SKU match
+      if (sku) {
+        const norm = normalise(sku);
+        if (norm && normSkuIndex.has(norm)) {
+          const canonKey = normSkuIndex.get(norm)!;
+          return skuMap.get(canonKey)!;
+        }
       }
-      return skuMap.get(sku)!;
+
+      // 3. Title fallback — only if title > 20 chars
+      if (title && title.length > 20) {
+        const lowerTitle = title.toLowerCase();
+        if (titleIndex.has(lowerTitle)) {
+          const canonKey = titleIndex.get(lowerTitle)!;
+          return skuMap.get(canonKey)!;
+        }
+      }
+
+      // 4. Create new entry
+      const key = sku || `_title_${title}`;
+      const entry = makeEntry(key, title);
+      skuMap.set(key, entry);
+      if (sku) {
+        const norm = normalise(sku);
+        if (norm) normSkuIndex.set(norm, key);
+      }
+      if (title && title.length > 20) {
+        titleIndex.set(title.toLowerCase(), key);
+      }
+      return entry;
     };
 
     // Shopify
     for (const item of platformData.shopify) {
-      if (!item.sku) continue;
-      const u = getOrCreate(item.sku, item.product_title || item.title);
+      if (!item.sku && !item.product_title && !item.title) continue;
+      const u = resolve(item.sku || '', item.product_title || item.title || '');
       u.shopify_qty = (u.shopify_qty ?? 0) + (item.quantity ?? 0);
       u.prices.push({ platform: 'Shopify', price: item.price });
     }
 
     // Amazon
     for (const item of platformData.amazon) {
-      if (!item.sku) continue;
-      const u = getOrCreate(item.sku, item.title);
+      if (!item.sku && !item.title) continue;
+      const u = resolve(item.sku || '', item.title || '');
       if (item.fulfilment_type === 'FBA') {
         u.amazon_fba_qty = (u.amazon_fba_qty ?? 0) + (item.quantity ?? 0);
       } else {
@@ -91,33 +138,44 @@ export default function UniversalInventoryTab({ platformData, loading }: Univers
 
     // Kogan
     for (const item of platformData.kogan) {
-      if (!item.sku) continue;
-      const u = getOrCreate(item.sku, item.title);
+      if (!item.sku && !item.title) continue;
+      const u = resolve(item.sku || '', item.title || '');
       u.kogan_qty = (u.kogan_qty ?? 0) + (item.quantity ?? 0);
       if (item.price) u.prices.push({ platform: 'Kogan', price: item.price });
     }
 
     // eBay
     for (const item of platformData.ebay) {
-      if (!item.sku) continue;
-      const u = getOrCreate(item.sku, item.title);
+      const itemSku = item.sku || item.item_id || '';
+      if (!itemSku && !item.title) continue;
+      const u = resolve(itemSku, item.title || '');
       u.ebay_qty = (u.ebay_qty ?? 0) + (item.quantity ?? 0);
       if (item.price) u.prices.push({ platform: 'eBay', price: item.price });
     }
 
     // Mirakl
     for (const item of platformData.mirakl) {
-      if (!item.sku) continue;
-      const u = getOrCreate(item.sku, item.title);
+      if (!item.sku && !item.title) continue;
+      const u = resolve(item.sku || '', item.title || '');
       u.bunnings_qty = (u.bunnings_qty ?? 0) + (item.quantity ?? 0);
       if (item.price) u.prices.push({ platform: item.marketplace_label || 'Bunnings', price: item.price });
     }
 
-    // Calculate totals and variance
+    // Calculate totals based on rules
+    const physicalSet = new Set(rules.physical_sources);
+    const isMirror = (platform: string) => platform in rules.mirror_platforms;
+
     for (const u of skuMap.values()) {
-      // Total Real Stock = Shopify + Amazon FBA only
-      u.total_real_stock = (u.shopify_qty ?? 0) + (u.amazon_fba_qty ?? 0);
-      u._muted = u.total_real_stock === 0;
+      let total = 0;
+      if (physicalSet.has('shopify')) total += (u.shopify_qty ?? 0);
+      if (physicalSet.has('amazon_fba')) total += (u.amazon_fba_qty ?? 0);
+      if (physicalSet.has('amazon_fbm') && !rules.fbm_from_shopify) total += (u.amazon_fbm_qty ?? 0);
+      if (physicalSet.has('kogan') && !isMirror('kogan')) total += (u.kogan_qty ?? 0);
+      if (physicalSet.has('ebay') && !isMirror('ebay')) total += (u.ebay_qty ?? 0);
+      if (physicalSet.has('mirakl') && !isMirror('mirakl')) total += (u.bunnings_qty ?? 0);
+
+      u.total_real_stock = total;
+      u._muted = total === 0;
 
       // Price variance
       const valid = u.prices.filter(p => p.price != null && p.price > 0);
@@ -129,31 +187,77 @@ export default function UniversalInventoryTab({ platformData, loading }: Univers
     }
 
     return Array.from(skuMap.values()).sort((a, b) => b.total_real_stock - a.total_real_stock);
-  }, [platformData]);
+  }, [platformData, rules]);
 
   const totalRealStock = unified.reduce((s, u) => s + u.total_real_stock, 0);
   const totalSkus = unified.length;
   const varianceCount = unified.filter(u => u.has_variance).length;
   const outOfStock = unified.filter(u => u.total_real_stock === 0).length;
 
+  // Build tooltip describing what's included
+  const sourceLabels = rules.physical_sources
+    .filter(s => !(s === 'amazon_fbm' && rules.fbm_from_shopify))
+    .map(s => {
+      if (s === 'shopify') return 'Shopify';
+      if (s === 'amazon_fba') return 'Amazon FBA';
+      if (s === 'amazon_fbm') return 'Amazon FBM';
+      if (s === 'kogan') return 'Kogan';
+      if (s === 'ebay') return 'eBay';
+      if (s === 'mirakl') return 'Bunnings/Mirakl';
+      return s;
+    });
+  const stockTooltip = `Counts ${sourceLabels.join(' + ')} inventory only.${rules.fbm_from_shopify ? ' FBM excluded (same as Shopify warehouse).' : ''} Mirror platforms excluded from total.`;
+
+  // Grey out mirror platform columns
+  const mirrorKeys = new Set(Object.keys(rules.mirror_platforms));
+
   const columns: InventoryColumn[] = [
     { key: 'sku', label: 'SKU', sortable: true },
     { key: 'title', label: 'Product', sortable: true },
     {
       key: 'shopify_qty', label: 'Shopify', sortable: true,
-      render: (val, row) => <span className="flex items-center gap-1"><StatusDot active={val != null ? val > 0 : null} /> {val ?? '—'}</span>,
+      render: (val) => <span className="flex items-center gap-1"><StatusDot active={val != null ? val > 0 : null} /> {val ?? '—'}</span>,
     },
     {
       key: 'amazon_fba_qty', label: 'FBA', sortable: true,
-      render: (val, row) => <span className="flex items-center gap-1"><StatusDot active={val != null ? val > 0 : null} /> {val ?? '—'}</span>,
+      render: (val) => <span className="flex items-center gap-1"><StatusDot active={val != null ? val > 0 : null} /> {val ?? '—'}</span>,
     },
     {
       key: 'amazon_fbm_qty', label: 'FBM', sortable: true,
-      render: (val) => val ?? '—',
+      render: (val) => (
+        <span className={rules.fbm_from_shopify ? 'text-muted-foreground/50' : ''}>
+          {val ?? '—'}
+          {rules.fbm_from_shopify && val != null && <span className="text-[9px] ml-1">(mirror)</span>}
+        </span>
+      ),
     },
-    { key: 'kogan_qty', label: 'Kogan', sortable: true, render: (val) => val ?? '—' },
-    { key: 'ebay_qty', label: 'eBay', sortable: true, render: (val) => val ?? '—' },
-    { key: 'bunnings_qty', label: 'Bunnings', sortable: true, render: (val) => val ?? '—' },
+    {
+      key: 'kogan_qty', label: 'Kogan', sortable: true,
+      render: (val) => (
+        <span className={mirrorKeys.has('kogan') ? 'text-muted-foreground/50' : ''}>
+          {val ?? '—'}
+          {mirrorKeys.has('kogan') && val != null && <span className="text-[9px] ml-1">(mirror)</span>}
+        </span>
+      ),
+    },
+    {
+      key: 'ebay_qty', label: 'eBay', sortable: true,
+      render: (val) => (
+        <span className={mirrorKeys.has('ebay') ? 'text-muted-foreground/50' : ''}>
+          {val ?? '—'}
+          {mirrorKeys.has('ebay') && val != null && <span className="text-[9px] ml-1">(mirror)</span>}
+        </span>
+      ),
+    },
+    {
+      key: 'bunnings_qty', label: 'Bunnings', sortable: true,
+      render: (val) => (
+        <span className={mirrorKeys.has('mirakl') ? 'text-muted-foreground/50' : ''}>
+          {val ?? '—'}
+          {mirrorKeys.has('mirakl') && val != null && <span className="text-[9px] ml-1">(mirror)</span>}
+        </span>
+      ),
+    },
     { key: 'total_real_stock', label: 'Total Real Stock', sortable: true },
     {
       key: 'has_variance',
@@ -166,7 +270,7 @@ export default function UniversalInventoryTab({ platformData, loading }: Univers
     <div className="space-y-4">
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <SummaryCard icon={<ShoppingBag className="h-4 w-4 text-primary" />} label="Total Real Stock" value={totalRealStock.toLocaleString()} tooltip="Counts Shopify and Amazon FBA inventory only. Kogan, eBay and Bunnings are fed from Shopify so adding them would double count." />
+        <SummaryCard icon={<ShoppingBag className="h-4 w-4 text-primary" />} label="Total Real Stock" value={totalRealStock.toLocaleString()} tooltip={stockTooltip} />
         <SummaryCard icon={<Tag className="h-4 w-4 text-primary" />} label="Total SKUs" value={totalSkus.toLocaleString()} />
         <SummaryCard icon={<AlertTriangle className="h-4 w-4 text-amber-500" />} label="Price Variance Alerts" value={String(varianceCount)} />
         <SummaryCard icon={<PackageOpen className="h-4 w-4 text-destructive" />} label="Out of Stock" value={String(outOfStock)} />
