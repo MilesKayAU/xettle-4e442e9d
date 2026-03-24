@@ -606,6 +606,23 @@ async function sweepUser(adminSupabase: any, userId: string) {
         }
 
         // Step 2: Settlement
+        // For Kogan auto-only periods, force settlement_needed since only recon-only data exists
+        if (!settlement && autoOnlyPeriods.has(pl)) {
+          record.settlement_uploaded = false
+          record.overall_status = 'settlement_needed'
+          record.reconciliation_status = 'pending'
+          // Still process orders above, then upsert and skip remaining steps
+          await adminSupabase
+            .from('marketplace_validation')
+            .upsert(record, { onConflict: 'user_id,marketplace_code,period_label' })
+          summary.settlement_needed++
+          // Mark processing done
+          await adminSupabase.from('marketplace_validation')
+            .update({ processing_state: 'processed', processing_completed_at: new Date().toISOString() })
+            .eq('user_id', userId).eq('marketplace_code', mc).eq('period_label', pl)
+          continue
+        }
+
         if (settlement) {
           record.settlement_uploaded = true
           record.settlement_id = settlement.settlement_id
