@@ -28,6 +28,7 @@ import PushSafetyPreview from '@/components/admin/accounting/PushSafetyPreview';
 import { runMarketplaceSync, runDirectMarketplaceSync } from '@/actions/sync';
 import { ACTIVE_CONNECTION_STATUSES, isApiConnectionType } from '@/constants/connection-status';
 import { useApiSyncedCodes } from '@/hooks/useApiSyncedCodes';
+import { isReconciliationOnly } from '@/utils/settlement-policy';
 
 interface ValidationRow {
   id: string;
