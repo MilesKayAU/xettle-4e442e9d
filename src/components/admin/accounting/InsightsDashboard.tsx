@@ -190,13 +190,8 @@ export default function InsightsDashboard() {
       }
 
       // Aggregate order counts from settlement_profit by marketplace
-      const profitOrderCounts: Record<string, number> = {};
-      if (profitOrdersRes.data) {
-        for (const row of profitOrdersRes.data as any[]) {
-          const mp = row.marketplace_code;
-          profitOrderCounts[mp] = (profitOrderCounts[mp] || 0) + (Number(row.orders_count) || 0);
-        }
-      }
+      // NOTE: profitOrderCounts is built later, after activeSettlementIds is determined
+      const _rawProfitOrders = profitOrdersRes.data as any[] || [];
 
       // Build observed commission rates from app_settings
       const observedRates: Record<string, number> = {};
