@@ -326,7 +326,7 @@ export default function ValidationSweep({
       if (uploadSubTab === 'manual') {
         result = result.filter(r => !apiSyncedCodes.has(r.marketplace_code) && !isReconciliationOnly(r.settlement_source, r.marketplace_code, r.settlement_id));
       } else if (uploadSubTab === 'api') {
-        result = result.filter(r => apiSyncedCodes.has(r.marketplace_code) && !isReconciliationOnly('api_sync', r.marketplace_code, r.settlement_id));
+        result = result.filter(r => apiSyncedCodes.has(r.marketplace_code) && !isReconciliationOnly(r.settlement_source, r.marketplace_code, r.settlement_id));
       } else if (uploadSubTab === 'recon') {
         result = result.filter(r => isUsefulRecon(r));
       }
