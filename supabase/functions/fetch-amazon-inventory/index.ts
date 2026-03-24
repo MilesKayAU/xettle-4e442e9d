@@ -40,11 +40,26 @@ serve(async (req: Request) => {
     const partial = false;
     const errorMsg = undefined;
 
+    const resultError = errorMsg || "Amazon inventory API integration pending SP-API role approval. Settlement reconciliation works independently.";
+
+    // Write-through cache
+    try {
+      await supabase.from("cached_inventory").upsert({
+        user_id: userId,
+        platform: "amazon",
+        items: items as any,
+        has_more: false,
+        partial,
+        error: resultError,
+        fetched_at: new Date().toISOString(),
+      }, { onConflict: "user_id,platform" });
+    } catch { /* cache write failure is non-fatal */ }
+
     return new Response(JSON.stringify({
       items,
       hasMore: false,
       partial,
-      error: errorMsg || "Amazon inventory API integration pending SP-API role approval. Settlement reconciliation works independently.",
+      error: resultError,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

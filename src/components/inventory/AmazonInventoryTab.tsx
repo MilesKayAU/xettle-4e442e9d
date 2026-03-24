@@ -42,11 +42,20 @@ const columns: InventoryColumn[] = [
   { key: 'status', label: 'Status' },
 ];
 
-export default function AmazonInventoryTab({ connected }: { connected: boolean }) {
+export default function AmazonInventoryTab({ connected, initialData, lastFetched: initialLastFetched }: { connected: boolean; initialData?: any[]; lastFetched?: Date | null }) {
   const [subTab, setSubTab] = useState<'FBA' | 'FBM'>('FBA');
-  const { data, loading, loadingMore, hasMore, partial, error, lastFetched, fetch, loadMore } = useInventoryFetch<AmazonItem>('fetch-amazon-inventory');
+  const { data, loading, loadingMore, hasMore, partial, error, lastFetched, fetch, loadMore, loadFromCache } = useInventoryFetch<AmazonItem>('fetch-amazon-inventory');
+  const [seeded, setSeeded] = useState(false);
 
-  useEffect(() => { if (connected) fetch(); }, [connected]);
+  useEffect(() => {
+    if (!connected || seeded) return;
+    if (initialData && initialData.length > 0) {
+      loadFromCache({ items: initialData, has_more: false, partial: false, error: null, fetched_at: initialLastFetched?.toISOString() || new Date().toISOString() });
+    } else {
+      fetch();
+    }
+    setSeeded(true);
+  }, [connected, seeded]);
 
   if (!connected) {
     return (
@@ -57,7 +66,9 @@ export default function AmazonInventoryTab({ connected }: { connected: boolean }
     );
   }
 
-  const filtered = data.filter(d => d.fulfilment_type === subTab);
+  const displayData = data.length > 0 ? data : (initialData as AmazonItem[] || []);
+  const displayLastFetched = lastFetched || initialLastFetched || null;
+  const filtered = displayData.filter(d => d.fulfilment_type === subTab);
 
   return (
     <div className="space-y-4">
@@ -75,7 +86,7 @@ export default function AmazonInventoryTab({ connected }: { connected: boolean }
             </button>
           ))}
         </div>
-        <InventoryRefreshBar lastFetched={lastFetched} loading={loading} partial={partial} error={error} onRefresh={fetch} />
+        <InventoryRefreshBar lastFetched={displayLastFetched} loading={loading} partial={partial} error={error} onRefresh={fetch} />
       </div>
       <InventoryTable
         columns={columns}

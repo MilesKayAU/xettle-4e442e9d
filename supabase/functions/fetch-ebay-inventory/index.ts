@@ -175,6 +175,19 @@ serve(async (req: Request) => {
       }
     }
 
+    // Write-through cache
+    try {
+      await supabase.from("cached_inventory").upsert({
+        user_id: userId,
+        platform: "ebay",
+        items: items as any,
+        has_more: hasMore,
+        partial,
+        error: errorMsg || null,
+        fetched_at: new Date().toISOString(),
+      }, { onConflict: "user_id,platform" });
+    } catch { /* cache write failure is non-fatal */ }
+
     return new Response(JSON.stringify({ items, hasMore, nextCursor, partial, error: errorMsg }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

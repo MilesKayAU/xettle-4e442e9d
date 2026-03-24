@@ -2,7 +2,7 @@
  * Shopify Inventory Tab — fetches live product/variant data.
  * ISOLATION: No settlement, validation, or Xero push imports.
  */
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useInventoryFetch } from './useInventoryFetch';
 import InventoryTable, { type InventoryColumn } from './InventoryTable';
 import InventoryRefreshBar from './InventoryRefreshBar';
@@ -65,17 +65,31 @@ const statusOptions = [
   { value: 'archived', label: 'Archived' },
 ];
 
-export default function ShopifyInventoryTab() {
-  const { data, loading, loadingMore, hasMore, partial, error, lastFetched, fetch, loadMore } = useInventoryFetch<ShopifyVariant>('fetch-shopify-inventory');
+export default function ShopifyInventoryTab({ initialData, lastFetched: initialLastFetched }: { initialData?: any[]; lastFetched?: Date | null }) {
+  const { data, loading, loadingMore, hasMore, partial, error, lastFetched, fetch, loadMore, loadFromCache } = useInventoryFetch<ShopifyVariant>('fetch-shopify-inventory');
+  const [seeded, setSeeded] = useState(false);
 
-  useEffect(() => { fetch(); }, []);
+  // Seed from cached data passed by parent (no live API call)
+  useEffect(() => {
+    if (!seeded && initialData && initialData.length > 0) {
+      loadFromCache({ items: initialData, has_more: false, partial: false, error: null, fetched_at: initialLastFetched?.toISOString() || new Date().toISOString() });
+      setSeeded(true);
+    } else if (!seeded && !initialData) {
+      // No cache available — fetch live
+      fetch();
+      setSeeded(true);
+    }
+  }, [initialData, seeded]);
+
+  const displayData = data.length > 0 ? data : (initialData as ShopifyVariant[] || []);
+  const displayLastFetched = lastFetched || initialLastFetched || null;
 
   return (
     <div className="space-y-4">
-      <InventoryRefreshBar lastFetched={lastFetched} loading={loading} partial={partial} error={error} onRefresh={fetch} />
+      <InventoryRefreshBar lastFetched={displayLastFetched} loading={loading} partial={partial} error={error} onRefresh={fetch} />
       <InventoryTable
         columns={columns}
-        data={data}
+        data={displayData}
         loading={loading}
         statusOptions={statusOptions}
         hasMore={hasMore}
