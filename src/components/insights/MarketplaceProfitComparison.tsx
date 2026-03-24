@@ -349,13 +349,27 @@ export default function MarketplaceProfitComparison() {
     <TooltipProvider>
     <Card className="border-border">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-          <BarChart3 className="h-4 w-4 text-primary" />
-          Marketplace Profit Ranking
-        </CardTitle>
-        <CardDescription className="text-xs">
-          Average margin across all periods — which marketplace makes you the most?
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-primary" />
+              Marketplace Profit Ranking
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Average margin across all periods — which marketplace makes you the most?
+            </CardDescription>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleRecalculate}
+            disabled={recalculating}
+            className="text-xs gap-1"
+          >
+            <RefreshCw className={`h-3 w-3 ${recalculating ? 'animate-spin' : ''}`} />
+            {recalculating ? 'Recalculating…' : 'Recalculate'}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="pb-3">
         <div className="border border-border rounded-md overflow-hidden">
