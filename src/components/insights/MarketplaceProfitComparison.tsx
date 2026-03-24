@@ -132,25 +132,7 @@ export default function MarketplaceProfitComparison() {
 
       const profits = profitRes.data || [];
       const settlements = settlementsRes.data || [];
-
-      // Build order counts map — only from lines belonging to active settlements
-      const orderCountsByMp: Record<string, number> = {};
-      if (orderCountsRes.data && Array.isArray(orderCountsRes.data)) {
-        const seen: Record<string, Set<string>> = {};
-        for (const row of orderCountsRes.data as any[]) {
-          // Skip lines from suppressed/deduped settlements
-          if (row.settlement_id && !activeSettlementIds.has(row.settlement_id)) continue;
-          const mp = normalizeMarketplace(row.marketplace_name || '');
-          if (!mp || !row.order_id) continue;
-          if (!seen[mp]) seen[mp] = new Set();
-          seen[mp].add(row.order_id);
-        }
-        for (const [mp, ids] of Object.entries(seen)) {
-          orderCountsByMp[mp] = ids.size;
-        }
-      }
-
-      // activeSettlementIds built AFTER dedup below
+      const _rawOrderLines = orderCountsRes.data as any[] || [];
 
       // Group settlements by normalised marketplace
       const grouped: Record<string, SettlementRow[]> = {};
@@ -174,6 +156,22 @@ export default function MarketplaceProfitComparison() {
       // Build activeSettlementIds AFTER dedup so shopify_auto_* IDs are excluded when CSV exists
       const dedupedSettlements = Object.values(grouped).flat();
       const activeSettlementIds = new Set(dedupedSettlements.map(s => (s as any).settlement_id));
+
+      // Build order counts map — only from lines belonging to active settlements
+      const orderCountsByMp: Record<string, number> = {};
+      if (_rawOrderLines.length > 0) {
+        const seen: Record<string, Set<string>> = {};
+        for (const row of _rawOrderLines) {
+          if (row.settlement_id && !activeSettlementIds.has(row.settlement_id)) continue;
+          const mp = normalizeMarketplace(row.marketplace_name || '');
+          if (!mp || !row.order_id) continue;
+          if (!seen[mp]) seen[mp] = new Set();
+          seen[mp].add(row.order_id);
+        }
+        for (const [mp, ids] of Object.entries(seen)) {
+          orderCountsByMp[mp] = ids.size;
+        }
+      }
 
       // Load observed rates for redistribution
       const { data: observedRatesData } = await supabase
