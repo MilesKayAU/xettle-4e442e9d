@@ -471,9 +471,12 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
         // Extract Kogan PDF doc numbers + remittance result for pairing
         let koganDocNumbers: string[] | undefined;
+        let koganPdfPeriodMonth: string | undefined;
         let koganRemittanceResult: KoganRemittanceResult | undefined;
         if (result?.marketplace === 'kogan' && file.name.toLowerCase().endsWith('.pdf')) {
-          koganDocNumbers = await extractKoganPdfDocNumbers(file);
+          const pdfInfo = await extractKoganPdfInfo(file);
+          koganDocNumbers = pdfInfo.docNumbers;
+          koganPdfPeriodMonth = pdfInfo.periodMonth;
           try {
             koganRemittanceResult = await parseKoganRemittancePdf(file);
           } catch { /* silent */ }
