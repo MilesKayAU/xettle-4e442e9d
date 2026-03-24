@@ -202,6 +202,11 @@ Deno.serve(async (req) => {
         }
       }
 
+      const ordersCount = orderIds.size || revenueLines.length || 1;
+      const fulfilmentMethod = getEffectiveMethod(mp, fulfilmentMethods[mp]);
+      const postageCostPerOrder = postageCosts[mp] || 0;
+      const mcfCostPerOrder = mcfCosts[mp] || 0;
+
       // For Shopify payout settlements (not shopify_auto_ or shopify_orders_),
       // exclude orders that belong to sub-channel auto-settlements to prevent
       // double-counting shipping costs.
@@ -210,17 +215,11 @@ Deno.serve(async (req) => {
       
       let shippingOrderCount: number;
       if (isShopifyPayout && subChannelOrderIds.size > 0) {
-        // Only count orders that are NOT in any sub-channel settlement
         const pureShopifyOrders = [...orderIds].filter(id => !subChannelOrderIds.has(id));
         shippingOrderCount = pureShopifyOrders.length || 1;
       } else {
         shippingOrderCount = ordersCount;
       }
-
-      const ordersCount = orderIds.size || revenueLines.length || 1;
-      const fulfilmentMethod = getEffectiveMethod(mp, fulfilmentMethods[mp]);
-      const postageCostPerOrder = postageCosts[mp] || 0;
-      const mcfCostPerOrder = mcfCosts[mp] || 0;
 
       // Calculate postage deduction using canonical shared function
       let postageDeduction = 0;
