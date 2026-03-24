@@ -1119,7 +1119,12 @@ export default function Dashboard() {
                         <p className="text-sm font-medium text-amber-800 dark:text-amber-300 mb-1">📤 Upload needed for:</p>
                         <ul className="text-xs text-amber-700 dark:text-amber-400 space-y-0.5">
                           {missingSettlements.map((m, i) => (
-                            <li key={i}>• <strong>{m.marketplace_label}</strong> — {m.period_label}</li>
+                            <li key={i}>
+                              • <strong>{m.marketplace_label}</strong> — {m.period_label}
+                              {m.marketplace_code.toLowerCase().includes('kogan') && (
+                                <span className="ml-1 font-medium">(CSV + PDF pair required)</span>
+                              )}
+                            </li>
                           ))}
                         </ul>
                       </div>
