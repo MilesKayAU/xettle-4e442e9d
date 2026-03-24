@@ -940,9 +940,9 @@ export default function InsightsDashboard() {
           </Card>
           <Card>
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs text-muted-foreground font-medium">Marketplace Fees Paid</p>
-              <p className="text-xl font-bold text-destructive mt-1">{formatCurrency(totalAllFees)}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{formatPct(totalAllSales > 0 ? totalAllFees / totalAllSales : 0)} of sales</p>
+              <p className="text-xs text-muted-foreground font-medium">Marketplace Fees</p>
+              <p className="text-xl font-bold text-destructive mt-1">{formatCurrency(totalAllFees - stats.reduce((sum, s) => sum + s.totalRefunds, 0))}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{formatPct(totalAllSales > 0 ? (totalAllFees - stats.reduce((sum, s) => sum + s.totalRefunds, 0)) / totalAllSales : 0)} of sales</p>
             </CardContent>
           </Card>
           <Card>
