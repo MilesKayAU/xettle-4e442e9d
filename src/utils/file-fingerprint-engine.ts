@@ -749,14 +749,8 @@ export async function detectFile(file: File): Promise<FileDetectionResult | null
         };
       }
     } catch { /* fall through */ }
-    return {
-      marketplace: 'bunnings',
-      marketplaceLabel: 'Bunnings',
-      confidence: 60,
-      isSettlementFile: true,
-      detectionLevel: 2,
-      fileFormat: 'pdf',
-    };
+    // Unknown PDF — don't assume any marketplace
+    return null;
   }
 
   const extracted = await extractFileHeaders(file);
