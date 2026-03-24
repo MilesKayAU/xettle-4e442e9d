@@ -345,7 +345,7 @@ export default function ValidationSweep({
     const activeRows = rows.filter(r => activeCodes.has(r.marketplace_code) && !pausedCodes.has(r.marketplace_code));
     const counts = { all: 0, complete: 0, ready_to_push: 0, settlement_needed: 0, settlement_needed_manual: 0, settlement_needed_api: 0, settlement_needed_recon: 0, gap_detected: 0 };
     activeRows.forEach((r) => {
-      const isRecon = r.settlement_id?.startsWith('shopify_auto_');
+      const isRecon = isReconciliationOnly('api_sync', r.marketplace_code, r.settlement_id);
       // Only count recon rows that are actually useful (no direct API, not resolved)
       if (isRecon) {
         if (isUsefulRecon(r)) counts.settlement_needed_recon++;
