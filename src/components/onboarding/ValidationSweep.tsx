@@ -332,7 +332,7 @@ export default function ValidationSweep({
       }
     } else {
       // Outside the settlement_needed filter, hide all recon rows
-      result = result.filter(r => !isReconciliationOnly('api_sync', r.marketplace_code, r.settlement_id));
+      result = result.filter(r => !isReconciliationOnly(r.settlement_source, r.marketplace_code, r.settlement_id));
     }
     if (marketplaceFilter !== 'all') {
       result = result.filter((r) => r.marketplace_code === marketplaceFilter);
