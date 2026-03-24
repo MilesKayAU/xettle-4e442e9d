@@ -23,6 +23,8 @@ import {
   savePostageCost,
   loadMcfCosts,
   saveMcfCost,
+  loadFreeShippingThresholds,
+  saveFreeShippingThreshold,
   isAmazonCode,
 } from '@/utils/fulfilment-settings';
 import LoadingSpinner from '@/components/ui/loading-spinner';

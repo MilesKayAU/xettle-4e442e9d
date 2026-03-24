@@ -254,3 +254,57 @@ export async function savePostageCost(
       .insert({ user_id: userId, key, value: String(amount) });
   }
 }
+
+/**
+ * Load free-shipping thresholds for the current user.
+ * Returns a map of marketplace_code → threshold amount (number).
+ * Orders over this amount get free shipping (no postage deduction).
+ */
+export async function loadFreeShippingThresholds(
+  userId: string,
+): Promise<Record<string, number>> {
+  const { data } = await supabase
+    .from('app_settings')
+    .select('key, value')
+    .eq('user_id', userId)
+    .like('key', 'free_shipping_threshold:%');
+
+  const result: Record<string, number> = {};
+  for (const row of data || []) {
+    const code = row.key.replace('free_shipping_threshold:', '');
+    const num = parseFloat(row.value || '');
+    if (code && !isNaN(num) && num >= 0) {
+      result[code] = num;
+    }
+  }
+  return result;
+}
+
+/**
+ * Save or update a free-shipping threshold for one marketplace.
+ */
+export async function saveFreeShippingThreshold(
+  userId: string,
+  marketplaceCode: string,
+  amount: number,
+): Promise<void> {
+  const key = `free_shipping_threshold:${marketplaceCode}`;
+
+  const { data: existing } = await supabase
+    .from('app_settings')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('key', key)
+    .maybeSingle();
+
+  if (existing) {
+    await supabase
+      .from('app_settings')
+      .update({ value: String(amount) })
+      .eq('id', existing.id);
+  } else {
+    await supabase
+      .from('app_settings')
+      .insert({ user_id: userId, key, value: String(amount) });
+  }
+}
