@@ -129,6 +129,20 @@ Deno.serve(async (req) => {
       linesBySettlement.get(sid)!.push(line);
     }
 
+    // Build set of order IDs that belong to sub-channel auto-settlements
+    // (e.g. shopify_auto_bunnings, shopify_auto_kogan). These orders also
+    // appear in the parent Shopify payout CSV, so we must exclude them from
+    // the Shopify payout's shipping count to avoid double-counting.
+    const subChannelOrderIds = new Set<string>();
+    for (const s of settlements || []) {
+      if (s.settlement_id?.startsWith("shopify_auto_")) {
+        const lines = linesBySettlement.get(s.settlement_id) || [];
+        for (const l of lines) {
+          if (l.order_id) subChannelOrderIds.add(l.order_id);
+        }
+      }
+    }
+
     const AMAZON_PREFIXES = ["amazon"];
     function isAmazonCode(code: string): boolean {
       return AMAZON_PREFIXES.some((p) => code.toLowerCase().startsWith(p));
