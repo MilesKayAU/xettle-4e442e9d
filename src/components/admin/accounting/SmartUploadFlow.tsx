@@ -178,7 +178,59 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
   const [mergingPdfDoc, setMergingPdfDoc] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<DetectedFile[]>([]);
-  filesRef.current = files;
+
+  // Re-parse stale in-memory Kogan CSV entries that were created by the old generic parser
+  useEffect(() => {
+    const staleKoganCsvs = files
+      .map((f, i) => ({ f, i }))
+      .filter(({ f }) => {
+        if (f.detection?.marketplace !== 'kogan' || f.file.name.toLowerCase().endsWith('.pdf')) return false;
+        const firstSettlementId = f.settlements?.[0]?.settlement_id || '';
+        return !!firstSettlementId && !/^kogan_\d+$/.test(firstSettlementId);
+      });
+
+    if (staleKoganCsvs.length === 0) return;
+
+    let cancelled = false;
+
+    (async () => {
+      const reparsed = await Promise.all(
+        staleKoganCsvs.map(async ({ f, i }) => {
+          try {
+            const text = await f.file.text();
+            const result = parseKoganPayoutCSV(text);
+            if (!result.success || result.settlements.length === 0) return null;
+            return { index: i, settlements: result.settlements };
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      if (cancelled) return;
+      const valid = reparsed.filter((r): r is { index: number; settlements: StandardSettlement[] } => !!r);
+      if (valid.length === 0) return;
+
+      setFiles(prev => {
+        const updated = [...prev];
+        for (const { index, settlements } of valid) {
+          if (!updated[index]) continue;
+          updated[index] = {
+            ...updated[index],
+            settlements,
+            error: undefined,
+            status: updated[index].status === 'error' ? 'detected' : updated[index].status,
+          };
+        }
+        return updated;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [files]);
+
 
   // Check if Shopify is connected and validate the token
   useEffect(() => {
@@ -357,7 +409,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
   // ── File detection ──
   const detectFiles = useCallback(async (newFiles: File[]) => {
-    // Dedup 1: skip files already in the current list (by name + size) — but allow re-upload if previous attempt was an error
+    // Dedup 1: if the same file is re-uploaded, replace the in-memory entry and re-parse it.
+    // Only block files that are already saved or currently saving.
     const currentFiles = filesRef.current;
     const replaceableIndices: number[] = [];
     const uniqueFiles = newFiles.filter(f => {
@@ -366,18 +419,19 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       );
       if (existingIdx >= 0) {
         const existing = currentFiles[existingIdx];
-        // Allow re-upload if previous was error (e.g. stale duplicate check)
-        if (existing.status === 'error') {
+        const canReplace = existing.status !== 'saved' && existing.status !== 'saving';
+        if (canReplace) {
           replaceableIndices.push(existingIdx);
+          toast.info(`Reprocessing "${f.name}" with the latest parser.`, { duration: 3000 });
           return true;
         }
-        toast.warning(`"${f.name}" is already in the upload list — skipped.`, { duration: 4000 });
+        toast.warning(`"${f.name}" is already saved — skipped.`, { duration: 4000 });
         return false;
       }
       return true;
     });
 
-    // Remove stale error entries that are being re-uploaded
+    // Remove stale in-memory entries that are being re-uploaded
     if (replaceableIndices.length > 0) {
       setFiles(prev => prev.filter((_, i) => !replaceableIndices.includes(i)));
     }
