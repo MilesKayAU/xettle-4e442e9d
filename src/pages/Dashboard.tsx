@@ -33,7 +33,7 @@ import RecentUploads from '@/components/dashboard/RecentUploads';
 import ReconciliationHealthPanel from '@/components/dashboard/ReconciliationHealthPanel';
 
 import { Button } from '@/components/ui/button';
-import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard, ClipboardList, ChevronDown, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
+import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard, ClipboardList, ChevronDown, CheckCircle2, AlertTriangle, Info, PackageOpen } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import CoaDetectedPanel from '@/components/dashboard/CoaDetectedPanel';
@@ -47,6 +47,7 @@ import ApiConnectionsPanel from '@/components/settings/ApiConnectionsPanel';
 import DataQualityPanel from '@/components/settings/DataQualityPanel';
 import FulfilmentMethodsPanel from '@/components/settings/FulfilmentMethodsPanel';
 import MarketplaceManagerPanel from '@/components/settings/MarketplaceManagerPanel';
+import InventoryDashboard from '@/components/inventory/InventoryDashboard';
 
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
 const ShopifyOrdersDashboard = lazy(() => import('@/components/admin/accounting/ShopifyOrdersDashboard'));
@@ -55,7 +56,7 @@ const OutstandingTab = lazy(() => import('@/components/dashboard/OutstandingTab'
 import { ReconciliationSummaryCard } from '@/components/admin/accounting/ReconciliationHub';
 const ReconciliationHub = lazy(() => import('@/components/admin/accounting/ReconciliationHub'));
 
-type DashboardView = 'home' | 'settlements' | 'insights' | 'settings';
+type DashboardView = 'home' | 'settlements' | 'insights' | 'inventory' | 'settings';
 type SettlementsSubTab = 'overview' | 'all' | 'outstanding' | 'reconciliation';
 type InsightsSubTab = 'overview' | 'reconciliation' | 'profit' | 'sku';
 
@@ -481,7 +482,7 @@ export default function Dashboard() {
       if (stored === 'dashboard') return 'home';
       if (stored === 'outstanding') { try { localStorage.setItem('xettle_settlements_subtab', 'outstanding'); } catch {} return 'settlements'; }
       if (stored === 'smart_upload') return 'home';
-      if (stored === 'home' || stored === 'settlements' || stored === 'insights' || stored === 'settings') return stored as DashboardView;
+      if (stored === 'home' || stored === 'settlements' || stored === 'insights' || stored === 'inventory' || stored === 'settings') return stored as DashboardView;
     } catch { /* storage unavailable */ }
     return 'home';
   });
@@ -881,6 +882,7 @@ export default function Dashboard() {
               { key: 'home' as DashboardView, label: 'Home', icon: LayoutDashboard },
               { key: 'settlements' as DashboardView, label: 'Settlements', icon: FileText, badgeCount: readyToPushCount + outstandingCount },
               { key: 'insights' as DashboardView, label: 'Insights', icon: BarChart3 },
+              { key: 'inventory' as DashboardView, label: 'Inventory', icon: PackageOpen, beta: true },
               { key: 'settings' as DashboardView, label: 'Settings', icon: Settings },
             ]).map(tab => {
               const Icon = tab.icon;
@@ -899,6 +901,9 @@ export default function Dashboard() {
                 >
                   <Icon className="h-4 w-4" />
                   {tab.label}
+                  {(tab as any).beta && (
+                    <span className="text-[9px] px-1 py-0.5 rounded bg-primary/10 text-primary font-semibold">BETA</span>
+                  )}
                   {showDot && badgeNum > 0 && (
                     <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold">
                       {badgeNum}
@@ -1216,6 +1221,13 @@ export default function Dashboard() {
           </ErrorBoundary>
         )}
 
+
+        {/* ─── Inventory ─────────────────────────────────────────────── */}
+        {activeView === 'inventory' && (
+          <ErrorBoundary>
+            <InventoryDashboard onNavigateToSettings={() => switchView('settings')} />
+          </ErrorBoundary>
+        )}
 
         {/* ─── Settings ──────────────────────────────────────────────── */}
         {activeView === 'settings' && (
