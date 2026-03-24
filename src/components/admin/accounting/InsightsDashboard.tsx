@@ -1359,8 +1359,14 @@ export default function InsightsDashboard() {
                     </th>
                     <th className="text-right px-3 py-2.5 font-medium text-foreground">
                       <Tooltip>
+                        <TooltipTrigger className="cursor-help underline decoration-dotted">Shipping Rev.</TooltipTrigger>
+                        <TooltipContent className="text-xs">Shipping revenue from settlements. Amazon reports this separately; other marketplaces bundle it into sales.</TooltipContent>
+                      </Tooltip>
+                    </th>
+                    <th className="text-right px-3 py-2.5 font-medium text-foreground">
+                      <Tooltip>
                         <TooltipTrigger className="cursor-help underline decoration-dotted">Est. Shipping</TooltipTrigger>
-                        <TooltipContent className="text-xs">Estimated shipping cost based on configured cost per order × order count. Shows "—" for marketplace-fulfilled channels.</TooltipContent>
+                        <TooltipContent className="text-xs">Estimated shipping cost based on configured cost per order × order count. Excludes orders above free-shipping threshold. Shows "—" for marketplace-fulfilled channels.</TooltipContent>
                       </Tooltip>
                     </th>
                     <th className="text-right px-3 py-2.5 font-medium text-foreground">Net</th>
