@@ -1377,6 +1377,86 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
   const allMissingUploaded = hasMissingChecklist && checkedItems.size === missingSettlements!.length;
 
+  // ── Kogan file pairing ──
+  const koganPairings = useMemo(() => {
+    const koganFiles = files.map((f, i) => ({ ...f, originalIdx: i })).filter(
+      f => f.detection?.marketplace === 'kogan' && f.status !== 'error'
+    );
+    if (koganFiles.length < 1) return null;
+
+    const csvFiles = koganFiles.filter(f => !f.file.name.toLowerCase().endsWith('.pdf'));
+    const pdfFiles = koganFiles.filter(f => f.file.name.toLowerCase().endsWith('.pdf'));
+
+    if (csvFiles.length === 0 && pdfFiles.length === 0) return null;
+
+    // Build settlement groups by doc number
+    type KoganPair = {
+      docNumber: string;
+      csvIdx: number | null;
+      pdfIdx: number | null;
+      csvFile: DetectedFile | null;
+      pdfFile: DetectedFile | null;
+      netPayout: number | null;
+      hasPdf: boolean;
+    };
+
+    const groups: KoganPair[] = [];
+    const usedPdfIndices = new Set<number>();
+
+    for (const csv of csvFiles) {
+      // Extract doc number from settlement_id
+      const settlementId = csv.settlements?.[0]?.settlement_id || '';
+      const docMatch = settlementId.match(/(\d{5,})/);
+      const docNumber = docMatch?.[1] || csv.file.name.replace(/\.[^.]+$/, '');
+
+      // Find matching PDF by doc number
+      let matchedPdf: (typeof pdfFiles)[0] | null = null;
+      for (const pdf of pdfFiles) {
+        if (usedPdfIndices.has(pdf.originalIdx)) continue;
+        const pdfDocNums = pdf.koganDocNumbers || [];
+        if (pdfDocNums.includes(docNumber)) {
+          matchedPdf = pdf;
+          usedPdfIndices.add(pdf.originalIdx);
+          break;
+        }
+      }
+
+      const netPayout = matchedPdf?.koganRemittanceResult?.totalPaidAmount
+        ?? csv.settlements?.[0]?.net_payout
+        ?? null;
+
+      groups.push({
+        docNumber,
+        csvIdx: csv.originalIdx,
+        pdfIdx: matchedPdf?.originalIdx ?? null,
+        csvFile: csv,
+        pdfFile: matchedPdf || null,
+        netPayout,
+        hasPdf: !!matchedPdf,
+      });
+    }
+
+    // Orphaned PDFs (no matching CSV)
+    for (const pdf of pdfFiles) {
+      if (usedPdfIndices.has(pdf.originalIdx)) continue;
+      const docNums = pdf.koganDocNumbers || [];
+      groups.push({
+        docNumber: docNums[0] || pdf.file.name.replace(/\.[^.]+$/, ''),
+        csvIdx: null,
+        pdfIdx: pdf.originalIdx,
+        csvFile: null,
+        pdfFile: pdf,
+        netPayout: pdf.koganRemittanceResult?.totalPaidAmount ?? null,
+        hasPdf: true,
+      });
+    }
+
+    if (groups.length === 0) return null;
+
+    const koganIndices = new Set(koganFiles.map(f => f.originalIdx));
+    return { groups, koganIndices };
+  }, [files]);
+
   return (
     <div className="space-y-4">
       {/* Missing settlements checklist banner */}
