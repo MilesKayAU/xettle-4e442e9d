@@ -133,11 +133,13 @@ export default function MarketplaceProfitComparison() {
       const profits = profitRes.data || [];
       const settlements = settlementsRes.data || [];
 
-      // Build order counts map by counting distinct order_ids per marketplace
+      // Build order counts map — only from lines belonging to active settlements
       const orderCountsByMp: Record<string, number> = {};
       if (orderCountsRes.data && Array.isArray(orderCountsRes.data)) {
         const seen: Record<string, Set<string>> = {};
         for (const row of orderCountsRes.data as any[]) {
+          // Skip lines from suppressed/deduped settlements
+          if (row.settlement_id && !activeSettlementIds.has(row.settlement_id)) continue;
           const mp = normalizeMarketplace(row.marketplace_name || '');
           if (!mp || !row.order_id) continue;
           if (!seen[mp]) seen[mp] = new Set();
