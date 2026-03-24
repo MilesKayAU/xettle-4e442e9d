@@ -1572,16 +1572,30 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
     if (csvFiles.length === 0 && pdfFiles.length === 0) return null;
 
-    // Build settlement groups by doc number
+    // Helper: extract period month from a CSV settlement's dates
+    const getCsvPeriodMonth = (csv: typeof csvFiles[0]): string | undefined => {
+      const s = csv.settlements?.[0];
+      if (!s) return undefined;
+      // Try period_start first, fall back to settlement_id date patterns
+      const dateStr = s.period_start || s.period_end;
+      if (dateStr) {
+        const d = new Date(dateStr);
+        if (!isNaN(d.getTime())) {
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        }
+      }
+      return undefined;
+    };
+
     type KoganPair = {
       docNumber: string;
+      periodMonth?: string;
       csvIdx: number | null;
       pdfIdx: number | null;
       csvFile: DetectedFile | null;
       pdfFile: DetectedFile | null;
       netPayout: number | null;
       hasPdf: boolean;
-      /** Existing settlement in DB (for late PDF merge) */
       existingDbSettlement?: { id: string; settlement_id: string; net_payout: number; metadata: any } | null;
     };
 
@@ -1589,13 +1603,15 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
     const usedPdfIndices = new Set<number>();
 
     for (const csv of csvFiles) {
-      // Extract doc number from settlement_id
       const settlementId = csv.settlements?.[0]?.settlement_id || '';
       const docMatch = settlementId.match(/(\d{5,})/);
       const docNumber = docMatch?.[1] || csv.file.name.replace(/\.[^.]+$/, '');
+      const csvMonth = getCsvPeriodMonth(csv);
 
-      // Find matching PDF by doc number
+      // Try matching PDF: first by doc number, then by period month
       let matchedPdf: (typeof pdfFiles)[0] | null = null;
+      
+      // Pass 1: doc number match (legacy, still works for exact matches)
       for (const pdf of pdfFiles) {
         if (usedPdfIndices.has(pdf.originalIdx)) continue;
         const pdfDocNums = pdf.koganDocNumbers || [];
@@ -1606,12 +1622,26 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         }
       }
 
+      // Pass 2: period-based match (primary strategy)
+      if (!matchedPdf && csvMonth) {
+        for (const pdf of pdfFiles) {
+          if (usedPdfIndices.has(pdf.originalIdx)) continue;
+          const pdfMonth = pdf.koganPdfPeriodMonth || pdf.koganRemittanceResult?.periodMonth;
+          if (pdfMonth && pdfMonth === csvMonth) {
+            matchedPdf = pdf;
+            usedPdfIndices.add(pdf.originalIdx);
+            break;
+          }
+        }
+      }
+
       const netPayout = matchedPdf?.koganRemittanceResult?.totalPaidAmount
         ?? csv.settlements?.[0]?.net_payout
         ?? null;
 
       groups.push({
         docNumber,
+        periodMonth: csvMonth,
         csvIdx: csv.originalIdx,
         pdfIdx: matchedPdf?.originalIdx ?? null,
         csvFile: csv,
@@ -1626,10 +1656,27 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       if (usedPdfIndices.has(pdf.originalIdx)) continue;
       const docNums = pdf.koganDocNumbers || [];
       const docNumber = docNums[0] || pdf.file.name.replace(/\.[^.]+$/, '');
-      const dbMatch = existingKoganSettlements[docNumber] || null;
+      const pdfMonth = pdf.koganPdfPeriodMonth || pdf.koganRemittanceResult?.periodMonth;
+      
+      // Try DB match by doc number first, then by period month
+      let dbMatch = existingKoganSettlements[docNumber] || null;
+      if (!dbMatch && pdfMonth) {
+        // Search existing settlements by period overlap
+        for (const key of Object.keys(existingKoganSettlements)) {
+          const s = existingKoganSettlements[key];
+          if (s.metadata?.period_start) {
+            const sMonth = s.metadata.period_start.substring(0, 7);
+            if (sMonth === pdfMonth) {
+              dbMatch = s;
+              break;
+            }
+          }
+        }
+      }
       
       groups.push({
         docNumber,
+        periodMonth: pdfMonth,
         csvIdx: null,
         pdfIdx: pdf.originalIdx,
         csvFile: null,
