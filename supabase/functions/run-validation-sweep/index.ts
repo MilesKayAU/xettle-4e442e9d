@@ -595,6 +595,7 @@ async function sweepUser(adminSupabase: any, userId: string) {
           record.settlement_id = settlement.settlement_id
           record.settlement_net = settlement.bank_deposit || 0
           record.settlement_uploaded_at = settlement.created_at || new Date().toISOString()
+          record.settlement_source = settlement.source || null
 
           // Guard: if settlement is already_recorded, also repair any legacy validation rows for the same settlement
           if (settlement.status === 'already_recorded') {

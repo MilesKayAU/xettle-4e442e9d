@@ -55,6 +55,7 @@ interface ValidationRow {
   overall_status: string;
   last_checked_at: string | null;
   processing_state: string | null;
+  settlement_source: string | null;
 }
 
 interface ValidationSweepProps {
