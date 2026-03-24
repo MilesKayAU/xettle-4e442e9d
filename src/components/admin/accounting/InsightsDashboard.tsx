@@ -1174,10 +1174,12 @@ export default function InsightsDashboard() {
                     </div>
                   )}
 
-                  {s.fulfilmentMethod === 'third_party_logistics' && s.shippingCostPerOrder === 0 && (
+                  {(s.fulfilmentMethod === 'third_party_logistics' || s.fulfilmentMethod === 'self_ship') && s.shippingCostPerOrder === 0 && (
                     <div className="rounded-md border border-blue-300/50 bg-blue-50 dark:bg-blue-900/10 dark:border-blue-700/30 px-3 py-2">
                       <p className="text-[11px] text-blue-800 dark:text-blue-300">
-                        3PL costs not tracked — add estimated cost per order to improve margin accuracy
+                        {s.fulfilmentMethod === 'third_party_logistics' 
+                          ? '3PL costs not tracked — add estimated cost per order to improve margin accuracy'
+                          : 'Shipping costs not set — add estimated cost per order in Settings for accurate margins'}
                       </p>
                     </div>
                   )}
