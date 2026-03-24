@@ -1246,6 +1246,7 @@ export type Database = {
           reconciliation_status: string | null
           settlement_id: string | null
           settlement_net: number | null
+          settlement_source: string | null
           settlement_uploaded: boolean | null
           settlement_uploaded_at: string | null
           updated_at: string | null
@@ -1282,6 +1283,7 @@ export type Database = {
           reconciliation_status?: string | null
           settlement_id?: string | null
           settlement_net?: number | null
+          settlement_source?: string | null
           settlement_uploaded?: boolean | null
           settlement_uploaded_at?: string | null
           updated_at?: string | null
@@ -1318,6 +1320,7 @@ export type Database = {
           reconciliation_status?: string | null
           settlement_id?: string | null
           settlement_net?: number | null
+          settlement_source?: string | null
           settlement_uploaded?: boolean | null
           settlement_uploaded_at?: string | null
           updated_at?: string | null
