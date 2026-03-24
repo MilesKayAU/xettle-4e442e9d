@@ -33,7 +33,7 @@ import RecentUploads from '@/components/dashboard/RecentUploads';
 import ReconciliationHealthPanel from '@/components/dashboard/ReconciliationHealthPanel';
 
 import { Button } from '@/components/ui/button';
-import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard, ClipboardList, ChevronDown, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
+import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard, ClipboardList, ChevronDown, CheckCircle2, AlertTriangle, Info, PackageOpen } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import CoaDetectedPanel from '@/components/dashboard/CoaDetectedPanel';
