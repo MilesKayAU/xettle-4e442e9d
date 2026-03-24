@@ -263,6 +263,18 @@ export default function InsightsDashboard() {
         }
       }
 
+      // ─── Build activeSettlementIds AFTER dedup ────────────────────────
+      const dedupedSettlements = Object.values(grouped).flat();
+      const activeSettlementIds = new Set(dedupedSettlements.map(s => (s as any).settlement_id));
+
+      // Aggregate order counts from settlement_profit — only for active settlements
+      const profitOrderCounts: Record<string, number> = {};
+      for (const row of _rawProfitOrders) {
+        if (!activeSettlementIds.has(row.settlement_id)) continue;
+        const mp = row.marketplace_code;
+        profitOrderCounts[mp] = (profitOrderCounts[mp] || 0) + (Number(row.orders_count) || 0);
+      }
+
       // ─── Platform Family Fee Redistribution ───────────────────────────
       // MyDeal, BigW, and Everyday Market all share the Woolworths MarketPlus platform.
       // The Woolworths CSV allocates platform-level fees (subscriptions, etc.) to MyDeal
