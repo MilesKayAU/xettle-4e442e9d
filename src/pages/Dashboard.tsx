@@ -901,6 +901,9 @@ export default function Dashboard() {
                 >
                   <Icon className="h-4 w-4" />
                   {tab.label}
+                  {(tab as any).beta && (
+                    <span className="text-[9px] px-1 py-0.5 rounded bg-primary/10 text-primary font-semibold">BETA</span>
+                  )}
                   {showDot && badgeNum > 0 && (
                     <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold">
                       {badgeNum}
