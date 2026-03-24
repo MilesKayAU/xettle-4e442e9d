@@ -202,6 +202,21 @@ Deno.serve(async (req) => {
         }
       }
 
+      // For Shopify payout settlements (not shopify_auto_ or shopify_orders_),
+      // exclude orders that belong to sub-channel auto-settlements to prevent
+      // double-counting shipping costs.
+      const isShopifyPayout = mp.toLowerCase() === "shopify" || 
+        (mp.toLowerCase().startsWith("shopify") && !mp.startsWith("shopify_auto_") && !mp.startsWith("shopify_orders_"));
+      
+      let shippingOrderCount: number;
+      if (isShopifyPayout && subChannelOrderIds.size > 0) {
+        // Only count orders that are NOT in any sub-channel settlement
+        const pureShopifyOrders = [...orderIds].filter(id => !subChannelOrderIds.has(id));
+        shippingOrderCount = pureShopifyOrders.length || 1;
+      } else {
+        shippingOrderCount = ordersCount;
+      }
+
       const ordersCount = orderIds.size || revenueLines.length || 1;
       const fulfilmentMethod = getEffectiveMethod(mp, fulfilmentMethods[mp]);
       const postageCostPerOrder = postageCosts[mp] || 0;
