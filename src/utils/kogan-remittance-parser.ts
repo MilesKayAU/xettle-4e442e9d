@@ -31,6 +31,8 @@ export interface KoganRemittanceResult {
   remittanceNumber?: string;       // e.g. '3599603'
   transferDate?: string;           // ISO date
   paymentDate?: string;            // ISO date
+  /** Period month derived from transfer date or line item dates, e.g. "2026-02" */
+  periodMonth?: string;
   lineItems: KoganRemittanceLineItem[];
   totalPaidAmount?: number;        // Bank deposit amount
   /** Breakdown of adjustments */
