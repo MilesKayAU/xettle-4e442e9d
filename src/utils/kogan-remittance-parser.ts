@@ -292,20 +292,19 @@ export function parseKoganPayoutCSV(csvText: string): KoganCsvParseResult {
       settlement_id: `kogan_${apInvoice}`,
       period_start: periodStart,
       period_end: periodEnd,
-      period_label: periodLabel,
-      currency: 'AUD',
       sales_ex_gst: salesExGst,
       gst_on_sales: gstOnSales,
       fees_ex_gst: -commissionExGst,
       gst_on_fees: commissionGst,
       net_payout: netPayout,
-      order_count: gRows.length,
       source: 'csv_upload',
       reconciles: Math.abs((salesExGst + gstOnSales - commissionExGst - commissionGst) - netPayout) <= 5,
       metadata: {
         apInvoiceNumber: apInvoice,
         orderCount: gRows.length,
         periodMonth: `${year}-${String(month + 1).padStart(2, '0')}`,
+        periodLabel,
+        currency: 'AUD',
       },
     });
   }
