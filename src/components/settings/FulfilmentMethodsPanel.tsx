@@ -306,6 +306,15 @@ export default function FulfilmentMethodsPanel() {
         }
       }
 
+      // Save free-shipping thresholds
+      for (const mp of marketplaces) {
+        const val = freeShippingThresholds[mp.marketplace_code]?.trim() || '';
+        const num = val === '' ? 0 : parseFloat(val);
+        if (!isNaN(num) && num >= 0) {
+          await saveFreeShippingThreshold(user.id, mp.marketplace_code, num);
+        }
+      }
+
       // Recalculate profit
       const result = await triggerProfitRecalc();
 
