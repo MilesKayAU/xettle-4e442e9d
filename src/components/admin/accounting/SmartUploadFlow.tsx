@@ -758,6 +758,18 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
     const df = filesRef.current[idx];
     if (!df?.detection || !df.detection.isSettlementFile) return;
 
+    // ── Kogan PDFs are companion files — never process standalone ──
+    if (df.detection.marketplace === 'kogan' && df.file.name.toLowerCase().endsWith('.pdf')) {
+      // Mark as informational, not an error
+      setFiles(prev => {
+        const updated = [...prev];
+        updated[idx] = { ...updated[idx], status: 'detected', error: undefined };
+        return updated;
+      });
+      toast.info('Kogan PDFs are merged automatically when their matching CSV is saved.');
+      return;
+    }
+
     const marketplace = df.overrideMarketplace || df.detection.marketplace;
 
     setFiles(prev => {
