@@ -860,6 +860,81 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         } catch { /* silent */ }
       }
 
+      // ── Kogan PDF + CSV merge: augment CSV settlement with PDF deductions ──
+      if (marketplace === 'kogan' && !df.file.name.toLowerCase().endsWith('.pdf')) {
+        // Find a Kogan PDF in the uploaded files
+        const koganPdfFile = filesRef.current.find(
+          f => f.detection?.marketplace === 'kogan' && f.file.name.toLowerCase().endsWith('.pdf')
+        );
+        if (koganPdfFile) {
+          try {
+            const pdfResult = await parseKoganRemittancePdf(koganPdfFile.file);
+            if (pdfResult.success && pdfResult.totalPaidAmount !== undefined) {
+              // Find which CSV settlement matches this PDF (by doc number / APInvoice)
+              for (const s of settlements) {
+                // Check if this settlement's ID matches an A/P Invoice doc number in the PDF
+                const matchingInvoice = pdfResult.lineItems.find(
+                  li => li.type === 'A/P Invoice' && s.settlement_id.includes(li.docNumber)
+                );
+                if (matchingInvoice || settlements.length === 1) {
+                  // Augment settlement with PDF deductions
+                  const refundsExGst = Math.round(pdfResult.returnsCreditNotes / 1.1 * 100) / 100;
+                  const refundsGst = Math.round((pdfResult.returnsCreditNotes - refundsExGst) * 100) / 100;
+                  
+                  // Add refunds (from credit notes)
+                  s.metadata = {
+                    ...s.metadata,
+                    koganPdfMerged: true,
+                    koganRemittanceNumber: pdfResult.remittanceNumber,
+                    koganAdvertisingFees: pdfResult.advertisingFees,
+                    koganMonthlySellerFee: pdfResult.monthlySellerFee,
+                    koganReturnsCreditNotes: pdfResult.returnsCreditNotes,
+                    koganPdfBankDeposit: pdfResult.totalPaidAmount,
+                    refundsInclGst: -pdfResult.returnsCreditNotes,
+                    refundsExGst: -refundsExGst,
+                  };
+
+                  // Override net_payout with the actual bank deposit from PDF
+                  s.net_payout = pdfResult.totalPaidAmount;
+
+                  // Add advertising fees and monthly seller fee to fees
+                  const adSpendExGst = Math.round(Math.abs(pdfResult.advertisingFees) / 1.1 * 100) / 100;
+                  const sellerFeeExGst = Math.round(pdfResult.monthlySellerFee / 1.1 * 100) / 100;
+                  s.fees_ex_gst = Math.round((s.fees_ex_gst - adSpendExGst - sellerFeeExGst) * 100) / 100;
+
+                  // Recalculate GST on fees 
+                  const totalFeesInclGst = Math.abs(s.fees_ex_gst) * 1.1;
+                  s.gst_on_fees = Math.round((totalFeesInclGst - Math.abs(s.fees_ex_gst)) * 100) / 100;
+
+                  // Recalculate reconciliation
+                  const calculatedNet = Math.round((
+                    s.sales_ex_gst + s.gst_on_sales +
+                    s.fees_ex_gst - s.gst_on_fees +
+                    (-pdfResult.returnsCreditNotes)
+                  ) * 100) / 100;
+                  s.reconciles = Math.abs(calculatedNet - s.net_payout) <= 5;
+                  s.metadata.calculatedNet = calculatedNet;
+                  s.metadata.reconciliationDiff = Math.round((calculatedNet - s.net_payout) * 100) / 100;
+                }
+              }
+              // Mark PDF as processed
+              setFiles(prev => {
+                const updated = [...prev];
+                const pdfIdx = updated.findIndex(f => f.file === koganPdfFile.file);
+                if (pdfIdx >= 0) {
+                  updated[pdfIdx] = { ...updated[pdfIdx], status: 'saved', savedCount: 0 };
+                }
+                return updated;
+              });
+              toast.success('Kogan PDF merged — returns, ad spend, and seller fees applied to settlement.');
+            }
+          } catch (err: any) {
+            console.warn('Kogan PDF merge failed:', err.message);
+            toast.warning('Kogan PDF merge failed — saving CSV data only. You can re-upload later.');
+          }
+        }
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
 
       for (const s of settlements) {
