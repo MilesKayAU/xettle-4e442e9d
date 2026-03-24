@@ -1401,6 +1401,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         await processFile(i);
       }
     }
+    // Final validation sweep to ensure dashboard is fully consistent after bulk save
+    triggerValidationSweep();
     setProcessingAll(false);
   }, [processFile]);
 
