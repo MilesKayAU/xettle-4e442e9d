@@ -92,6 +92,8 @@ interface DetectedFile {
   xeroReadiness?: XeroReadinessResult;
   /** Kogan PDF doc numbers for pairing */
   koganDocNumbers?: string[];
+  /** Kogan PDF period month for period-based pairing (e.g. "2026-02") */
+  koganPdfPeriodMonth?: string;
   /** Kogan remittance parse result (cached for merge) */
   koganRemittanceResult?: KoganRemittanceResult;
 }
