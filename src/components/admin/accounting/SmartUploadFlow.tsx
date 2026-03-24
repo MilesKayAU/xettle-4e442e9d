@@ -44,6 +44,7 @@ import { parseGenericCSV, parseGenericXLSX } from '@/utils/generic-csv-parser';
 import { parseShopifyPayoutCSV } from '@/utils/shopify-payments-parser';
 import { parseShopifyOrdersCSV } from '@/utils/shopify-orders-parser';
 import { parseBunningsSummaryPdf } from '@/utils/bunnings-summary-parser';
+import { parseKoganRemittancePdf, type KoganRemittanceResult } from '@/utils/kogan-remittance-parser';
 import { parseWoolworthsMarketPlusCSV, isTransactionFee } from '@/utils/woolworths-marketplus-parser';
 import { saveSettlement, validateSettlementSanity, MARKETPLACE_LABELS as ENGINE_LABELS, type StandardSettlement } from '@/utils/settlement-engine';
 import { createDraftFingerprint } from '@/utils/fingerprint-lifecycle';
@@ -145,7 +146,7 @@ const MARKETPLACE_SOURCE_HINTS: Record<string, string> = {
   everyday_market: 'Provided by Everyday Market via email or marketplace portal',
   mydeal: 'Provided by MyDeal via email or marketplace portal',
   bunnings: 'Upload the "Summary of Transactions" PDF from Bunnings Marketplace portal. Optionally include the "Billing Cycle Orders" CSV for order-level detail.',
-  kogan: 'Provided by Kogan via email or marketplace portal',
+  kogan: 'Upload the Kogan CSV payout file AND the Remittance Advice PDF together. The CSV has order details; the PDF has returns, seller fees, ad spend, and the actual bank deposit amount.',
   catch: 'Provided by Catch via email or marketplace portal',
   ebay_au: 'eBay Seller Hub → Payments → Reports → Download CSV',
   woolworths_marketplus: 'Woolworths MarketPlus portal → Reports → Download CSV',
@@ -259,6 +260,15 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         const result = await parseBunningsSummaryPdf(file);
         if (!result.success) return [];
         return [result.settlement];
+      }
+
+      // Kogan PDF — parse remittance and store for later merge
+      if (marketplace === 'kogan' && file.name.toLowerCase().endsWith('.pdf')) {
+        const result = await parseKoganRemittancePdf(file);
+        if (!result.success) return [];
+        // Store the remittance data — it will be merged with CSV settlements in post-processing
+        // Return empty settlements; the merge happens after all files are detected
+        return [];
       }
       
       if (marketplace === 'shopify_payments') {
@@ -492,6 +502,12 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
             let status: FileStatus = result
               ? (result.isSettlementFile ? (isFirstContact ? 'first_contact' : 'detected') : 'wrong_file')
               : 'unknown';
+
+            // Kogan PDF is a companion file — mark as detected even without settlements
+            const isKoganPdf = result?.marketplace === 'kogan' && uniqueFiles[idx].name.toLowerCase().endsWith('.pdf');
+            if (isKoganPdf && settlements.length === 0) {
+              status = 'detected';
+            }
 
             let error: string | undefined;
             if (allDupes) {
@@ -848,6 +864,81 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           const parsed = parse(text);
           if (parsed.success) woolworthsRows = parsed.allRows;
         } catch { /* silent */ }
+      }
+
+      // ── Kogan PDF + CSV merge: augment CSV settlement with PDF deductions ──
+      if (marketplace === 'kogan' && !df.file.name.toLowerCase().endsWith('.pdf')) {
+        // Find a Kogan PDF in the uploaded files
+        const koganPdfFile = filesRef.current.find(
+          f => f.detection?.marketplace === 'kogan' && f.file.name.toLowerCase().endsWith('.pdf')
+        );
+        if (koganPdfFile) {
+          try {
+            const pdfResult = await parseKoganRemittancePdf(koganPdfFile.file);
+            if (pdfResult.success && pdfResult.totalPaidAmount !== undefined) {
+              // Find which CSV settlement matches this PDF (by doc number / APInvoice)
+              for (const s of settlements) {
+                // Check if this settlement's ID matches an A/P Invoice doc number in the PDF
+                const matchingInvoice = pdfResult.lineItems.find(
+                  li => li.type === 'A/P Invoice' && s.settlement_id.includes(li.docNumber)
+                );
+                if (matchingInvoice || settlements.length === 1) {
+                  // Augment settlement with PDF deductions
+                  const refundsExGst = Math.round(pdfResult.returnsCreditNotes / 1.1 * 100) / 100;
+                  const refundsGst = Math.round((pdfResult.returnsCreditNotes - refundsExGst) * 100) / 100;
+                  
+                  // Add refunds (from credit notes)
+                  s.metadata = {
+                    ...s.metadata,
+                    koganPdfMerged: true,
+                    koganRemittanceNumber: pdfResult.remittanceNumber,
+                    koganAdvertisingFees: pdfResult.advertisingFees,
+                    koganMonthlySellerFee: pdfResult.monthlySellerFee,
+                    koganReturnsCreditNotes: pdfResult.returnsCreditNotes,
+                    koganPdfBankDeposit: pdfResult.totalPaidAmount,
+                    refundsInclGst: -pdfResult.returnsCreditNotes,
+                    refundsExGst: -refundsExGst,
+                  };
+
+                  // Override net_payout with the actual bank deposit from PDF
+                  s.net_payout = pdfResult.totalPaidAmount;
+
+                  // Add advertising fees and monthly seller fee to fees
+                  const adSpendExGst = Math.round(Math.abs(pdfResult.advertisingFees) / 1.1 * 100) / 100;
+                  const sellerFeeExGst = Math.round(pdfResult.monthlySellerFee / 1.1 * 100) / 100;
+                  s.fees_ex_gst = Math.round((s.fees_ex_gst - adSpendExGst - sellerFeeExGst) * 100) / 100;
+
+                  // Recalculate GST on fees 
+                  const totalFeesInclGst = Math.abs(s.fees_ex_gst) * 1.1;
+                  s.gst_on_fees = Math.round((totalFeesInclGst - Math.abs(s.fees_ex_gst)) * 100) / 100;
+
+                  // Recalculate reconciliation
+                  const calculatedNet = Math.round((
+                    s.sales_ex_gst + s.gst_on_sales +
+                    s.fees_ex_gst - s.gst_on_fees +
+                    (-pdfResult.returnsCreditNotes)
+                  ) * 100) / 100;
+                  s.reconciles = Math.abs(calculatedNet - s.net_payout) <= 5;
+                  s.metadata.calculatedNet = calculatedNet;
+                  s.metadata.reconciliationDiff = Math.round((calculatedNet - s.net_payout) * 100) / 100;
+                }
+              }
+              // Mark PDF as processed
+              setFiles(prev => {
+                const updated = [...prev];
+                const pdfIdx = updated.findIndex(f => f.file === koganPdfFile.file);
+                if (pdfIdx >= 0) {
+                  updated[pdfIdx] = { ...updated[pdfIdx], status: 'saved', savedCount: 0 };
+                }
+                return updated;
+              });
+              toast.success('Kogan PDF merged — returns, ad spend, and seller fees applied to settlement.');
+            }
+          } catch (err: any) {
+            console.warn('Kogan PDF merge failed:', err.message);
+            toast.warning('Kogan PDF merge failed — saving CSV data only. You can re-upload later.');
+          }
+        }
       }
 
       const { data: { user } } = await supabase.auth.getUser();

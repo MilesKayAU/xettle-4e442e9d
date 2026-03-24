@@ -702,8 +702,22 @@ function parseRow(line: string, delimiter: string): string[] {
 export async function detectFile(file: File): Promise<FileDetectionResult | null> {
   const name = file.name.toLowerCase();
 
-  // PDF: use content-based detection (Bunnings)
+  // PDF: use content-based detection
   if (name.endsWith('.pdf')) {
+    // Kogan Remittance Advice PDF
+    if (name.includes('kogan') || name.match(/^kgn[-_]/i)) {
+      return {
+        marketplace: 'kogan',
+        marketplaceLabel: 'Kogan',
+        confidence: 90,
+        confidenceReason: 'Filename matches Kogan Remittance Advice pattern',
+        isSettlementFile: true,
+        detectionLevel: 1,
+        fileFormat: 'pdf',
+        dataCompleteness: 'partial',
+        completenessWarning: 'This PDF contains returns, fees, and bank deposit. Upload the matching CSV for full order-level detail.',
+      };
+    }
     if (name.includes('bunnings') || name.includes('summary-of-transactions') || name.includes('mirakl')) {
       return {
         marketplace: 'bunnings',
@@ -715,6 +729,26 @@ export async function detectFile(file: File): Promise<FileDetectionResult | null
         dataCompleteness: 'full',
       };
     }
+    // Try content-based detection for unknown PDFs
+    try {
+      const slice = file.slice(0, 8192);
+      const buffer = await slice.arrayBuffer();
+      const text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
+      const lower = text.toLowerCase();
+      if (lower.includes('kogan') || lower.includes('kogan australia')) {
+        return {
+          marketplace: 'kogan',
+          marketplaceLabel: 'Kogan',
+          confidence: 85,
+          confidenceReason: 'PDF content contains "Kogan" references',
+          isSettlementFile: true,
+          detectionLevel: 2,
+          fileFormat: 'pdf',
+          dataCompleteness: 'partial',
+          completenessWarning: 'This PDF contains returns, fees, and bank deposit. Upload the matching CSV for full order-level detail.',
+        };
+      }
+    } catch { /* fall through */ }
     return {
       marketplace: 'bunnings',
       marketplaceLabel: 'Bunnings',

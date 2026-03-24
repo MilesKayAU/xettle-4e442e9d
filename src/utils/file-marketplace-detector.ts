@@ -3,7 +3,7 @@
  * Returns null if detection is inconclusive.
  */
 
-export type DetectedMarketplace = 'amazon_au' | 'bunnings' | 'shopify_payments' | 'shopify_orders' | 'woolworths_marketplus' | 'ebay_au' | null;
+export type DetectedMarketplace = 'amazon_au' | 'bunnings' | 'kogan' | 'shopify_payments' | 'shopify_orders' | 'woolworths_marketplus' | 'ebay_au' | null;
 
 /** Sniff a file and return the detected marketplace */
 export async function detectFileMarketplace(file: File): Promise<DetectedMarketplace> {
@@ -21,6 +21,9 @@ export async function detectFileMarketplace(file: File): Promise<DetectedMarketp
   }
   if (name.includes('ebay') || name.includes('order_proceeds') || name.includes('transaction_report')) {
     return 'ebay_au';
+  }
+  if (name.includes('kogan') || name.match(/^kgn-/i)) {
+    return 'kogan';
   }
 
   // ── Content-based signals ──
@@ -77,6 +80,9 @@ export async function detectFileMarketplace(file: File): Promise<DetectedMarketp
       const text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
       const lower = text.toLowerCase();
 
+      if (lower.includes('kogan') || lower.includes('kogan australia') || lower.includes('kogan.com')) {
+        return 'kogan';
+      }
       if (lower.includes('bunnings') || lower.includes('payable orders') || lower.includes('summary of transactions')) {
         return 'bunnings';
       }
@@ -98,6 +104,7 @@ export async function detectFileMarketplace(file: File): Promise<DetectedMarketp
 export const MARKETPLACE_LABELS: Record<string, string> = {
   amazon_au: 'Amazon AU',
   bunnings: 'Bunnings',
+  kogan: 'Kogan',
   shopify_payments: 'Shopify Payments',
   shopify_orders: 'Shopify Orders',
   woolworths_marketplus: 'Woolworths MarketPlus',
