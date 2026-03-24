@@ -147,9 +147,8 @@ Deno.serve(async (req) => {
             orderIdsInAuto.add(l.order_id);
           }
         }
-        // Extract marketplace from settlement_id: shopify_auto_bunnings_2026-01 → bunnings
-        const parts = s.settlement_id.replace("shopify_auto_", "").split("_");
-        const mpKey = parts.slice(0, -1).join("_") || parts[0]; // everything before the last _YYYY-MM
+        // Use the marketplace column directly (e.g. "bunnings", "kogan")
+        const mpKey = (s.marketplace || "").toLowerCase();
         const monthKey = s.period_end?.substring(0, 7) || "";
         if (mpKey && monthKey && orderIdsInAuto.size > 0) {
           if (!autoOrderCounts.has(mpKey)) autoOrderCounts.set(mpKey, new Map());
@@ -157,6 +156,25 @@ Deno.serve(async (req) => {
           autoOrderCounts.get(mpKey)!.set(monthKey, existing + orderIdsInAuto.size);
         }
       }
+    }
+
+    // Debug: log auto order counts for verification
+
+    // Count how many CSV settlements exist per marketplace+month so we can
+    // split the auto order count proportionally (e.g. 2 fortnightly CSVs in Feb → each gets half)
+    const csvSettlementCounts = new Map<string, Map<string, number>>();
+    for (const s of settlements || []) {
+      if (s.settlement_id?.startsWith("shopify_auto_")) continue;
+      const mpLower = (s.marketplace || "").toLowerCase();
+      const monthKey = s.period_end?.substring(0, 7) || "";
+      if (!mpLower || !monthKey) continue;
+      // Only count if this settlement has no order_ids (i.e. summary CSV)
+      const lines = linesBySettlement.get(s.settlement_id) || [];
+      const hasOrderIds = lines.some(l => l.order_id);
+      if (hasOrderIds) continue;
+      if (!csvSettlementCounts.has(mpLower)) csvSettlementCounts.set(mpLower, new Map());
+      const existing = csvSettlementCounts.get(mpLower)!.get(monthKey) || 0;
+      csvSettlementCounts.get(mpLower)!.set(monthKey, existing + 1);
     }
 
     const AMAZON_PREFIXES = ["amazon"];
@@ -235,13 +253,15 @@ Deno.serve(async (req) => {
         shippingOrderCount = pureShopifyOrders.length || 1;
       } else if (orderIds.size <= 1 && !s.settlement_id?.startsWith("shopify_auto_")) {
         // CSV settlements (e.g. Mirakl/Bunnings) often have summary lines with no order_ids.
-        // Cross-reference the auto-settlement order count for the same marketplace + month.
+        // Cross-reference the auto-settlement order count for the same marketplace + month,
+        // then split proportionally across the number of CSV settlements in that month.
         const mpLower = mp.toLowerCase();
         const monthKey = s.period_end?.substring(0, 7) || "";
         const autoCount = autoOrderCounts.get(mpLower)?.get(monthKey);
+        const csvCount = csvSettlementCounts.get(mpLower)?.get(monthKey) || 1;
         if (autoCount && autoCount > ordersCount) {
-          shippingOrderCount = autoCount;
-          console.log(`[profit] ${mp} ${monthKey}: using auto order count ${autoCount} instead of ${ordersCount} for shipping`);
+          shippingOrderCount = Math.round(autoCount / csvCount);
+          console.log(`[profit] ${mp} ${monthKey}: using auto order count ${autoCount}/${csvCount} = ${shippingOrderCount} instead of ${ordersCount} for shipping`);
         } else {
           shippingOrderCount = ordersCount;
         }
