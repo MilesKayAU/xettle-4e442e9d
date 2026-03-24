@@ -1,110 +1,61 @@
 
 
-## Plan: Insights Page Data Accuracy Audit and Fixes
+## Plan: Fix Shopify Shipping Cost Misattribution
 
-### Issues Found
+### Root Cause
 
-**Issue 1 (Critical) — Refunds double-counted in "Total fees + refunds" line**
+When a Shopify payout CSV is uploaded, it contains ALL orders — including Bunnings, Kogan, BigW, etc. that use Shopify as the payment processor. The `recalculate-profit` edge function processes this settlement with `marketplace_code = 'shopify'` and applies the **Shopify** postage cost setting ($9) to every order in it.
 
-In `InsightsDashboard.tsx`, the `feeBreakdown` array includes refunds as a segment (line 468). The `breakdownTotal` (line 475) sums ALL breakdown items including refunds. Then `s.feeLoad` = `breakdownTotal / totalSales` — already includes refunds. But line 1410 adds refunds AGAIN:
+Result: 87 Shopify orders × $9 = $783 shipping deducted from "Shopify" — but many of those 87 orders are actually Bunnings/Kogan/BigW orders whose shipping should be attributed to their respective marketplaces (or not at all if they're marketplace-fulfilled).
 
-```typescript
-// Line 1410 — DOUBLE COUNTS refunds
-formatPct(s.feeLoad + (s.totalSales > 0 ? s.totalRefunds / s.totalSales : 0))
+This is why Shopify shows 30% shipping — it's absorbing the shipping costs of all sub-channel orders.
+
+Meanwhile, `shopify_auto_bunnings` settlements (created by auto-generate) also count those same Bunnings orders with their own shipping deduction — so shipping is **double-counted** across the system.
+
+### Fix
+
+**1. Exclude sub-channel orders from Shopify payout shipping calculation**
+
+File: `supabase/functions/recalculate-profit/index.ts`
+
+When processing a Shopify payout settlement (marketplace starts with `shopify` but NOT `shopify_auto_` or `shopify_orders_`), cross-reference the order IDs against `settlement_lines` from `shopify_auto_*` settlements. Any order that appears in a sub-channel auto-settlement should be excluded from the Shopify payout's order count for shipping purposes.
+
+```text
+Before:  87 orders × $9 = $783 shipping on "Shopify"
+After:   87 - 55 sub-channel orders = 32 pure Shopify orders × $9 = $288
 ```
 
-Result: If refunds are 5% and fees are 10%, it shows "15% + 5% = 20%" instead of the correct 15%.
+Implementation:
+- After loading all settlement lines, build a set of order IDs that belong to `shopify_auto_*` settlements
+- When calculating `ordersCount` for a Shopify payout settlement, subtract orders that exist in any `shopify_auto_*` settlement
+- This prevents double-counting: Bunnings orders get shipping under `bunnings`, pure Shopify orders get shipping under `shopify`
 
-Fix: Remove the `+ totalRefunds/totalSales` from line 1410 since `feeLoad` already includes refunds.
+**2. Apply correct per-marketplace shipping rates to sub-channel auto-settlements**
 
----
+The auto-generate function already creates separate settlements per marketplace (e.g., `shopify_auto_bunnings_2026-01`). The `recalculate-profit` function already looks up `postageCosts[mp]` per marketplace. So if the user has set `postage_cost:bunnings = $9` and `postage_cost:shopify = $5`, Bunnings gets $9 and Shopify gets $5.
 
-**Issue 2 (Critical) — "Marketplace Fees Paid" summary card includes refunds**
+Verify: Ensure `postage_cost` settings exist per sub-channel marketplace, not just for "shopify". If only "shopify" has a cost set, the sub-channels get $0. Add a note in the UI when sub-channel shipping costs aren't configured.
 
-The top-level card at line 940 shows `totalAllFees` which is derived from `breakdownTotal` — which includes refunds. A card labelled "Marketplace Fees Paid" should not include refund amounts. This inflates the perceived fee burden.
+**3. Update InsightsDashboard order counts to exclude sub-channel orders from Shopify**
 
-Fix: Separate `totalAllFees` into fees-only (commission + FBA + storage + other) and show refunds separately, OR rename the card to "Fees & Refunds".
+File: `src/components/admin/accounting/InsightsDashboard.tsx`
 
----
+The `profitOrderCounts` aggregation at line 184-189 sums `orders_count` from `settlement_profit`. After the recalculate-profit fix, the Shopify entry will already have the correct (reduced) order count. No additional frontend changes needed — the fix is in the profit calculation.
 
-**Issue 3 (Medium) — MarketplaceProfitComparison uses completely separate data loading**
+**4. Add sub-channel shipping configuration reminder**
 
-`InsightsDashboard` loads settlements directly (no user_id filter — relies on RLS). `MarketplaceProfitComparison` loads both `settlement_profit` AND `settlements` with explicit `user_id` filter. These two components on the same page can show conflicting numbers because:
-- Different filtering logic (profit engine skips "suspicious" margins)
-- Different fee calculation (profit uses `settlement_profit` table, insights uses raw settlements)
-- `settlement_profit` table may be stale or have different row counts
+File: `src/components/admin/accounting/InsightsDashboard.tsx`
 
-This means the "Marketplace Profit Ranking" table and the "$1 Sale Breakdown" chart could show different margins for the same marketplace.
-
-Fix: Add a note in the Profit Ranking card clarifying it uses SKU-level cost data (different from the payout-based metrics above). This is actually correct behavior — two different views of profitability — but the UX doesn't explain this.
-
----
-
-**Issue 4 (Medium) — `useInsightsData` hook exists but appears unused on the Insights dashboard**
-
-The hook at `src/hooks/useInsightsData.ts` calls 4 RPC functions (`get_marketplace_fee_analysis`, `get_gst_liability_by_quarter`, `get_rolling_12_month_trend`, `get_channel_comparison`). But `InsightsDashboard.tsx` never imports or uses this hook — it builds its own data from raw settlements. This means:
-- If those RPC functions exist, they're wasted
-- If they don't exist, the hook silently fails
-- A third data source that could diverge from the other two
-
-Fix: Remove `useInsightsData` if it's truly unused, or integrate it to replace the manual aggregation.
-
----
-
-**Issue 5 (Low) — Fee Comparison table shows refunds as a "Fee Source"**
-
-The cross-marketplace fee comparison table (line 1426) pulls labels from `feeBreakdown` which includes "Refunds". Refunds aren't a fee source — they're a separate financial event. Showing them alongside "Commission" and "FBA Fulfilment" is misleading.
-
-Fix: Exclude "Refunds" from the fee comparison table rows, or add it as a separate summary row below the total.
-
----
-
-**Issue 6 (Low) — Stacked bar segments don't account for refunds separately**
-
-The `getStackedSegments` function (line 857) calculates: `net = 1 - fees - ads`. But `feeLoad` already includes refunds (from Issue 1), so the bar shows refunds as part of fees, not as a distinct segment. This makes it look like fees are higher than they are.
-
-Fix: Break refunds out as a 4th segment in the stacked bar (distinct color from fees and ads).
-
----
-
-**Issue 7 (UX) — Page is extremely long with repetitive data**
-
-The screenshot shows the same data presented in 6+ different formats on one page:
-1. Summary cards (top)
-2. Profit Ranking table
-3. SKU comparison
-4. $1 Sale Breakdown bars
-5. Fee Intelligence table
-6. Profit Leak Breakdown bars
-7. Fee Comparison table
-8. Revenue Concentration bars
-9. Biggest Cost Driver card
-10. Marketplace Overview cards
-
-Many show the same numbers in different layouts. A bookkeeper scanning this page sees the same marketplace data repeated 6+ times. This increases cognitive load and the risk of spotting inconsistencies.
-
-Fix: Group into tabs (Overview / Fee Analysis / Profit Breakdown) to reduce scrolling and repetition.
-
----
-
-### Implementation Priority
-
-| # | Issue | Impact | Fix Complexity |
-|---|-------|--------|---------------|
-| 1 | Refunds double-counted in total | Wrong numbers shown | 1 line change |
-| 2 | "Fees Paid" includes refunds | Misleading label | Label rename or split |
-| 5 | Refunds in Fee Comparison table | Minor confusion | Filter 1 array |
-| 6 | Stacked bar lacks refund segment | Visual inaccuracy | Add 4th segment |
-| 3 | Dual data sources show different values | Confusing discrepancies | Add explanatory note |
-| 4 | Unused `useInsightsData` hook | Dead code | Delete or integrate |
-| 7 | Page too long / repetitive | Poor UX | Tab restructure |
+When a marketplace's fulfilment method is `self_ship` or `third_party_logistics` but `shippingCostPerOrder === 0` and there are orders, show a subtle prompt: "Set shipping cost estimate for accurate margins."
 
 ### Files Modified
 
 | File | Changes |
 |------|---------|
-| `src/components/admin/accounting/InsightsDashboard.tsx` | Fix double-count (line 1410), rename "Fees Paid" card, exclude refunds from fee comparison, add 4th bar segment, add tabs |
-| `src/hooks/useInsightsData.ts` | Evaluate removal if unused |
+| `supabase/functions/recalculate-profit/index.ts` | Exclude sub-channel order IDs from Shopify payout shipping count; build cross-reference set from `shopify_auto_*` lines |
+| `src/components/admin/accounting/InsightsDashboard.tsx` | Add missing shipping cost prompt for sub-channel marketplaces |
 
 ### No database changes needed
+
+After deploying, run "Recalculate Profit" to refresh all `settlement_profit` rows with corrected shipping attribution.
 
