@@ -278,6 +278,17 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         // Return empty settlements; the merge happens on save
         return [];
       }
+
+      // Kogan CSV — use dedicated parser instead of generic
+      if (marketplace === 'kogan' && !file.name.toLowerCase().endsWith('.pdf')) {
+        const text = await file.text();
+        const result = parseKoganPayoutCSV(text);
+        if (!result.success) {
+          console.warn('[Kogan CSV] Parse failed:', result.error);
+          return [];
+        }
+        return result.settlements;
+      }
       
       if (marketplace === 'shopify_payments') {
         const text = await file.text();
