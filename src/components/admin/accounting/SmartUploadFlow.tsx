@@ -758,6 +758,18 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
     const df = filesRef.current[idx];
     if (!df?.detection || !df.detection.isSettlementFile) return;
 
+    // ── Kogan PDFs are companion files — never process standalone ──
+    if (df.detection.marketplace === 'kogan' && df.file.name.toLowerCase().endsWith('.pdf')) {
+      // Mark as informational, not an error
+      setFiles(prev => {
+        const updated = [...prev];
+        updated[idx] = { ...updated[idx], status: 'detected', error: undefined };
+        return updated;
+      });
+      toast.info('Kogan PDFs are merged automatically when their matching CSV is saved.');
+      return;
+    }
+
     const marketplace = df.overrideMarketplace || df.detection.marketplace;
 
     setFiles(prev => {
@@ -884,10 +896,26 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
       // ── Kogan PDF + CSV merge: augment CSV settlement with PDF deductions ──
       if (marketplace === 'kogan' && !df.file.name.toLowerCase().endsWith('.pdf')) {
-        // Find a Kogan PDF in the uploaded files
-        const koganPdfFile = filesRef.current.find(
-          f => f.detection?.marketplace === 'kogan' && f.file.name.toLowerCase().endsWith('.pdf')
-        );
+        // Find the PAIRED Kogan PDF via koganPairings (not first-found)
+        let koganPdfFile: DetectedFile | null = null;
+        
+        // Extract doc number from this CSV's settlement
+        const csvSettlementId = settlements[0]?.settlement_id || '';
+        const csvDocMatch = csvSettlementId.match(/(\d{5,})/);
+        const csvDocNumber = csvDocMatch?.[1] || '';
+        
+        // Search for matching PDF by doc number
+        if (csvDocNumber) {
+          for (const f of filesRef.current) {
+            if (f.detection?.marketplace !== 'kogan' || !f.file.name.toLowerCase().endsWith('.pdf')) continue;
+            const pdfDocNums = f.koganDocNumbers || [];
+            if (pdfDocNums.includes(csvDocNumber)) {
+              koganPdfFile = f;
+              break;
+            }
+          }
+        }
+        
         if (koganPdfFile) {
           try {
             const pdfResult = await parseKoganRemittancePdf(koganPdfFile.file);
@@ -1333,8 +1361,13 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
     setProcessingAll(true);
     const currentFiles = filesRef.current;
     for (let i = 0; i < currentFiles.length; i++) {
-      const s = currentFiles[i].status;
-      if ((s === 'detected' || s === 'reviewing') && currentFiles[i].detection?.isSettlementFile) {
+      const f = currentFiles[i];
+      const s = f.status;
+      if ((s === 'detected' || s === 'reviewing') && f.detection?.isSettlementFile) {
+        // Skip Kogan PDFs — they are companion files merged during CSV save
+        if (f.detection.marketplace === 'kogan' && f.file.name.toLowerCase().endsWith('.pdf')) {
+          continue;
+        }
         await processFile(i);
       }
     }
@@ -1352,7 +1385,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
     });
   }, []);
 
-  const readyFiles = files.filter(f => (f.status === 'detected' || f.status === 'reviewing') && f.detection?.isSettlementFile);
+  const readyFiles = files.filter(f => (f.status === 'detected' || f.status === 'reviewing') && f.detection?.isSettlementFile && !(f.detection?.marketplace === 'kogan' && f.file.name.toLowerCase().endsWith('.pdf')));
   const confirmedCount = readyFiles.length;
   const savedCount = files.filter(f => f.status === 'saved').length;
   const totalSettlements = readyFiles.reduce((sum, f) => sum + (f.settlements?.length || 0), 0);
