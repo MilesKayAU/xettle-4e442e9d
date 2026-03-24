@@ -1385,7 +1385,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
     });
   }, []);
 
-  const readyFiles = files.filter(f => (f.status === 'detected' || f.status === 'reviewing') && f.detection?.isSettlementFile);
+  const readyFiles = files.filter(f => (f.status === 'detected' || f.status === 'reviewing') && f.detection?.isSettlementFile && !(f.detection?.marketplace === 'kogan' && f.file.name.toLowerCase().endsWith('.pdf')));
   const confirmedCount = readyFiles.length;
   const savedCount = files.filter(f => f.status === 'saved').length;
   const totalSettlements = readyFiles.reduce((sum, f) => sum + (f.settlements?.length || 0), 0);
