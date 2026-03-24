@@ -46,6 +46,7 @@ import AccountingBoundarySettings from '@/components/onboarding/AccountingBounda
 import ApiConnectionsPanel from '@/components/settings/ApiConnectionsPanel';
 import DataQualityPanel from '@/components/settings/DataQualityPanel';
 import FulfilmentMethodsPanel from '@/components/settings/FulfilmentMethodsPanel';
+import MarketplaceManagerPanel from '@/components/settings/MarketplaceManagerPanel';
 
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
 const ShopifyOrdersDashboard = lazy(() => import('@/components/admin/accounting/ShopifyOrdersDashboard'));
