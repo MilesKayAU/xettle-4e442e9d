@@ -840,6 +840,50 @@ async function sweepUser(adminSupabase: any, userId: string) {
     console.error('[validation-sweep] orphan cleanup error:', e)
   }
 
+  // P5: Clean orphaned validation rows for shopify_auto settlements with stale period_labels
+  try {
+    const { data: autoValidationRows } = await adminSupabase
+      .from('marketplace_validation')
+      .select('id, settlement_id, period_label')
+      .eq('user_id', userId)
+      .like('settlement_id', 'shopify_auto_%')
+
+    if (autoValidationRows && autoValidationRows.length > 0) {
+      // Get current boundaries for all shopify_auto settlements
+      const autoSettlementIds = [...new Set(autoValidationRows.map((r: any) => r.settlement_id))]
+      const { data: autoSettlements } = await adminSupabase
+        .from('settlements')
+        .select('settlement_id, period_start, period_end')
+        .eq('user_id', userId)
+        .in('settlement_id', autoSettlementIds)
+
+      const currentLabels = new Map<string, string>()
+      for (const s of (autoSettlements || [])) {
+        currentLabels.set(s.settlement_id, `${s.period_start} → ${s.period_end}`)
+      }
+
+      const orphanIds: string[] = []
+      for (const row of autoValidationRows) {
+        const expectedLabel = currentLabels.get(row.settlement_id)
+        if (!expectedLabel) {
+          // Settlement no longer exists — orphaned
+          orphanIds.push(row.id)
+        } else if (row.period_label !== expectedLabel) {
+          // Period label doesn't match current settlement boundaries — stale
+          orphanIds.push(row.id)
+        }
+      }
+
+      if (orphanIds.length > 0) {
+        await adminSupabase.from('marketplace_validation').delete().in('id', orphanIds)
+        console.log(`[validation-sweep] Cleaned ${orphanIds.length} stale shopify_auto validation rows`)
+        await logEvent(adminSupabase, userId, 'shopify_auto_orphan_cleanup', { removed_count: orphanIds.length }, 'info')
+      }
+    }
+  } catch (e) {
+    console.error('[validation-sweep] shopify_auto orphan cleanup error:', e)
+  }
+
   // Log sweep completion
   await logEvent(adminSupabase, userId, 'validation_sweep_complete', summary, 'info')
 

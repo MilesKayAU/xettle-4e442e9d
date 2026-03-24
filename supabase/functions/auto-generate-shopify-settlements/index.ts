@@ -392,10 +392,16 @@ Deno.serve(async (req) => {
     // Deterministic settlement_id
     const settlementId = `shopify_auto_${mpCode}_${monthStr}_${userPrefix}`;
 
-    // Calculate period boundaries from actual order dates
+    // Use fixed calendar month boundaries (prevents orphaned validation rows)
+    const [calYear, calMonth] = monthStr.split('-').map(Number);
+    const lastDay = new Date(calYear, calMonth, 0).getDate();
+    const periodStart = `${monthStr}-01`;
+    const periodEnd = `${monthStr}-${String(lastDay).padStart(2, '0')}`;
+
+    // Track actual order date range for reference
     const dates = groupOrders.map(o => new Date(o.processed_at));
-    const periodStart = new Date(Math.min(...dates.map(d => d.getTime())));
-    const periodEnd = new Date(Math.max(...dates.map(d => d.getTime())));
+    const firstOrderDate = new Date(Math.min(...dates.map(d => d.getTime()))).toISOString().split('T')[0];
+    const lastOrderDate = new Date(Math.max(...dates.map(d => d.getTime()))).toISOString().split('T')[0];
 
     // Aggregate financials
     const salesPrincipal = groupOrders.reduce((sum, o) => sum + o.total_price - o.total_tax, 0);
@@ -416,8 +422,8 @@ Deno.serve(async (req) => {
       source: 'api_sync',
       status: 'ingested',
       connection_id: connectionId,
-      period_start: periodStart.toISOString().split('T')[0],
-      period_end: periodEnd.toISOString().split('T')[0],
+      period_start: periodStart,
+      period_end: periodEnd,
       sales_principal: Math.round(salesPrincipal * 100) / 100,
       gst_on_income: Math.round(gstOnIncome * 100) / 100,
       promotional_discounts: Math.round(totalDiscounts * 100) / 100,
@@ -427,9 +433,11 @@ Deno.serve(async (req) => {
         order_count: groupOrders.length,
         sample_orders: groupOrders.slice(0, 5).map(o => o.order_name),
         generated_at: new Date().toISOString(),
-        source_version: 'auto-generate-shopify-settlements-v3',
+        source_version: 'auto-generate-shopify-settlements-v4',
         fees_estimated: true,
         commission_rate_applied: commissionRate,
+        first_order_date: firstOrderDate,
+        last_order_date: lastOrderDate,
       },
     };
 
