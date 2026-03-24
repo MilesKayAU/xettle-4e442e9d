@@ -12,7 +12,8 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
-import { BarChart3, Lock, ArrowRight, TrendingUp, TrendingDown, AlertTriangle, Truck } from 'lucide-react';
+import { BarChart3, Lock, ArrowRight, TrendingUp, TrendingDown, AlertTriangle, Truck, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import { loadFulfilmentMethods, loadPostageCosts, getEffectiveMethod, getPostageDeductionForOrder } from '@/utils/fulfilment-settings';
@@ -57,6 +58,7 @@ function getMarginColor(margin: number): string {
 export default function MarketplaceProfitComparison() {
   const [data, setData] = useState<AggregatedMarketplace[]>([]);
   const [loading, setLoading] = useState(true);
+  const [recalculating, setRecalculating] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
   const [accessChecked, setAccessChecked] = useState(false);
   const navigate = useNavigate();
@@ -64,6 +66,22 @@ export default function MarketplaceProfitComparison() {
   useEffect(() => {
     checkAccessAndLoad();
   }, []);
+
+  async function handleRecalculate() {
+    setRecalculating(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { toast.error('Not authenticated'); return; }
+      const { error } = await supabase.functions.invoke('recalculate-profit', {});
+      if (error) throw error;
+      toast.success('Profit recalculated — refreshing…');
+      await checkAccessAndLoad();
+    } catch (e: any) {
+      toast.error('Recalculation failed: ' + (e.message || 'Unknown error'));
+    } finally {
+      setRecalculating(false);
+    }
+  }
 
   async function checkAccessAndLoad() {
     try {
@@ -90,7 +108,7 @@ export default function MarketplaceProfitComparison() {
       const [profitRes, settlementsRes, fulfilmentMethods, postageCosts, orderCountsRes] = await Promise.all([
         supabase
           .from('settlement_profit')
-          .select('marketplace_code, settlement_id, gross_revenue, gross_profit, margin_percent')
+          .select('marketplace_code, settlement_id, gross_revenue, gross_profit, margin_percent, total_cogs')
           .eq('user_id', user.id),
         supabase
           .from('settlements')
@@ -130,8 +148,7 @@ export default function MarketplaceProfitComparison() {
         }
       }
 
-      // Build a set of active settlement IDs for cross-referencing profit rows
-      const activeSettlementIds = new Set(settlements.map(s => (s as any).settlement_id));
+      // activeSettlementIds built AFTER dedup below
 
       // Group settlements by normalised marketplace
       const grouped: Record<string, SettlementRow[]> = {};
@@ -151,6 +168,10 @@ export default function MarketplaceProfitComparison() {
           grouped[mp] = realRows;
         }
       }
+
+      // Build activeSettlementIds AFTER dedup so shopify_auto_* IDs are excluded when CSV exists
+      const dedupedSettlements = Object.values(grouped).flat();
+      const activeSettlementIds = new Set(dedupedSettlements.map(s => (s as any).settlement_id));
 
       // Load observed rates for redistribution
       const { data: observedRatesData } = await supabase
@@ -180,8 +201,9 @@ export default function MarketplaceProfitComparison() {
         // Skip corrupted rows
         if (Math.abs(Number(row.gross_revenue) || 0) > 10_000_000) continue;
         if ((Number(row.gross_revenue) || 0) <= 0) continue;
-        // Skip rows with suspiciously high margins for marketplaces with known fees
-        if (isMarginSuspicious(row.marketplace_code, Number(row.margin_percent) || 0)) continue;
+        // Only apply suspicious margin filter when COGS data exists (otherwise high margins are expected payout ratios)
+        const totalCogs = Number((row as any).total_cogs) || 0;
+        if (totalCogs > 0 && isMarginSuspicious(row.marketplace_code, Number(row.margin_percent) || 0)) continue;
 
         const mp = row.marketplace_code;
         if (!mpMap.has(mp)) mpMap.set(mp, { revenue: 0, profit: 0, margins: [], count: 0 });
@@ -327,13 +349,27 @@ export default function MarketplaceProfitComparison() {
     <TooltipProvider>
     <Card className="border-border">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-          <BarChart3 className="h-4 w-4 text-primary" />
-          Marketplace Profit Ranking
-        </CardTitle>
-        <CardDescription className="text-xs">
-          Average margin across all periods — which marketplace makes you the most?
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-primary" />
+              Marketplace Profit Ranking
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Average margin across all periods — which marketplace makes you the most?
+            </CardDescription>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleRecalculate}
+            disabled={recalculating}
+            className="text-xs gap-1"
+          >
+            <RefreshCw className={`h-3 w-3 ${recalculating ? 'animate-spin' : ''}`} />
+            {recalculating ? 'Recalculating…' : 'Recalculate'}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="pb-3">
         <div className="border border-border rounded-md overflow-hidden">
