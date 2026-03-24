@@ -11,10 +11,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { PackageOpen, Settings2 } from 'lucide-react';
+import { PackageOpen, Settings2, AlertTriangle } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 import { useInventoryRules } from '@/hooks/useInventoryRules';
+import { useInventoryFetch } from './useInventoryFetch';
 
 import UniversalInventoryTab from './UniversalInventoryTab';
 import ShopifyInventoryTab from './ShopifyInventoryTab';
