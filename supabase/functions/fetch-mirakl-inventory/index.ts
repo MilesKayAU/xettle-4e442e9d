@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyRequest } from "../_shared/auth-guard.ts";
-import { getMiraklToken } from "../_shared/mirakl-token.ts";
+import { getMiraklAuthHeader } from "../_shared/mirakl-token.ts";
 
 const PAGE_TIMEOUT_MS = 8000;
 const DEFAULT_LIMIT = 500;
@@ -47,12 +47,8 @@ serve(async (req: Request) => {
         break;
       }
 
-      const authHeaders: Record<string, string> = {};
-      if (token.auth_mode === "api_key" && token.api_key) {
-        authHeaders["Authorization"] = token.api_key;
-      } else if (token.access_token) {
-        authHeaders["Authorization"] = `Bearer ${token.access_token}`;
-      }
+      const auth = await getMiraklAuthHeader(supabase, token);
+      const authHeaders: Record<string, string> = { [auth.headerName]: auth.headerValue };
 
       let offset = cursor;
       const pageSize = 100;
