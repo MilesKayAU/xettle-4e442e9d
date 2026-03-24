@@ -550,6 +550,41 @@ export async function setSourcePreference(
   return { success: true };
 }
 
+// ─── Canonical Settlement Lines Insert ──────────────────────────────────────
+
+/**
+ * Canonical settlement lines insert — validates parent settlement exists
+ * before inserting lines. All client-side settlement_lines writes should
+ * use this function for consistent error handling and audit logging.
+ */
+export async function saveSettlementLines(
+  userId: string,
+  settlementId: string,
+  lines: Record<string, any>[],
+): Promise<ActionResult> {
+  if (!lines.length) return { success: true };
+
+  // Validate parent settlement exists
+  const { data: parent, error: parentErr } = await supabase
+    .from('settlements')
+    .select('id')
+    .eq('settlement_id', settlementId)
+    .eq('user_id', userId)
+    .limit(1)
+    .maybeSingle();
+
+  if (parentErr) return { success: false, error: parentErr.message };
+  if (!parent) return { success: false, error: `Parent settlement ${settlementId} not found` };
+
+  // Ensure all lines have user_id set
+  const enrichedLines = lines.map(l => ({ ...l, user_id: userId, settlement_id: settlementId }));
+
+  const { error } = await supabase.from('settlement_lines').insert(enrichedLines as any);
+  if (error) return { success: false, error: error.message };
+
+  return { success: true };
+}
+
 // ─── Generic Multi-Marketplace Cross-Reference ─────────────────────────────
 
 export interface MarketplaceCorrectionGroup {
