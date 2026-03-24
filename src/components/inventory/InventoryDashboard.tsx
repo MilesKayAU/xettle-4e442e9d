@@ -58,6 +58,13 @@ export default function InventoryDashboard({ onNavigateToSettings }: { onNavigat
   // Inventory rules (live state for preview, save persists)
   const { rules, setRules, saveRules, loading: rulesLoading, saving } = useInventoryRules();
 
+  // Platform-level fetches for Universal tab aggregation
+  const shopifyFetch = useInventoryFetch('fetch-shopify-inventory');
+  const amazonFetch = useInventoryFetch('fetch-amazon-inventory');
+  const koganFetch = useInventoryFetch('fetch-kogan-inventory');
+  const ebayFetch = useInventoryFetch('fetch-ebay-inventory');
+  const miraklFetch = useInventoryFetch('fetch-mirakl-inventory');
+
   // Also check for Kogan API creds in app_settings and direct token tables
   const [hasKoganCreds, setHasKoganCreds] = useState(false);
   const [hasAmazonToken, setHasAmazonToken] = useState(false);
