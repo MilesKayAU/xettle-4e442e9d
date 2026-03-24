@@ -450,6 +450,29 @@ export default function FulfilmentMethodsPanel() {
                     className="pl-7 h-8 text-sm"
                   />
                 </div>
+                <div className="pt-1 space-y-1">
+                  <Label htmlFor={`threshold-${mp.marketplace_code}`} className="text-xs text-muted-foreground flex items-center gap-1">
+                    <DollarSign className="h-3 w-3" />
+                    Free shipping threshold (orders above this = no postage deduction)
+                  </Label>
+                  <div className="relative w-40">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                    <Input
+                      id={`threshold-${mp.marketplace_code}`}
+                      type="number"
+                      min={0}
+                      step={1}
+                      placeholder="e.g. 50"
+                      value={freeShippingThresholds[mp.marketplace_code] || ''}
+                      onChange={(e) =>
+                        setFreeShippingThresholds(prev => ({ ...prev, [mp.marketplace_code]: e.target.value }))
+                      }
+                      onBlur={(e) => handleThresholdSave(mp.marketplace_code, e.target.value)}
+                      className="pl-7 h-8 text-sm"
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Leave empty to apply postage to all orders</p>
+                </div>
               </div>
             )}
             {showMfnBanner && (
