@@ -1476,7 +1476,7 @@ export default function InsightsDashboard() {
                         <div className="h-full bg-primary rounded-full transition-all duration-700" style={{ width: `${keepPct * 100}%` }} />
                       </div>
                       <span className="text-xs font-bold tabular-nums text-foreground w-14 text-right">{formatPct(keepPct)}</span>
-                      <span className="text-xs tabular-nums text-muted-foreground w-20 text-right">{formatCurrency(s.netPayout)}</span>
+                      <span className="text-xs tabular-nums text-muted-foreground w-20 text-right">{formatCurrency(adjustedNet)}</span>
                     </div>
                     
                     {/* Fee breakdown rows */}
