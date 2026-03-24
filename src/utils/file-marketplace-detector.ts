@@ -104,6 +104,7 @@ export async function detectFileMarketplace(file: File): Promise<DetectedMarketp
 export const MARKETPLACE_LABELS: Record<string, string> = {
   amazon_au: 'Amazon AU',
   bunnings: 'Bunnings',
+  kogan: 'Kogan',
   shopify_payments: 'Shopify Payments',
   shopify_orders: 'Shopify Orders',
   woolworths_marketplus: 'Woolworths MarketPlus',
