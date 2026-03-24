@@ -5,7 +5,7 @@ import { logger } from '../_shared/logger.ts'
 
 const EBAY_AUTH_URL = 'https://auth.ebay.com/oauth2/authorize'
 const EBAY_TOKEN_URL = 'https://api.ebay.com/identity/v1/oauth2/token'
-const EBAY_SCOPES = 'https://api.ebay.com/oauth/api_scope/sell.finances https://api.ebay.com/oauth/api_scope/sell.fulfillment'
+const EBAY_SCOPES = 'https://api.ebay.com/oauth/api_scope/sell.finances https://api.ebay.com/oauth/api_scope/sell.fulfillment https://api.ebay.com/oauth/api_scope/sell.inventory.readonly'
 
 serve(async (req) => {
   const origin = req.headers.get("Origin") ?? "";

@@ -48,7 +48,7 @@ serve(async (req: Request) => {
               "Content-Type": "application/x-www-form-urlencoded",
               Authorization: `Basic ${btoa(`${clientId}:${certId}`)}`,
             },
-            body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(tokenRow.refresh_token)}`,
+            body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(tokenRow.refresh_token)}&scope=${encodeURIComponent('https://api.ebay.com/oauth/api_scope/sell.finances https://api.ebay.com/oauth/api_scope/sell.fulfillment https://api.ebay.com/oauth/api_scope/sell.inventory.readonly')}`,
           });
           if (refreshResp.ok) {
             const tokens = await refreshResp.json();
