@@ -67,6 +67,22 @@ export default function MarketplaceProfitComparison() {
     checkAccessAndLoad();
   }, []);
 
+  async function handleRecalculate() {
+    setRecalculating(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { toast.error('Not authenticated'); return; }
+      const { error } = await supabase.functions.invoke('recalculate-profit', {});
+      if (error) throw error;
+      toast.success('Profit recalculated — refreshing…');
+      await checkAccessAndLoad();
+    } catch (e: any) {
+      toast.error('Recalculation failed: ' + (e.message || 'Unknown error'));
+    } finally {
+      setRecalculating(false);
+    }
+  }
+
   async function checkAccessAndLoad() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
