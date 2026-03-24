@@ -1456,10 +1456,10 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       // Search for Kogan settlements matching these doc numbers
       const { data: existing } = await supabase
         .from('settlements')
-        .select('id, settlement_id, net_payout, metadata, marketplace_code')
+        .select('id, settlement_id, bank_deposit, marketplace, status')
         .eq('user_id', user.id)
-        .eq('marketplace_code', 'kogan')
-        .not('settlement_source', 'eq', 'duplicate_suppressed');
+        .eq('marketplace', 'kogan')
+        .neq('status', 'duplicate_suppressed');
       
       if (!existing || existing.length === 0) return;
       
@@ -1468,7 +1468,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         const docMatch = (row.settlement_id || '').match(/(\d{5,})/);
         const docNum = docMatch?.[1];
         if (docNum && orphanedDocNums.includes(docNum)) {
-          matched[docNum] = { id: row.id, settlement_id: row.settlement_id, net_payout: row.net_payout, metadata: row.metadata };
+          matched[docNum] = { id: row.id, settlement_id: row.settlement_id, net_payout: row.bank_deposit || 0, metadata: {} };
         }
       }
       
