@@ -180,6 +180,11 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
         </Suspense>
       </SettingsAccordion>
     ),
+    active_marketplaces: (
+      <SettingsAccordion title="Active Marketplaces" description="Site-wide on/off switch for each marketplace" defaultOpen={false} status={getStatus('active_marketplaces')} helpText={SETTINGS_HELP.active_marketplaces}>
+        <ErrorBoundary><MarketplaceManagerPanel /></ErrorBoundary>
+      </SettingsAccordion>
+    ),
     destination_accounts: (
       <SettingsAccordion id="destination-accounts" title="Destination Accounts" description="Choose where each payout rail lands in Xero" defaultOpen={sortedSections[0] === 'destination_accounts'} status={getStatus('destination_accounts')} helpText={SETTINGS_HELP.destination_accounts}>
         <ErrorBoundary><DestinationAccountMapper /></ErrorBoundary>
