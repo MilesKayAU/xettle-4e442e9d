@@ -253,13 +253,15 @@ Deno.serve(async (req) => {
         shippingOrderCount = pureShopifyOrders.length || 1;
       } else if (orderIds.size <= 1 && !s.settlement_id?.startsWith("shopify_auto_")) {
         // CSV settlements (e.g. Mirakl/Bunnings) often have summary lines with no order_ids.
-        // Cross-reference the auto-settlement order count for the same marketplace + month.
+        // Cross-reference the auto-settlement order count for the same marketplace + month,
+        // then split proportionally across the number of CSV settlements in that month.
         const mpLower = mp.toLowerCase();
         const monthKey = s.period_end?.substring(0, 7) || "";
         const autoCount = autoOrderCounts.get(mpLower)?.get(monthKey);
+        const csvCount = csvSettlementCounts.get(mpLower)?.get(monthKey) || 1;
         if (autoCount && autoCount > ordersCount) {
-          shippingOrderCount = autoCount;
-          console.log(`[profit] ${mp} ${monthKey}: using auto order count ${autoCount} instead of ${ordersCount} for shipping`);
+          shippingOrderCount = Math.round(autoCount / csvCount);
+          console.log(`[profit] ${mp} ${monthKey}: using auto order count ${autoCount}/${csvCount} = ${shippingOrderCount} instead of ${ordersCount} for shipping`);
         } else {
           shippingOrderCount = ordersCount;
         }
