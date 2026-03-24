@@ -46,8 +46,6 @@ export default function MiraklInventoryTab({ connected, onNavigateToSettings, in
     if (!connected || seeded) return;
     if (initialData && initialData.length > 0) {
       loadFromCache({ items: initialData, has_more: false, partial: false, error: null, fetched_at: initialLastFetched?.toISOString() || new Date().toISOString() });
-    } else {
-      fetch();
     }
     setSeeded(true);
   }, [connected, seeded]);

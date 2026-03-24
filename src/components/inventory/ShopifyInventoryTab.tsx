@@ -74,9 +74,8 @@ export default function ShopifyInventoryTab({ initialData, lastFetched: initialL
     if (!seeded && initialData && initialData.length > 0) {
       loadFromCache({ items: initialData, has_more: false, partial: false, error: null, fetched_at: initialLastFetched?.toISOString() || new Date().toISOString() });
       setSeeded(true);
-    } else if (!seeded && !initialData) {
-      // No cache available — fetch live
-      fetch();
+    } else if (!seeded) {
+      // No cache — show empty, user can click Refresh
       setSeeded(true);
     }
   }, [initialData, seeded]);
