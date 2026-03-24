@@ -44,7 +44,7 @@ import { parseGenericCSV, parseGenericXLSX } from '@/utils/generic-csv-parser';
 import { parseShopifyPayoutCSV } from '@/utils/shopify-payments-parser';
 import { parseShopifyOrdersCSV } from '@/utils/shopify-orders-parser';
 import { parseBunningsSummaryPdf } from '@/utils/bunnings-summary-parser';
-import { parseKoganRemittancePdf, type KoganRemittanceResult } from '@/utils/kogan-remittance-parser';
+import { parseKoganRemittancePdf, extractKoganPdfDocNumbers, type KoganRemittanceResult } from '@/utils/kogan-remittance-parser';
 import { parseWoolworthsMarketPlusCSV, isTransactionFee } from '@/utils/woolworths-marketplus-parser';
 import { saveSettlement, validateSettlementSanity, MARKETPLACE_LABELS as ENGINE_LABELS, type StandardSettlement } from '@/utils/settlement-engine';
 import { createDraftFingerprint } from '@/utils/fingerprint-lifecycle';
@@ -90,6 +90,10 @@ interface DetectedFile {
   readiness?: BookkeeperReadinessResult;
   /** Xero readiness result (computed post-save for first marketplace settlement) */
   xeroReadiness?: XeroReadinessResult;
+  /** Kogan PDF doc numbers for pairing */
+  koganDocNumbers?: string[];
+  /** Kogan remittance parse result (cached for merge) */
+  koganRemittanceResult?: KoganRemittanceResult;
 }
 
 interface SmartUploadFlowProps {
@@ -262,12 +266,12 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         return [result.settlement];
       }
 
-      // Kogan PDF — parse remittance and store for later merge
+      // Kogan PDF — parse remittance, extract doc numbers, store for later merge
       if (marketplace === 'kogan' && file.name.toLowerCase().endsWith('.pdf')) {
         const result = await parseKoganRemittancePdf(file);
         if (!result.success) return [];
-        // Store the remittance data — it will be merged with CSV settlements in post-processing
-        // Return empty settlements; the merge happens after all files are detected
+        // Doc numbers and result are stored via detection callback (see below)
+        // Return empty settlements; the merge happens on save
         return [];
       }
       
@@ -461,7 +465,17 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           }
         } catch {}
 
-        return { idx, result, settlements, dbDupeIds, splitResult: undefined as MultiMarketplaceSplitResult | undefined, csvHeaders: fileHeaders, sampleRows };
+        // Extract Kogan PDF doc numbers + remittance result for pairing
+        let koganDocNumbers: string[] | undefined;
+        let koganRemittanceResult: KoganRemittanceResult | undefined;
+        if (result?.marketplace === 'kogan' && file.name.toLowerCase().endsWith('.pdf')) {
+          koganDocNumbers = await extractKoganPdfDocNumbers(file);
+          try {
+            koganRemittanceResult = await parseKoganRemittancePdf(file);
+          } catch { /* silent */ }
+        }
+
+        return { idx, result, settlements, dbDupeIds, splitResult: undefined as MultiMarketplaceSplitResult | undefined, csvHeaders: fileHeaders, sampleRows, koganDocNumbers, koganRemittanceResult };
       })
     );
 
@@ -470,7 +484,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       const offset = prev.length - uniqueFiles.length;
       for (const r of results) {
         if (r.status === 'fulfilled') {
-          const { idx, result, settlements, dbDupeIds, splitResult, csvHeaders, sampleRows } = r.value;
+          const { idx, result, settlements, dbDupeIds, splitResult, csvHeaders, sampleRows, koganDocNumbers, koganRemittanceResult } = r.value;
           const fileIdx = offset + idx;
           if (fileIdx < updated.length) {
             // If multi-marketplace split detected, show confirmation card
@@ -524,6 +538,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               csvHeaders: result ? (csvHeaders || undefined) : undefined,
               sampleRows: sampleRows || undefined,
               wasLowConfidence: isFirstContact || false,
+              koganDocNumbers: koganDocNumbers || undefined,
+              koganRemittanceResult: koganRemittanceResult || undefined,
             };
 
             if (someDupes) {
@@ -938,6 +954,15 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
             console.warn('Kogan PDF merge failed:', err.message);
             toast.warning('Kogan PDF merge failed — saving CSV data only. You can re-upload later.');
           }
+        } else {
+          // No PDF found — flag settlements as missing PDF for later correction
+          for (const s of settlements) {
+            s.metadata = { ...s.metadata, missingPdf: true };
+          }
+          toast.warning(
+            'Kogan CSV saved without Remittance PDF — net payout may not match your bank deposit. Upload the PDF later to correct.',
+            { duration: 8000 }
+          );
         }
       }
 
@@ -1361,6 +1386,86 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
   const allMissingUploaded = hasMissingChecklist && checkedItems.size === missingSettlements!.length;
 
+  // ── Kogan file pairing ──
+  const koganPairings = useMemo(() => {
+    const koganFiles = files.map((f, i) => ({ ...f, originalIdx: i })).filter(
+      f => f.detection?.marketplace === 'kogan' && f.status !== 'error'
+    );
+    if (koganFiles.length < 1) return null;
+
+    const csvFiles = koganFiles.filter(f => !f.file.name.toLowerCase().endsWith('.pdf'));
+    const pdfFiles = koganFiles.filter(f => f.file.name.toLowerCase().endsWith('.pdf'));
+
+    if (csvFiles.length === 0 && pdfFiles.length === 0) return null;
+
+    // Build settlement groups by doc number
+    type KoganPair = {
+      docNumber: string;
+      csvIdx: number | null;
+      pdfIdx: number | null;
+      csvFile: DetectedFile | null;
+      pdfFile: DetectedFile | null;
+      netPayout: number | null;
+      hasPdf: boolean;
+    };
+
+    const groups: KoganPair[] = [];
+    const usedPdfIndices = new Set<number>();
+
+    for (const csv of csvFiles) {
+      // Extract doc number from settlement_id
+      const settlementId = csv.settlements?.[0]?.settlement_id || '';
+      const docMatch = settlementId.match(/(\d{5,})/);
+      const docNumber = docMatch?.[1] || csv.file.name.replace(/\.[^.]+$/, '');
+
+      // Find matching PDF by doc number
+      let matchedPdf: (typeof pdfFiles)[0] | null = null;
+      for (const pdf of pdfFiles) {
+        if (usedPdfIndices.has(pdf.originalIdx)) continue;
+        const pdfDocNums = pdf.koganDocNumbers || [];
+        if (pdfDocNums.includes(docNumber)) {
+          matchedPdf = pdf;
+          usedPdfIndices.add(pdf.originalIdx);
+          break;
+        }
+      }
+
+      const netPayout = matchedPdf?.koganRemittanceResult?.totalPaidAmount
+        ?? csv.settlements?.[0]?.net_payout
+        ?? null;
+
+      groups.push({
+        docNumber,
+        csvIdx: csv.originalIdx,
+        pdfIdx: matchedPdf?.originalIdx ?? null,
+        csvFile: csv,
+        pdfFile: matchedPdf || null,
+        netPayout,
+        hasPdf: !!matchedPdf,
+      });
+    }
+
+    // Orphaned PDFs (no matching CSV)
+    for (const pdf of pdfFiles) {
+      if (usedPdfIndices.has(pdf.originalIdx)) continue;
+      const docNums = pdf.koganDocNumbers || [];
+      groups.push({
+        docNumber: docNums[0] || pdf.file.name.replace(/\.[^.]+$/, ''),
+        csvIdx: null,
+        pdfIdx: pdf.originalIdx,
+        csvFile: null,
+        pdfFile: pdf,
+        netPayout: pdf.koganRemittanceResult?.totalPaidAmount ?? null,
+        hasPdf: true,
+      });
+    }
+
+    if (groups.length === 0) return null;
+
+    const koganIndices = new Set(koganFiles.map(f => f.originalIdx));
+    return { groups, koganIndices };
+  }, [files]);
+
   return (
     <div className="space-y-4">
       {/* Missing settlements checklist banner */}
@@ -1616,7 +1721,138 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
             return null;
           })()}
 
+          {/* Kogan Pairing Card */}
+          {koganPairings && (
+            <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/10">
+              <CardContent className="py-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <h3 className="text-sm font-semibold text-foreground">Kogan Settlements</h3>
+                  <Badge variant="outline" className="text-[10px] h-5">
+                    {koganPairings.groups.length} settlement{koganPairings.groups.length !== 1 ? 's' : ''}
+                  </Badge>
+                </div>
+                <div className="space-y-2">
+                  {koganPairings.groups.map((pair) => {
+                    const csvStatus = pair.csvFile ? pair.csvFile.status : null;
+                    const isSaved = csvStatus === 'saved' || (pair.pdfFile?.status === 'saved' && !pair.csvFile);
+                    return (
+                      <div
+                        key={pair.docNumber}
+                        className={`rounded-md border px-3 py-2.5 space-y-1 ${
+                          isSaved
+                            ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-950/20'
+                            : pair.hasPdf && pair.csvFile
+                              ? 'border-blue-200 dark:border-blue-800 bg-background'
+                              : 'border-amber-300 dark:border-amber-700 bg-amber-50/30 dark:bg-amber-950/10'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {isSaved ? (
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                            ) : pair.hasPdf && pair.csvFile ? (
+                              <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                            ) : (
+                              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                            )}
+                            <span className="text-sm font-medium text-foreground">
+                              Settlement {pair.docNumber}
+                            </span>
+                            {isSaved && (
+                              <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 text-[10px] h-5">
+                                Saved
+                              </Badge>
+                            )}
+                          </div>
+                          {pair.netPayout !== null && (
+                            <span className="text-sm font-semibold text-foreground tabular-nums">
+                              {formatAUD(pair.netPayout)}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* File status rows */}
+                        <div className="text-xs text-muted-foreground space-y-0.5 pl-6">
+                          {pair.csvFile ? (
+                            <div className="flex items-center gap-1.5">
+                              <FileSpreadsheet className="h-3 w-3" />
+                              <span className="truncate max-w-[200px]">{pair.csvFile.file.name}</span>
+                              <span className="text-emerald-600 dark:text-emerald-400">✓</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                              <FileSpreadsheet className="h-3 w-3" />
+                              <span>Missing CSV — order details unavailable</span>
+                            </div>
+                          )}
+                          {pair.pdfFile ? (
+                            <div className="flex items-center gap-1.5">
+                              <FileText className="h-3 w-3" />
+                              <span className="truncate max-w-[200px]">{pair.pdfFile.file.name}</span>
+                              <span className="text-emerald-600 dark:text-emerald-400">✓</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                              <FileText className="h-3 w-3" />
+                              <span>Missing PDF — net payout may not match bank deposit</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Missing PDF warning detail */}
+                        {!pair.hasPdf && pair.csvFile && (
+                          <div className="ml-6 mt-1 text-[11px] text-amber-700 dark:text-amber-400 bg-amber-100/50 dark:bg-amber-900/20 rounded px-2 py-1">
+                            <strong>⚠ Inaccurate:</strong> CSV total ({pair.netPayout !== null ? formatAUD(pair.netPayout) : '—'}) excludes returns, ad spend, and seller fees. Upload the Kogan Remittance PDF for accurate bank reconciliation.
+                          </div>
+                        )}
+
+                        {/* Save button per pair */}
+                        {!isSaved && pair.csvFile && (pair.csvFile.status === 'detected' || pair.csvFile.status === 'reviewing') && (
+                          <div className="flex items-center gap-2 pl-6 pt-1">
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs gap-1.5"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                processFile(pair.csvIdx!);
+                              }}
+                            >
+                              <CheckCircle2 className="h-3 w-3" />
+                              {pair.hasPdf ? 'Save (Paired)' : 'Save (CSV Only)'}
+                            </Button>
+                            {!pair.hasPdf && (
+                              <span className="text-[10px] text-muted-foreground">You can upload the PDF later to correct this settlement</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Upload missing files button */}
+                {koganPairings.groups.some(g => !g.hasPdf || !g.csvFile) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      inputRef.current?.click();
+                    }}
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    Upload missing files
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {files.map((df, idx) => (
+            // Skip Kogan files that are shown in the pairing card
+            koganPairings?.koganIndices.has(idx) ? null :
             df.status === 'multi_split' && df.splitResult ? (
               <MultiMarketplaceSplitCard
                 key={`${df.file.name}-${idx}`}
