@@ -498,6 +498,22 @@ async function sweepUser(adminSupabase: any, userId: string) {
     for (const s of (settlements || [])) {
       if (s.marketplace === mc && s.status !== 'duplicate_suppressed' && !isReconciliationOnly(s.source, s.marketplace, s.settlement_id)) periodKeys.add(`${s.period_start} → ${s.period_end}`)
     }
+
+    // ── Kogan awareness: auto-generated settlements (shopify_auto_kogan_*) should create
+    // settlement_needed rows so the dashboard shows "Upload Needed" for these periods
+    const autoOnlyPeriods = new Set<string>()
+    if (mc.toLowerCase().includes('kogan')) {
+      for (const s of (settlements || [])) {
+        if (s.marketplace === mc && s.status !== 'duplicate_suppressed' && isReconciliationOnly(s.source, s.marketplace, s.settlement_id)) {
+          const pk = `${s.period_start} → ${s.period_end}`
+          if (!periodKeys.has(pk)) {
+            autoOnlyPeriods.add(pk)
+            periodKeys.add(pk)
+          }
+        }
+      }
+    }
+
     // Only create synthetic monthly periods if NO real settlement periods exist for this marketplace
     // This prevents phantom "full month" rows when actual settlements are fortnightly/weekly
     if (periodKeys.size === 0) {
