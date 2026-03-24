@@ -1711,7 +1711,12 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       // Filename fallback: extract invoice number from patterns like KGN-..._362490_2.csv
       const filenameMatch = csv.file.name.match(/_(\d{5,})_/);
       const docNumber = koganIdMatch?.[1] || lastDigitMatch?.[1] || firstDigitMatch?.[1] || filenameMatch?.[1] || csv.file.name.replace(/\.[^.]+$/, '');
-      const csvMonth = getCsvPeriodMonth(csv) || csv.settlements?.[0]?.metadata?.periodMonth;
+      let csvMonth = getCsvPeriodMonth(csv) || csv.settlements?.[0]?.metadata?.periodMonth;
+      // Fallback: extract month from filename like KGN-AUMKAKOGAU20260315_362490_2.csv
+      if (!csvMonth) {
+        const fnDateMatch = csv.file.name.match(/(\d{4})(\d{2})\d{2}/);
+        if (fnDateMatch) csvMonth = `${fnDateMatch[1]}-${fnDateMatch[2]}`;
+      }
 
       // Try matching PDF: first by doc number, then by period month
       let matchedPdf: (typeof pdfFiles)[0] | null = null;
