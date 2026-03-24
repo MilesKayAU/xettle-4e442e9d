@@ -1,115 +1,57 @@
 
 
-## Plan: Inventory Caching Layer + Background Sync
+## Plan: Unify Homepage and Overview Data Sources
 
-### Problem
+### Root Cause
 
-Every time the inventory page loads, it fires 5 live API calls to external platforms (Shopify, Amazon, eBay, Kogan, Mirakl). Individual tabs also re-fetch on mount. This means:
-- Page load = 5 API calls (dashboard-level for Universal)
-- Switching to Shopify tab = 6th API call (tab-level)
-- Every page revisit = another 5 calls
+The homepage and the Settlements Overview pull counts from **different tables**:
 
-No data is cached. No background sync exists.
+| Component | Data Source | What it counts |
+|-----------|-----------|----------------|
+| Homepage badge (Settlements tab) | `settlements` table → `status = 'ready_to_push'` | Settlement records |
+| Homepage `ActionCentre` | `marketplace_validation` table | Validation periods |
+| Homepage `RecentSettlements` | `settlements` table (+ synthetic validation rows) | Settlement records |
+| Overview `ValidationSweep` | `marketplace_validation` table | Validation periods |
 
-### Solution: Two-Layer Fix
+When `marketplace_validation` is empty or stale (hasn't been re-swept), the Overview shows all zeros — even though `settlements` might have data. The homepage may show counts from `settlements` that don't match.
 
-**Layer 1 — Database cache with staleness check (immediate UX fix)**
+### Fix: Single Source of Truth
 
-Store fetched inventory in a `cached_inventory` table. When the page loads, serve from cache instantly. Only call live APIs if cache is older than 24 hours or user explicitly requests a refresh.
+Make `marketplace_validation` the canonical source everywhere, and ensure it's always populated.
 
-**Layer 2 — Daily background sync via scheduled-sync**
+**1. Auto-trigger validation sweep when Overview tab is opened with stale/empty data**
 
-Add inventory fetching to the existing `scheduled-sync` orchestrator so inventory is refreshed automatically every 24 hours alongside settlement syncs.
+**File: `src/components/onboarding/ValidationSweep.tsx`**
+- After `loadData()` completes, if `rows.length === 0` and there are active marketplace connections, auto-trigger `triggerValidationSweep()` then reload
+- Add a `lastSweptAt` check: if the most recent `last_checked_at` is older than 1 hour, show a "Data may be outdated" banner with a re-scan button (already exists as "Re-scan")
 
-### Database Change
+**2. Align homepage badge counts to use `marketplace_validation`**
 
-New table: `cached_inventory`
+**File: `src/pages/Dashboard.tsx`** (lines 619-633)
+- Replace the `settlements`-table badge count queries with `marketplace_validation` counts:
+  - `readyToPushCount` = count where `overall_status = 'ready_to_push'`
+  - `outstandingCount` = count where `overall_status IN ('settlement_needed', 'missing')`
+- This ensures the Settlements tab badge matches the Overview summary cards exactly
 
-```sql
-CREATE TABLE public.cached_inventory (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  platform text NOT NULL,  -- 'shopify', 'amazon', 'ebay', 'kogan', 'mirakl'
-  items jsonb NOT NULL DEFAULT '[]',
-  has_more boolean DEFAULT false,
-  partial boolean DEFAULT false,
-  error text,
-  fetched_at timestamptz NOT NULL DEFAULT now(),
-  created_at timestamptz DEFAULT now(),
-  UNIQUE (user_id, platform)
-);
+**3. Align `ActionCentre` ready-to-push section with Overview**
 
-ALTER TABLE public.cached_inventory ENABLE ROW LEVEL SECURITY;
+**File: `src/components/dashboard/ActionCentre.tsx`**
+- Already queries `marketplace_validation` — verify its count logic matches `ValidationSweep.statusCounts` exactly (same active-connection filtering, same recon-only exclusions)
+- Add the same `activeCodes` and `pausedCodes` filtering that `ValidationSweep` uses
 
-CREATE POLICY "Users read own inventory cache"
-  ON public.cached_inventory FOR SELECT
-  TO authenticated USING (auth.uid() = user_id);
+**4. Auto-sweep on first settlement ingest**
 
-CREATE POLICY "Service role manages inventory cache"
-  ON public.cached_inventory FOR ALL
-  TO service_role USING (true);
-```
+**File: `src/pages/Dashboard.tsx`**
+- After `loadMarketplaces()` completes and finds active connections, check if `marketplace_validation` has any rows; if not, trigger `triggerValidationSweep()` once
+- This ensures new users who just uploaded their first settlement see data in Overview immediately
 
-### Edge Function Changes
+### Files Modified
 
-**Each inventory edge function** (`fetch-shopify-inventory`, `fetch-ebay-inventory`, etc.) — add a write-through step: after fetching from the external API, upsert results into `cached_inventory`. This happens server-side so the cache is always fresh after any fetch.
+| File | Changes |
+|------|---------|
+| `src/pages/Dashboard.tsx` | Badge counts from `marketplace_validation`; auto-sweep if empty |
+| `src/components/onboarding/ValidationSweep.tsx` | Auto-sweep when opened with 0 rows + active connections |
+| `src/components/dashboard/ActionCentre.tsx` | Align filtering logic with ValidationSweep |
 
-**New edge function: `read-cached-inventory`** — reads all 5 platform caches for a user in one call. Returns cached data + `fetched_at` timestamps so the UI knows how stale each platform's data is.
-
-### Frontend Changes
-
-**`src/components/inventory/useInventoryFetch.ts`**
-- Add a `fetchCached()` method that reads from `cached_inventory` first
-- The existing `fetch()` remains as the "force refresh" path
-- New `isCacheStale(threshold: number)` helper — default 24 hours
-
-**`src/components/inventory/InventoryDashboard.tsx`**
-- On mount: call `read-cached-inventory` (single fast DB read, no external API calls)
-- Show cached data immediately with a "Last synced: X hours ago" indicator
-- If any platform cache is older than 24h, show a subtle "Data may be outdated" badge
-- Add a "Refresh All" button on the Universal tab that triggers live fetches for all platforms
-- Individual tabs: show cached data on mount, refresh button triggers live fetch
-
-**Individual tabs** (`ShopifyInventoryTab`, `EbayInventoryTab`, etc.)
-- Remove `useEffect(() => { fetch(); }, [])` — no auto-fetch on mount
-- Accept `initialData` and `lastFetched` props from dashboard
-- Only call live API when user clicks Refresh
-
-**`supabase/functions/scheduled-sync/index.ts`**
-- Add inventory cache refresh as an optional step in the daily sync pipeline
-- Respects existing `auto_sync_enabled` toggles per platform
-
-### UX Flow
-
-```text
-User opens Inventory page
-  → Single DB query returns all 5 platform caches (instant)
-  → Data renders immediately
-  → "Last synced: 3 hours ago" shown per platform
-  → User clicks "Refresh All" → live API calls fire → cache updated
-  
-Next day at 2am AEST
-  → scheduled-sync refreshes inventory caches automatically
-  → User opens page → sees fresh data instantly
-```
-
-### Files
-
-| File | Action |
-|------|--------|
-| Migration | New `cached_inventory` table |
-| `supabase/functions/read-cached-inventory/index.ts` | **New** — reads all cached platforms |
-| `supabase/functions/fetch-shopify-inventory/index.ts` | Add cache upsert after fetch |
-| `supabase/functions/fetch-ebay-inventory/index.ts` | Add cache upsert after fetch |
-| `supabase/functions/fetch-amazon-inventory/index.ts` | Add cache upsert after fetch |
-| `supabase/functions/fetch-kogan-inventory/index.ts` | Add cache upsert after fetch |
-| `supabase/functions/fetch-mirakl-inventory/index.ts` | Add cache upsert after fetch |
-| `src/components/inventory/useInventoryFetch.ts` | Add cached read path |
-| `src/components/inventory/InventoryDashboard.tsx` | Load from cache on mount, add Refresh All |
-| `src/components/inventory/ShopifyInventoryTab.tsx` | Remove auto-fetch, accept cached data |
-| `src/components/inventory/EbayInventoryTab.tsx` | Remove auto-fetch, accept cached data |
-| `src/components/inventory/AmazonInventoryTab.tsx` | Remove auto-fetch, accept cached data |
-| `src/components/inventory/KoganInventoryTab.tsx` | Remove auto-fetch, accept cached data |
-| `src/components/inventory/MiraklInventoryTab.tsx` | Remove auto-fetch, accept cached data |
-| `supabase/functions/scheduled-sync/index.ts` | Add inventory refresh step |
+### No database changes needed
 
