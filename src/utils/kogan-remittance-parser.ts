@@ -252,11 +252,22 @@ export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittan
     console.log('[Kogan PDF] Parsed', lineItems.length, 'line items. Total paid:', totalPaidAmount, 
       'Invoice total:', invoiceTotal, 'Credits:', creditNoteTotal, 'Ad fees:', advertisingFees);
 
+    // Derive periodMonth from transferDate or first line item date
+    let periodMonth: string | undefined;
+    if (transferDate) {
+      // transferDate is ISO: YYYY-MM-DD
+      periodMonth = transferDate.substring(0, 7);
+    } else if (lineItems.length > 0 && lineItems[0].date) {
+      const isoDate = parseDateToISO(lineItems[0].date);
+      if (isoDate) periodMonth = isoDate.substring(0, 7);
+    }
+
     return {
       success: lineItems.length > 0,
       remittanceNumber,
       transferDate,
       paymentDate,
+      periodMonth,
       lineItems,
       totalPaidAmount,
       invoiceTotal,
