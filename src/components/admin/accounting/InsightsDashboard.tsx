@@ -1681,6 +1681,9 @@ export default function InsightsDashboard() {
                   {/* Stacked bar in card */}
                   <div className="h-3 rounded-full overflow-hidden flex">
                     <div className="h-full bg-primary transition-all duration-500" style={{ width: `${getStackedSegments(s).net}%` }} />
+                    {getStackedSegments(s).shipping > 0 && (
+                      <div className="h-full bg-chart-2 transition-all duration-500" style={{ width: `${getStackedSegments(s).shipping}%` }} />
+                    )}
                     {s.adSpend > 0 && (
                       <div className="h-full bg-accent transition-all duration-500" style={{ width: `${getStackedSegments(s).ads}%` }} />
                     )}
