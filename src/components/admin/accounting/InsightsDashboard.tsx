@@ -1409,9 +1409,15 @@ export default function InsightsDashboard() {
 
                   {/* Total fees summary */}
                   <div className="flex items-center justify-between text-xs border-t border-border pt-2">
-                    <span className="text-muted-foreground font-medium">Total fees + refunds</span>
-                    <span className="font-bold text-foreground tabular-nums">{formatPct(s.feeLoad + (s.totalSales > 0 ? s.totalRefunds / s.totalSales : 0))} of sales</span>
+                    <span className="text-muted-foreground font-medium">Total fees</span>
+                    <span className="font-bold text-foreground tabular-nums">{formatPct(s.feeLoad)} of sales</span>
                   </div>
+                  {s.totalRefunds > 0 && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">+ Refunds</span>
+                      <span className="font-semibold text-foreground tabular-nums">{formatPct(s.totalSales > 0 ? s.totalRefunds / s.totalSales : 0)} of sales ({formatCurrency(s.totalRefunds)})</span>
+                    </div>
+                  )}
 
                   {/* Biggest cost driver callout */}
                   {s.feeBreakdown.length > 0 && (
