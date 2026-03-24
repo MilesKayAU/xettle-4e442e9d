@@ -1092,6 +1092,23 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
       });
     });
 
+    // Background: auto-save Kogan advertising fees to marketplace_ad_spend for Insights
+    if (koganAdFeesExGst > 0 && settlement.marketplace === 'kogan') {
+      supabase.from('marketplace_ad_spend').upsert({
+        user_id: user.id,
+        marketplace_code: 'kogan',
+        period_start: settlement.period_start,
+        period_end: settlement.period_end,
+        spend_amount: koganAdFeesExGst,
+        source: 'settlement_pdf',
+        notes: `Auto-extracted from Kogan Remittance PDF`,
+        currency: 'AUD',
+      }, { onConflict: 'user_id,marketplace_code,period_start,period_end' } as any).then(({ error: adErr }) => {
+        if (adErr) console.error('[marketplace_ad_spend] Kogan ad upsert error:', adErr);
+        else console.log(`[settlement-engine] Saved Kogan ad spend $${koganAdFeesExGst} for ${settlement.period_start}`);
+      });
+    }
+
     // Background: auto-reconcile if Shopify is connected
     import('./marketplace-reconciliation-engine').then(({ autoReconcileSettlement }) => {
       autoReconcileSettlement(
