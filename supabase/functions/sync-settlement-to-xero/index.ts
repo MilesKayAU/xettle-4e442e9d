@@ -553,7 +553,7 @@ serve(async (req) => {
       if (gateCheck && isReconciliationOnly(gateCheck.source, gateCheck.marketplace, gateCheck.settlement_id)) {
         return new Response(JSON.stringify({
           success: false,
-          error: 'This settlement is reconciliation-only and cannot be pushed to Xero. Upload the marketplace CSV settlement instead.',
+          error: `Settlement ${body.settlementId} is reconciliation-only (source: ${gateCheck.source}) and cannot be pushed to Xero. Upload a payout-level settlement for accounting entries.`,
         }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
