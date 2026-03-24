@@ -498,6 +498,22 @@ async function sweepUser(adminSupabase: any, userId: string) {
     for (const s of (settlements || [])) {
       if (s.marketplace === mc && s.status !== 'duplicate_suppressed' && !isReconciliationOnly(s.source, s.marketplace, s.settlement_id)) periodKeys.add(`${s.period_start} → ${s.period_end}`)
     }
+
+    // ── Kogan awareness: auto-generated settlements (shopify_auto_kogan_*) should create
+    // settlement_needed rows so the dashboard shows "Upload Needed" for these periods
+    const autoOnlyPeriods = new Set<string>()
+    if (mc.toLowerCase().includes('kogan')) {
+      for (const s of (settlements || [])) {
+        if (s.marketplace === mc && s.status !== 'duplicate_suppressed' && isReconciliationOnly(s.source, s.marketplace, s.settlement_id)) {
+          const pk = `${s.period_start} → ${s.period_end}`
+          if (!periodKeys.has(pk)) {
+            autoOnlyPeriods.add(pk)
+            periodKeys.add(pk)
+          }
+        }
+      }
+    }
+
     // Only create synthetic monthly periods if NO real settlement periods exist for this marketplace
     // This prevents phantom "full month" rows when actual settlements are fortnightly/weekly
     if (periodKeys.size === 0) {
@@ -590,6 +606,23 @@ async function sweepUser(adminSupabase: any, userId: string) {
         }
 
         // Step 2: Settlement
+        // For Kogan auto-only periods, force settlement_needed since only recon-only data exists
+        if (!settlement && autoOnlyPeriods.has(pl)) {
+          record.settlement_uploaded = false
+          record.overall_status = 'settlement_needed'
+          record.reconciliation_status = 'pending'
+          // Still process orders above, then upsert and skip remaining steps
+          await adminSupabase
+            .from('marketplace_validation')
+            .upsert(record, { onConflict: 'user_id,marketplace_code,period_label' })
+          summary.settlement_needed++
+          // Mark processing done
+          await adminSupabase.from('marketplace_validation')
+            .update({ processing_state: 'processed', processing_completed_at: new Date().toISOString() })
+            .eq('user_id', userId).eq('marketplace_code', mc).eq('period_label', pl)
+          continue
+        }
+
         if (settlement) {
           record.settlement_uploaded = true
           record.settlement_id = settlement.settlement_id

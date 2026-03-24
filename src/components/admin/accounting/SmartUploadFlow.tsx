@@ -46,7 +46,7 @@ import { parseShopifyOrdersCSV } from '@/utils/shopify-orders-parser';
 import { parseBunningsSummaryPdf } from '@/utils/bunnings-summary-parser';
 import { parseKoganRemittancePdf, extractKoganPdfInfo, type KoganRemittanceResult } from '@/utils/kogan-remittance-parser';
 import { parseWoolworthsMarketPlusCSV, isTransactionFee } from '@/utils/woolworths-marketplus-parser';
-import { saveSettlement, validateSettlementSanity, MARKETPLACE_LABELS as ENGINE_LABELS, type StandardSettlement } from '@/utils/settlement-engine';
+import { saveSettlement, validateSettlementSanity, triggerValidationSweep, MARKETPLACE_LABELS as ENGINE_LABELS, type StandardSettlement } from '@/utils/settlement-engine';
 import { createDraftFingerprint } from '@/utils/fingerprint-lifecycle';
 import { validateBookkeeperMinimumData, type BookkeeperReadinessResult } from '@/utils/bookkeeper-readiness';
 import { checkXeroReadinessForMarketplace, type XeroReadinessResult } from '@/utils/xero-mapping-readiness';
@@ -1401,6 +1401,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         await processFile(i);
       }
     }
+    // Final validation sweep to ensure dashboard is fully consistent after bulk save
+    triggerValidationSweep();
     setProcessingAll(false);
   }, [processFile]);
 
@@ -1575,6 +1577,9 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       
       toast.success(`Kogan PDF merged into Settlement ${docNumber} — net payout updated to ${formatAUD(pdfResult.totalPaidAmount)}.`);
       onSettlementsSaved?.();
+      
+      // Trigger validation sweep so dashboard cards reflect the merged PDF
+      triggerValidationSweep();
     } catch (err: any) {
       toast.error('PDF merge failed: ' + (err.message || 'Unknown error'));
     } finally {
