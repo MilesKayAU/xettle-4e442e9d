@@ -616,18 +616,18 @@ export default function Dashboard() {
     })();
   }, [user]);
 
-  // Fetch outstanding (Awaiting Payment) count + ready_to_push count for badges
+  // Fetch badge counts from marketplace_validation (single source of truth with Overview)
   useEffect(() => {
     if (!user) return;
     async function fetchBadgeCounts() {
-      const [outstanding, ready] = await Promise.all([
-        supabase.from('settlements').select('id', { count: 'exact', head: true })
-          .eq('xero_status', 'authorised_in_xero'),
-        supabase.from('settlements').select('id', { count: 'exact', head: true })
-          .eq('status', 'ready_to_push').eq('is_hidden', false).eq('is_pre_boundary', false),
+      const [readyRes, outstandingRes] = await Promise.all([
+        supabase.from('marketplace_validation').select('id', { count: 'exact', head: true })
+          .eq('overall_status', 'ready_to_push'),
+        supabase.from('marketplace_validation').select('id', { count: 'exact', head: true })
+          .in('overall_status', ['settlement_needed', 'missing']),
       ]);
-      setOutstandingCount(outstanding.count ?? 0);
-      setReadyToPushCount(ready.count ?? 0);
+      setReadyToPushCount(readyRes.count ?? 0);
+      setOutstandingCount(outstandingRes.count ?? 0);
     }
     fetchBadgeCounts();
   }, [user]);
