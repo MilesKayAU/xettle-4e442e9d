@@ -121,7 +121,7 @@ export default function MarketplaceProfitComparison() {
         loadPostageCosts(user.id),
         supabase
           .from('settlement_lines')
-          .select('marketplace_name, order_id')
+          .select('settlement_id, marketplace_name, order_id')
           .eq('user_id', user.id)
           .eq('accounting_category', 'revenue')
           .not('order_id', 'is', null),
