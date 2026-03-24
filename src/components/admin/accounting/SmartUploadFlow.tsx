@@ -1522,9 +1522,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       const { error } = await supabase
         .from('settlements')
         .update({
-          net_payout: pdfResult.totalPaidAmount,
-          metadata: updatedMetadata,
-        })
+          bank_deposit: pdfResult.totalPaidAmount,
+        } as any)
         .eq('id', existing.id)
         .eq('user_id', user.id);
       
