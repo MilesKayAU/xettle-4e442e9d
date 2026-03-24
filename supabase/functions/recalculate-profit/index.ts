@@ -106,8 +106,8 @@ Deno.serve(async (req) => {
         .is("duplicate_of_settlement_id", null)
     );
 
-    // Load settlement lines (paginated) and product costs
-    const [allLines, productCosts] = await Promise.all([
+    // Load settlement lines (paginated), product costs, and Shopify orders for threshold calc
+    const [allLines, productCosts, shopifyOrders] = await Promise.all([
       fetchAllRows(
         admin.from("settlement_lines")
           .select("settlement_id, sku, amount, order_id, transaction_type, fulfilment_channel")
@@ -118,7 +118,23 @@ Deno.serve(async (req) => {
           .select("sku, cost, currency, label")
           .eq("user_id", userId)
       ),
+      // Load Shopify orders to determine order values for free-shipping threshold
+      Object.keys(freeShippingThresholds).length > 0
+        ? fetchAllRows(
+            admin.from("shopify_orders")
+              .select("order_id, total_price, source_name")
+              .eq("user_id", userId)
+          )
+        : Promise.resolve([]),
     ]);
+
+    // Build order value lookup: order_id → total_price (for threshold checking)
+    const orderValueMap = new Map<string, number>();
+    for (const so of shopifyOrders as any[]) {
+      if (so.order_id && so.total_price != null) {
+        orderValueMap.set(String(so.order_id), Number(so.total_price));
+      }
+    }
 
     // Build cost lookup
     const costMap = new Map<string, number>();
