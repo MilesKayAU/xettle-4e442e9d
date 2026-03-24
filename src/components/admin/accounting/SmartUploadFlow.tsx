@@ -90,6 +90,10 @@ interface DetectedFile {
   readiness?: BookkeeperReadinessResult;
   /** Xero readiness result (computed post-save for first marketplace settlement) */
   xeroReadiness?: XeroReadinessResult;
+  /** Kogan PDF doc numbers for pairing */
+  koganDocNumbers?: string[];
+  /** Kogan remittance parse result (cached for merge) */
+  koganRemittanceResult?: KoganRemittanceResult;
 }
 
 interface SmartUploadFlowProps {
