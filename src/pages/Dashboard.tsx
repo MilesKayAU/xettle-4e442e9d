@@ -1222,6 +1222,13 @@ export default function Dashboard() {
         )}
 
 
+        {/* ─── Inventory ─────────────────────────────────────────────── */}
+        {activeView === 'inventory' && (
+          <ErrorBoundary>
+            <InventoryDashboard onNavigateToSettings={() => switchView('settings')} />
+          </ErrorBoundary>
+        )}
+
         {/* ─── Settings ──────────────────────────────────────────────── */}
         {activeView === 'settings' && (
           <ErrorBoundary>
