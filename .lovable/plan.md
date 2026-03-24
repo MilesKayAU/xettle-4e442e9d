@@ -1,62 +1,39 @@
 
 
-## Plan: Accurate Shipping with Free-Shipping Threshold and Order-Level Data
+## Finding: No Kogan CSVs Were Saved — PDFs Are Correctly Showing "Missing CSV"
 
-### Problem (3 issues)
+### What happened
 
-**1. Free shipping threshold ignored**
-All marketplaces offer free shipping above a threshold (typically $50). Currently, the system applies $9 shipping to EVERY order. Real data from Shopify orders:
+The database only contains **auto-generated** Kogan settlements (`shopify_auto_kogan_2026-01_...`, `shopify_auto_kogan_2026-02_...`, etc.) — these come from Shopify order data, not from CSV uploads.
 
-| Channel | Total Orders | Under $50 (pay shipping) | Over $50 (free) | Current Est. | Correct Est. |
-|---------|-------------|--------------------------|------------------|-------------|-------------|
-| Kogan | 158 | 153 | 5 | $1,233 (137×$9) | ~$1,197 (133×$9) |
-| Bunnings | 110 | 99 | 11 | $153 (17×$9) | ~$891 (99×$9) |
-| Shopify | 60 | 43 | 17 | $477 (53×$9) | ~$387 (43×$9) |
+There are **zero CSV-uploaded Kogan settlements** in the database. The user's previous CSV uploads either failed during save or were never confirmed. The 8 PDFs are correctly showing "Missing CSV" because their matching CSVs genuinely don't exist in the database.
 
-Kogan barely changes (most orders are small), but Bunnings is massively wrong — and that's compounded by issue #2.
+### The real issue
 
-**2. Bunnings CSV order counts still broken**
-Despite the cross-reference code in `recalculate-profit`, each Bunnings CSV settlement still shows `orders_count: 2`. The auto-settlement data exists (36 + 61 + 4 = 101 orders) but the profit rows aren't reflecting it. The `orders_count` in the upsert (line 315) uses the raw `ordersCount` from line 239, NOT the corrected `shippingOrderCount`. So the profit table stores 2 orders per CSV settlement, and the Insights dashboard reads THAT number.
+The user expected their previously uploaded CSVs to be in the system, but they weren't saved. This means:
+1. The PDFs are working correctly — they detect doc numbers and look for matches
+2. The DB lookup works correctly — it just finds nothing because there's nothing to find
+3. The user needs to **re-upload the Kogan CSVs alongside the PDFs** (or upload CSVs first, save them, then upload PDFs)
 
-**3. No shipping revenue visibility**
-Amazon stores shipping revenue in `sales_shipping` ($4,366). All other marketplaces bundle shipping revenue into `sales_principal`. The Fee Intelligence table doesn't show this, making it impossible to see the true product-only margin.
+### What should be improved
 
-### Fix
+The UX doesn't make this clear enough. When PDFs show "Missing CSV," the user assumes the system failed to link — not that the CSVs were never saved. Two improvements:
 
-**Step 1: Add free-shipping threshold config**
+**1. Clearer messaging when no DB match exists**
 
-- Add `free_shipping_threshold:{marketplace}` key in `app_settings`
-- Add threshold input to `FulfilmentMethodsPanel` (where postage cost is already configured)
-- Default to $0 (no threshold = charge all orders) so existing behaviour is unchanged until configured
+Currently: "Missing CSV — order details unavailable"
 
-**Step 2: Fix `recalculate-profit` to use threshold-aware order counts**
+Better: "No saved Kogan settlement found for this doc number. Upload the matching CSV to create a complete settlement pair."
 
-In `supabase/functions/recalculate-profit/index.ts`:
-- Load `free_shipping_threshold:*` from app_settings
-- Query `shopify_orders` to get order values per marketplace
-- Count only orders where `total_price < threshold` for shipping deduction
-- Fix line 315: store `shippingOrderCount` (not `ordersCount`) in the profit row so Insights reads the corrected count
+**2. Show the auto-generated settlement as a potential match (with warning)**
 
-**Step 3: Update InsightsDashboard shipping calculation**
-
-In `src/components/admin/accounting/InsightsDashboard.tsx`:
-- Load free-shipping thresholds from app_settings  
-- Use threshold-aware order count from `settlement_profit.orders_count` (now fixed)
-- Show "X of Y orders shipped (free shipping over $Z)" in tooltip
-
-**Step 4: Show shipping revenue column in Fee Intelligence**
-
-Where `sales_shipping > 0` (Amazon), show it as a separate column. For other marketplaces, show "Included in Sales" to make it clear the revenue is bundled.
+The DB has `shopify_auto_kogan_2026-02_...` and `shopify_auto_kogan_2026-03_...` settlements. These cover the same periods as some PDFs. The system could note: "An auto-generated settlement exists for this period — uploading the CSV will replace it with authoritative data."
 
 ### Files Modified
 
 | File | Changes |
 |------|---------|
-| `src/components/settings/FulfilmentMethodsPanel.tsx` | Add free-shipping threshold input per marketplace |
-| `supabase/functions/recalculate-profit/index.ts` | Load thresholds; query shopify_orders for order values; threshold-aware shipping count; fix orders_count storage |
-| `src/components/admin/accounting/InsightsDashboard.tsx` | Load thresholds; threshold-aware shipping display; shipping revenue column |
-| `src/utils/fulfilment-settings.ts` | Add `loadFreeShippingThresholds()` helper |
+| `src/components/admin/accounting/SmartUploadFlow.tsx` | Improve "Missing CSV" messaging; optionally show auto-generated settlement matches as context |
 
-### No database schema changes needed
-Uses existing `app_settings` table for threshold config and existing `shopify_orders.total_price` for order-level data.
+### No database changes needed
 
