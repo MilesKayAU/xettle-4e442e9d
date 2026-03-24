@@ -22,6 +22,9 @@ export async function detectFileMarketplace(file: File): Promise<DetectedMarketp
   if (name.includes('ebay') || name.includes('order_proceeds') || name.includes('transaction_report')) {
     return 'ebay_au';
   }
+  if (name.includes('kogan') || name.match(/^kgn-/i)) {
+    return 'kogan';
+  }
 
   // ── Content-based signals ──
   try {
