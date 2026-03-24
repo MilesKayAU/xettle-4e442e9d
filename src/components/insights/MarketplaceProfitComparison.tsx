@@ -92,7 +92,7 @@ export default function MarketplaceProfitComparison() {
       const [profitRes, settlementsRes, fulfilmentMethods, postageCosts, orderCountsRes] = await Promise.all([
         supabase
           .from('settlement_profit')
-          .select('marketplace_code, settlement_id, gross_revenue, gross_profit, margin_percent')
+          .select('marketplace_code, settlement_id, gross_revenue, gross_profit, margin_percent, total_cogs')
           .eq('user_id', user.id),
         supabase
           .from('settlements')
