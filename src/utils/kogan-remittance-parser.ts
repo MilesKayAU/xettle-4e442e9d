@@ -136,6 +136,222 @@ export async function extractKoganPdfInfo(file: File): Promise<KoganPdfDocInfo> 
  * We normalise the text first, then use a line-by-line approach to parse
  * the paid documents table.
  */
+// ─── Kogan CSV Parser ─────────────────────────────────────────────
+
+interface KoganCsvParseResult {
+  success: boolean;
+  settlements: import('@/utils/settlement-engine').StandardSettlement[];
+  error?: string;
+}
+
+/**
+ * Parse a Kogan payout CSV into StandardSettlement objects.
+ *
+ * The CSV has columns like: APInvoice, InvoiceDate, DateManifested, DateRemitted,
+ * OrderID, Total (AUD), Commission (Inc GST), Remitted, etc.
+ *
+ * Rows are grouped by APInvoice number. Non-data rows (separators, headers,
+ * credit note labels, monthly fee lines) are filtered out.
+ */
+export function parseKoganPayoutCSV(csvText: string): KoganCsvParseResult {
+  const lines = csvText.split(/\r?\n/);
+  if (lines.length < 2) return { success: false, settlements: [], error: 'Empty CSV' };
+
+  // Find header row (skip preamble)
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(30, lines.length); i++) {
+    const lower = lines[i].toLowerCase();
+    if (lower.includes('apinvoice') || lower.includes('ap invoice') || lower.includes('invoicedate')) {
+      headerIdx = i;
+      break;
+    }
+  }
+  if (headerIdx < 0) return { success: false, settlements: [], error: 'Could not find Kogan CSV header row' };
+
+  const headers = parseCSVLine(lines[headerIdx]);
+  const colIdx = (name: string) => headers.findIndex(h => h.trim().toLowerCase().replace(/\s+/g, '') === name.toLowerCase().replace(/\s+/g, ''));
+
+  const iAPInvoice = colIdx('APInvoice');
+  const iInvoiceDate = colIdx('InvoiceDate');
+  const iDateManifested = colIdx('DateManifested');
+  const iDateRemitted = colIdx('DateRemitted');
+  const iTotal = headers.findIndex(h => /total.*aud/i.test(h.trim()));
+  const iCommission = headers.findIndex(h => /commission.*inc.*gst/i.test(h.trim()));
+  const iRemitted = colIdx('Remitted');
+  const iGST = headers.findIndex(h => /gst/i.test(h.trim()) && !/commission/i.test(h.trim()));
+
+  if (iAPInvoice < 0) return { success: false, settlements: [], error: 'APInvoice column not found' };
+
+  // Parse all data rows, filtering junk
+  interface KoganRow {
+    apInvoice: string;
+    invoiceDate: string;
+    dateManifested: string;
+    dateRemitted: string;
+    total: number;
+    commission: number;
+    remitted: number;
+    gst: number;
+  }
+
+  const JUNK_PATTERNS = [/^-{3,}/, /^apcreditnote$/i, /^monthly\s+marketplace/i, /^monthly\s+seller/i, /^ungrouped$/i, /^$/];
+
+  const rows: KoganRow[] = [];
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    const cols = parseCSVLine(line);
+    const apVal = (cols[iAPInvoice] || '').trim();
+
+    // Filter junk rows
+    if (JUNK_PATTERNS.some(p => p.test(apVal))) continue;
+    // Must be a numeric AP Invoice number
+    if (!/^\d{3,}$/.test(apVal)) continue;
+
+    const getNum = (idx: number) => {
+      if (idx < 0 || idx >= cols.length) return 0;
+      const v = parseFloat(cols[idx].replace(/[^0-9.\-]/g, ''));
+      return isNaN(v) ? 0 : v;
+    };
+    const getStr = (idx: number) => (idx >= 0 && idx < cols.length) ? cols[idx].trim() : '';
+
+    rows.push({
+      apInvoice: apVal,
+      invoiceDate: getStr(iInvoiceDate),
+      dateManifested: getStr(iDateManifested),
+      dateRemitted: getStr(iDateRemitted),
+      total: getNum(iTotal),
+      commission: getNum(iCommission),
+      remitted: getNum(iRemitted),
+      gst: getNum(iGST),
+    });
+  }
+
+  if (rows.length === 0) return { success: false, settlements: [], error: 'No valid Kogan data rows found' };
+
+  // Group by APInvoice
+  const groups = new Map<string, KoganRow[]>();
+  for (const r of rows) {
+    const existing = groups.get(r.apInvoice) || [];
+    existing.push(r);
+    groups.set(r.apInvoice, existing);
+  }
+
+  const settlements: import('@/utils/settlement-engine').StandardSettlement[] = [];
+
+  for (const [apInvoice, gRows] of groups) {
+    // Extract date — try InvoiceDate, DateManifested, DateRemitted in order
+    let periodDate: Date | null = null;
+    for (const r of gRows) {
+      for (const dateStr of [r.invoiceDate, r.dateManifested, r.dateRemitted]) {
+        if (!dateStr) continue;
+        const d = tryParseDate(dateStr);
+        if (d) { periodDate = d; break; }
+      }
+      if (periodDate) break;
+    }
+
+    if (!periodDate) {
+      console.warn(`[Kogan CSV] Skipping APInvoice ${apInvoice} — no parseable date`);
+      continue;
+    }
+
+    // Period = the month of the date
+    const year = periodDate.getFullYear();
+    const month = periodDate.getMonth(); // 0-indexed
+    const periodStart = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    const periodEnd = `${year}-${String(month + 1).padStart(2, '0')}-${lastDay}`;
+    const periodLabel = `Kogan ${new Date(year, month).toLocaleString('en-AU', { month: 'short', year: 'numeric' })}`;
+
+    // Sum financials
+    let totalSales = 0;
+    let totalCommission = 0;
+    let totalRemitted = 0;
+    let totalGst = 0;
+    for (const r of gRows) {
+      totalSales += r.total;
+      totalCommission += Math.abs(r.commission);
+      totalRemitted += r.remitted;
+      totalGst += r.gst;
+    }
+
+    // Commission is inclusive of GST — split
+    const commissionExGst = Math.round(totalCommission / 1.1 * 100) / 100;
+    const commissionGst = Math.round((totalCommission - commissionExGst) * 100) / 100;
+
+    // Sales ex GST
+    const salesExGst = Math.round((totalSales - totalGst) * 100) / 100;
+    const gstOnSales = Math.round(totalGst * 100) / 100;
+
+    const netPayout = Math.round(totalRemitted * 100) / 100;
+
+    settlements.push({
+      marketplace: 'kogan',
+      settlement_id: `kogan_${apInvoice}`,
+      period_start: periodStart,
+      period_end: periodEnd,
+      period_label: periodLabel,
+      currency: 'AUD',
+      sales_ex_gst: salesExGst,
+      gst_on_sales: gstOnSales,
+      fees_ex_gst: -commissionExGst,
+      gst_on_fees: commissionGst,
+      net_payout: netPayout,
+      order_count: gRows.length,
+      source: 'csv_upload',
+      reconciles: Math.abs((salesExGst + gstOnSales - commissionExGst - commissionGst) - netPayout) <= 5,
+      metadata: {
+        apInvoiceNumber: apInvoice,
+        orderCount: gRows.length,
+        periodMonth: `${year}-${String(month + 1).padStart(2, '0')}`,
+      },
+    });
+  }
+
+  return { success: settlements.length > 0, settlements, error: settlements.length === 0 ? 'No valid settlement groups parsed' : undefined };
+}
+
+/** Parse a single CSV line handling quoted fields */
+function parseCSVLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (ch === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+/** Try parsing date in DD/MM/YYYY, YYYY-MM-DD, or M/D/YYYY formats */
+function tryParseDate(s: string): Date | null {
+  if (!s) return null;
+  // DD/MM/YYYY
+  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) {
+    const d = new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
+    if (!isNaN(d.getTime())) return d;
+  }
+  // YYYY-MM-DD
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) {
+    const d = new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
+    if (!isNaN(d.getTime())) return d;
+  }
+  return null;
+}
+
 export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittanceResult> {
   const empty: Omit<KoganRemittanceResult, 'success' | 'error'> = {
     lineItems: [], invoiceTotal: 0, creditNoteTotal: 0,
