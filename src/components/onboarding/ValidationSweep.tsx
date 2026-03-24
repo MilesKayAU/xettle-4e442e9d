@@ -200,6 +200,30 @@ export default function ValidationSweep({
     }
   }, []);
 
+  // Auto-sweep when opened with 0 rows but active connections exist
+  const autoSweptRef = useRef(false);
+  useEffect(() => {
+    if (loading || autoSweptRef.current || rows.length > 0) return;
+    // Check if there are active connections — if so, auto-trigger sweep
+    (async () => {
+      const { count } = await supabase.from('marketplace_connections')
+        .select('id', { count: 'exact', head: true })
+        .in('connection_status', ['active', 'connected']);
+      if ((count ?? 0) > 0) {
+        autoSweptRef.current = true;
+        setSweeping(true);
+        setSweepStep(0);
+        setSweepStartTime(Date.now());
+        try {
+          await triggerValidationSweep();
+        } catch (err: any) {
+          toast.error('Auto-sweep failed: ' + (err.message || 'Unknown error'));
+          setSweeping(false);
+        }
+      }
+    })();
+  }, [loading, rows.length]);
+
   useEffect(() => { loadData(); }, [loadData]);
 
   // Sweep animation effect
