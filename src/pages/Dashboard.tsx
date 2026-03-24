@@ -882,6 +882,7 @@ export default function Dashboard() {
               { key: 'home' as DashboardView, label: 'Home', icon: LayoutDashboard },
               { key: 'settlements' as DashboardView, label: 'Settlements', icon: FileText, badgeCount: readyToPushCount + outstandingCount },
               { key: 'insights' as DashboardView, label: 'Insights', icon: BarChart3 },
+              { key: 'inventory' as DashboardView, label: 'Inventory', icon: PackageOpen, beta: true },
               { key: 'settings' as DashboardView, label: 'Settings', icon: Settings },
             ]).map(tab => {
               const Icon = tab.icon;
