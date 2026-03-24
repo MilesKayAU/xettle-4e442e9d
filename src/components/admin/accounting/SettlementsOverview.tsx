@@ -64,7 +64,7 @@ export default function SettlementsOverview({
         .from('settlements')
         .select('marketplace, period_end, status, xero_status, updated_at, settlement_id')
         .in('marketplace', codes)
-        .neq('source', 'api_sync')
+        .in('source', ['csv_upload', 'manual', 'api', 'ebay_api', 'mirakl_api', 'amazon_api'])
         .order('period_end', { ascending: false });
 
       if (error) throw error;
