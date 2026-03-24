@@ -464,17 +464,18 @@ export default function InsightsDashboard() {
         }
         const finalOther = otherFeesTotal;
 
+        // Separate fee-only breakdown (no refunds) and refund breakdown
         const feeBreakdown: FeeBreakdown[] = [];
         if (finalCommission > 0) feeBreakdown.push({ label: 'Commission', amount: finalCommission, pctOfSales: totalSales > 0 ? finalCommission / totalSales : 0, color: 'bg-primary' });
-        if (totalRefunds > 0) feeBreakdown.push({ label: 'Refunds', amount: totalRefunds, pctOfSales: totalSales > 0 ? totalRefunds / totalSales : 0, color: 'bg-muted-foreground/60' });
         if (fbaTotal > 0) feeBreakdown.push({ label: 'FBA Fulfilment', amount: fbaTotal, pctOfSales: totalSales > 0 ? fbaTotal / totalSales : 0, color: 'bg-destructive' });
         if (storageTotal > 0) feeBreakdown.push({ label: 'Storage', amount: storageTotal, pctOfSales: totalSales > 0 ? storageTotal / totalSales : 0, color: 'bg-muted-foreground' });
         if (finalOther > 0) feeBreakdown.push({ label: 'Other fees', amount: finalOther, pctOfSales: totalSales > 0 ? finalOther / totalSales : 0, color: 'bg-muted-foreground/40' });
         feeBreakdown.sort((a, b) => b.amount - a.amount);
 
-        // ─── Compute feeLoad from breakdown so Total row always equals sum of rows ───
+        // ─── Compute feeLoad from fee-only breakdown (excludes refunds) ───
         const breakdownTotal = feeBreakdown.reduce((sum, f) => sum + f.amount, 0);
         const consistentFeeLoad = totalSales > 0 ? Math.min(breakdownTotal / totalSales, 1) : 0;
+        const refundLoad = totalSales > 0 ? totalRefunds / totalSales : 0;
 
         // PAC shipping estimate data
         const pacStats = pacStatsByMp[mp];
