@@ -132,8 +132,7 @@ export default function MarketplaceProfitComparison() {
         }
       }
 
-      // Build a set of active settlement IDs for cross-referencing profit rows
-      const activeSettlementIds = new Set(settlements.map(s => (s as any).settlement_id));
+      // activeSettlementIds built AFTER dedup below
 
       // Group settlements by normalised marketplace
       const grouped: Record<string, SettlementRow[]> = {};
