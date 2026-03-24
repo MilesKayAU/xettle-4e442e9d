@@ -1,40 +1,51 @@
 
 
-## Plan: Fix eBay Inventory to Use Trading API (GetMyeBaySelling)
+## Plan: Inventory Rules Panel with Smart SKU Matching (Phase 1.1)
 
-### Problem
-The current `fetch-ebay-inventory` edge function calls `GET /sell/inventory/v1/inventory_item` (REST Inventory API), which returns 400 for sellers whose listings were created via the traditional eBay listing flow. Most smaller sellers use the traditional model.
+### What We're Building
 
-### Fix
+1. **`src/hooks/useInventoryRules.ts`** — Hook to load/save inventory rules from `app_settings` (key: `inventory_rules`). Returns current rules and a setter. Default rules: `{ physical_sources: ['shopify', 'amazon_fba'], fbm_from_shopify: true, mirror_platforms: { kogan: 'shopify', ebay: 'shopify', mirakl: 'shopify' } }`.
 
-**File: `supabase/functions/fetch-ebay-inventory/index.ts`** — Replace the REST Inventory API call with the Trading API `GetMyeBaySelling` XML call.
+2. **`src/components/inventory/InventoryRulesPanel.tsx`** — Collapsible settings panel with:
+   - **Physical Stock Sources**: checkboxes for Shopify, Amazon FBA, Amazon FBM, Kogan, eBay, Mirakl
+   - **FBM Toggle**: "Amazon FBM stock comes from Shopify warehouse" (default checked)
+   - **Mirror Platforms**: read-only static text (Kogan → Shopify, eBay → Shopify, Mirakl → Shopify) with "Customizable in a future update" note
+   - **Live preview**: checkbox changes update a local state immediately; the Universal tab recalculates in real-time without requiring save. Save button persists to `app_settings`.
 
-Changes:
-- Replace lines 71-125 (the inventory fetch loop) with Trading API logic
-- Use `POST https://api.ebay.com/ws/api.dll` with XML body requesting `ActiveList`
-- Headers: `X-EBAY-API-SITEID: 15` (Australia), `X-EBAY-API-COMPATIBILITY-LEVEL: 1155`, `X-EBAY-API-CALL-NAME: GetMyeBaySelling`, `X-EBAY-API-IAF-TOKEN: {token}`
-- Parse XML response to extract from `ActiveList.ItemArray.Item[]`: ItemID, SKU, Title, SellingStatus.CurrentPrice, QuantityAvailable, ListingDetails.ViewItemURL, PictureDetails.GalleryURL
-- Handle pagination: check `TotalNumberOfPages`, increment `PageNumber` up to limit
-- Use `EntriesPerPage: 200` per page
-- Map to same output shape: `{ sku, title, quantity, price, listing_status, item_id, url, thumbnail }`
-- If SKU is empty, use ItemID as identifier
-- Keep existing timeout protection and partial result pattern
+3. **`src/components/inventory/UniversalInventoryTab.tsx`** — Updated to:
+   - Accept `inventoryRules` as a prop
+   - Use rules to calculate `total_real_stock` from only `physical_sources`
+   - Respect `fbm_from_shopify` toggle
+   - **Smart SKU matching** with normalisation on BOTH sides:
+     ```typescript
+     const normalise = (sku: string) => sku.toLowerCase().replace(/[-\s_]/g, '');
+     ```
+     Match priority: (1) exact SKU, (2) normalised SKU match, (3) exact title match **only if title.length > 20**, (4) treat as separate row
+   - Mirror platforms shown greyed out in table when excluded from totals
 
-**File: `src/components/inventory/EbayInventoryTab.tsx`** — Update columns and interface:
-- Add `item_id` field; display SKU with fallback to ItemID + "No SKU" badge
-- Add `thumbnail` column (small image)
-- Add `url` as clickable link on title
-- Keep existing columns: Qty, Price, Status, Last Updated
+4. **`src/components/inventory/InventoryDashboard.tsx`** — Load rules via `useInventoryRules`, pass to `UniversalInventoryTab`, render gear button to toggle `InventoryRulesPanel`. Panel state changes flow to Universal tab immediately.
 
-### XML Parsing
-Use Deno's built-in XML handling or simple regex extraction since the response structure is predictable and flat. A lightweight XML-to-object parser keeps the function dependency-free.
+### SKU Matching Detail
 
-### No Other Changes
-- No settlement, accounting, or other tab modifications
-- Token refresh logic stays as-is (OAuth token works for Trading API via IAF-TOKEN header)
-- Existing scope `sell.inventory.readonly` isn't needed for Trading API but doesn't hurt to keep
+The `getOrCreate` function will be refactored to a two-pass approach:
+- First pass: build a lookup by normalised SKU and by title (only titles > 20 chars)
+- When inserting a new platform's item: check normalised SKU first, then title fallback, then create new entry
+- Both sides normalised — Shopify `COF-60` matches Amazon `cof60`
 
-### Files Modified
-1. `supabase/functions/fetch-ebay-inventory/index.ts` — Replace REST API with Trading API
-2. `src/components/inventory/EbayInventoryTab.tsx` — Update columns for new fields
+### Files
+
+| File | Action |
+|------|--------|
+| `src/hooks/useInventoryRules.ts` | **New** |
+| `src/components/inventory/InventoryRulesPanel.tsx` | **New** |
+| `src/components/inventory/UniversalInventoryTab.tsx` | Modified — rules-aware calculation + smart SKU matching |
+| `src/components/inventory/InventoryDashboard.tsx` | Modified — wire up rules hook + panel |
+
+### No database changes needed
+Uses existing `app_settings` table with key `inventory_rules`.
+
+### Constraints
+- No settlement/validation/Xero imports
+- Mirror platforms read-only in Phase 1
+- No manual SKU mapping UI (Phase 2)
 
