@@ -2037,8 +2037,34 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                   })}
                 </div>
 
+                {/* Merge All PDFs button when multiple DB matches exist */}
+                {(() => {
+                  const mergeablePairs = koganPairings.groups.filter(
+                    g => !g.csvFile && g.existingDbSettlement && g.hasPdf && g.pdfFile?.status !== 'saved'
+                  );
+                  if (mergeablePairs.length > 1) {
+                    return (
+                      <Button
+                        size="sm"
+                        className="gap-2 text-xs"
+                        disabled={!!mergingPdfDoc}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          for (const p of mergeablePairs) {
+                            await mergeKoganPdfToExisting(p.docNumber, p.pdfIdx!);
+                          }
+                        }}
+                      >
+                        {mergingPdfDoc ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
+                        Merge All {mergeablePairs.length} PDFs into Saved Settlements
+                      </Button>
+                    );
+                  }
+                  return null;
+                })()}
+
                 {/* Upload missing files button */}
-                {koganPairings.groups.some(g => !g.hasPdf || !g.csvFile) && (
+                {koganPairings.groups.some(g => (!g.hasPdf && !g.existingDbSettlement) || (!g.csvFile && !g.existingDbSettlement)) && (
                   <Button
                     variant="outline"
                     size="sm"
