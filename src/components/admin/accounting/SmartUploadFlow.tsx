@@ -1910,22 +1910,25 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                   {koganPairings.groups.map((pair) => {
                     const csvStatus = pair.csvFile ? pair.csvFile.status : null;
                     const isSaved = csvStatus === 'saved' || (pair.pdfFile?.status === 'saved' && !pair.csvFile);
+                    const hasDbCsv = !pair.csvFile && !!pair.existingDbSettlement;
+                    const pdfMerged = isSaved || (hasDbCsv && pair.pdfFile?.status === 'saved');
+                    const isComplete = (pair.hasPdf && pair.csvFile) || (hasDbCsv && pair.hasPdf);
                     return (
                       <div
                         key={pair.docNumber}
                         className={`rounded-md border px-3 py-2.5 space-y-1 ${
-                          isSaved
+                          pdfMerged
                             ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-950/20'
-                            : pair.hasPdf && pair.csvFile
+                            : isComplete
                               ? 'border-blue-200 dark:border-blue-800 bg-background'
                               : 'border-amber-300 dark:border-amber-700 bg-amber-50/30 dark:bg-amber-950/10'
                         }`}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            {isSaved ? (
+                            {pdfMerged ? (
                               <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                            ) : pair.hasPdf && pair.csvFile ? (
+                            ) : isComplete ? (
                               <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                             ) : (
                               <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
@@ -1933,9 +1936,9 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                             <span className="text-sm font-medium text-foreground">
                               Settlement {pair.docNumber}
                             </span>
-                            {isSaved && (
+                            {pdfMerged && (
                               <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 text-[10px] h-5">
-                                Saved
+                                {hasDbCsv ? 'PDF Merged' : 'Saved'}
                               </Badge>
                             )}
                           </div>
@@ -1953,6 +1956,12 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                               <FileSpreadsheet className="h-3 w-3" />
                               <span className="truncate max-w-[200px]">{pair.csvFile.file.name}</span>
                               <span className="text-emerald-600 dark:text-emerald-400">✓</span>
+                            </div>
+                          ) : hasDbCsv ? (
+                            <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                              <FileSpreadsheet className="h-3 w-3" />
+                              <span>CSV already saved ✓</span>
+                              <span className="text-muted-foreground text-[10px]">({pair.existingDbSettlement!.settlement_id})</span>
                             </div>
                           ) : (
                             <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
@@ -1981,8 +1990,31 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                           </div>
                         )}
 
-                        {/* Save button per pair */}
-                        {!isSaved && pair.csvFile && (pair.csvFile.status === 'detected' || pair.csvFile.status === 'reviewing') && (
+                        {/* Merge PDF into existing DB settlement */}
+                        {hasDbCsv && pair.hasPdf && pair.pdfFile?.status !== 'saved' && !pdfMerged && (
+                          <div className="flex items-center gap-2 pl-6 pt-1">
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs gap-1.5"
+                              disabled={mergingPdfDoc === pair.docNumber}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                mergeKoganPdfToExisting(pair.docNumber, pair.pdfIdx!);
+                              }}
+                            >
+                              {mergingPdfDoc === pair.docNumber ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Link2 className="h-3 w-3" />
+                              )}
+                              Merge PDF into Saved Settlement
+                            </Button>
+                            <span className="text-[10px] text-muted-foreground">Updates net payout with returns, fees & ad spend</span>
+                          </div>
+                        )}
+
+                        {/* Save button per pair (new CSV upload) */}
+                        {!isSaved && !hasDbCsv && pair.csvFile && (pair.csvFile.status === 'detected' || pair.csvFile.status === 'reviewing') && (
                           <div className="flex items-center gap-2 pl-6 pt-1">
                             <Button
                               size="sm"
