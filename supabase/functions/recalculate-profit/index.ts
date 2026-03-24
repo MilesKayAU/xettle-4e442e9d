@@ -158,7 +158,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`[profit] autoOrderCounts: ${JSON.stringify([...autoOrderCounts.entries()].map(([k, v]) => [k, Object.fromEntries(v)]))}`);
+    // Debug: log auto order counts for verification
 
     // Count how many CSV settlements exist per marketplace+month so we can
     // split the auto order count proportionally (e.g. 2 fortnightly CSVs in Feb → each gets half)
