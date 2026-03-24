@@ -6,6 +6,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { logger } from '@/utils/logger';
+import { isReconciliationOnly } from '@/utils/settlement-policy';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -405,7 +406,7 @@ export async function autoReconcileSettlement(
 
     // ─── Auto-promote: ingested → ready_to_push when reconciliation is matched ───
     // NEVER promote shopify_auto_* analytics records — they are for insights only
-    if (result.status === 'matched' && !settlementId.startsWith('shopify_auto_')) {
+    if (result.status === 'matched' && !isReconciliationOnly(undefined, undefined, settlementId)) {
       const { error: promoteErr } = await supabase
         .from('settlements')
         .update({

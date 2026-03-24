@@ -32,6 +32,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { isBankMatchRequired } from '@/constants/settlement-rails';
+import { isReconciliationOnly } from '@/utils/settlement-policy';
+import { PUSHABLE_SOURCES } from '@/utils/settlementSources';
 
 interface SettlementRow {
   id: string;
@@ -379,7 +381,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
         supabase
           .from('settlements')
           .select('id, settlement_id, marketplace, period_start, period_end, bank_deposit, status, xero_status, source, created_at, bank_verified, sales_principal, seller_fees, fba_fees, refunds, gst_on_income, other_fees, storage_fees, advertising_costs, is_pre_boundary')
-          .neq('source', 'api_sync')
+          .in('source', [...PUSHABLE_SOURCES])
           .neq('status', 'duplicate_suppressed')
           .neq('status', 'already_recorded')
           .order('period_end', { ascending: false }),
@@ -423,7 +425,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
 
       const queueRows: SettlementRow[] = actionableOnly
         ? ((validationRes.data || []) as any[])
-            .filter((row) => !row.settlement_id?.startsWith('shopify_auto_'))
+            .filter((row) => !isReconciliationOnly((row as any).source, row.marketplace_code, row.settlement_id))
             .map((row) => {
               const existing = row.settlement_id ? settlementMap.get(row.settlement_id) : undefined;
               if (existing) return { ...existing, dashboard_origin: 'settlement' as const };
@@ -514,7 +516,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
         );
         let ready = 0, readyTotal = 0, uploadNeeded = 0, uploadNeededManual = 0, uploadNeededApi = 0, gaps = 0;
         for (const r of valRes.data) {
-          if ((r as any).settlement_id?.startsWith('shopify_auto_')) continue;
+          if (isReconciliationOnly(undefined, undefined, (r as any).settlement_id)) continue;
           if (r.overall_status === 'ready_to_push') {
             ready++;
             readyTotal += (r as any).settlement_net || 0;

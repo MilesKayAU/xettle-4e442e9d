@@ -28,6 +28,7 @@ import PushSafetyPreview from '@/components/admin/accounting/PushSafetyPreview';
 import { runMarketplaceSync, runDirectMarketplaceSync } from '@/actions/sync';
 import { ACTIVE_CONNECTION_STATUSES, isApiConnectionType } from '@/constants/connection-status';
 import { useApiSyncedCodes } from '@/hooks/useApiSyncedCodes';
+import { isReconciliationOnly } from '@/utils/settlement-policy';
 
 interface ValidationRow {
   id: string;
@@ -275,7 +276,7 @@ export default function ValidationSweep({
   ), [allConnections]);
 
   const isUsefulRecon = useCallback((r: ValidationRow) => {
-    return !!r.settlement_id?.startsWith('shopify_auto_')
+    return isReconciliationOnly('api_sync', r.marketplace_code, r.settlement_id)
       && !directApiCodes.has(r.marketplace_code)
       && r.overall_status !== 'duplicate_suppressed';
   }, [directApiCodes]);
@@ -298,15 +299,15 @@ export default function ValidationSweep({
     // Apply manual/api/recon sub-tab when settlement_needed filter is active
     if (filter === 'settlement_needed') {
       if (uploadSubTab === 'manual') {
-        result = result.filter(r => !apiSyncedCodes.has(r.marketplace_code) && !r.settlement_id?.startsWith('shopify_auto_'));
+        result = result.filter(r => !apiSyncedCodes.has(r.marketplace_code) && !isReconciliationOnly('api_sync', r.marketplace_code, r.settlement_id));
       } else if (uploadSubTab === 'api') {
-        result = result.filter(r => apiSyncedCodes.has(r.marketplace_code) && !r.settlement_id?.startsWith('shopify_auto_'));
+        result = result.filter(r => apiSyncedCodes.has(r.marketplace_code) && !isReconciliationOnly('api_sync', r.marketplace_code, r.settlement_id));
       } else if (uploadSubTab === 'recon') {
         result = result.filter(r => isUsefulRecon(r));
       }
     } else {
       // Outside the settlement_needed filter, hide all recon rows
-      result = result.filter(r => !r.settlement_id?.startsWith('shopify_auto_'));
+      result = result.filter(r => !isReconciliationOnly('api_sync', r.marketplace_code, r.settlement_id));
     }
     if (marketplaceFilter !== 'all') {
       result = result.filter((r) => r.marketplace_code === marketplaceFilter);
@@ -344,7 +345,7 @@ export default function ValidationSweep({
     const activeRows = rows.filter(r => activeCodes.has(r.marketplace_code) && !pausedCodes.has(r.marketplace_code));
     const counts = { all: 0, complete: 0, ready_to_push: 0, settlement_needed: 0, settlement_needed_manual: 0, settlement_needed_api: 0, settlement_needed_recon: 0, gap_detected: 0 };
     activeRows.forEach((r) => {
-      const isRecon = r.settlement_id?.startsWith('shopify_auto_');
+      const isRecon = isReconciliationOnly('api_sync', r.marketplace_code, r.settlement_id);
       // Only count recon rows that are actually useful (no direct API, not resolved)
       if (isRecon) {
         if (isUsefulRecon(r)) counts.settlement_needed_recon++;
@@ -399,7 +400,7 @@ export default function ValidationSweep({
   useEffect(() => { setSelectedIds(new Set()); setPage(1); setUploadSubTab('manual'); }, [filter, marketplaceFilter, dateFrom, dateTo]);
 
   // Selectable rows (only ready_to_push)
-  const selectableRows = useMemo(() => filteredRows.filter(r => r.overall_status === 'ready_to_push' && r.settlement_id && !r.settlement_id?.startsWith('shopify_auto_')), [filteredRows]);
+  const selectableRows = useMemo(() => filteredRows.filter(r => r.overall_status === 'ready_to_push' && r.settlement_id && !isReconciliationOnly('api_sync', r.marketplace_code, r.settlement_id)), [filteredRows]);
   const allSelectableSelected = selectableRows.length > 0 && selectableRows.every(r => selectedIds.has(r.id));
   const someSelected = selectedIds.size > 0;
 
@@ -697,7 +698,7 @@ export default function ValidationSweep({
                     <tr key={row.id} className={cn("border-b hover:bg-muted/20 transition-colors group", selectedIds.has(row.id) && "bg-primary/5")}>
 
                       <td className="px-2 py-2 text-center w-8">
-                        {!row.settlement_id?.startsWith('shopify_auto_') && row.overall_status === 'ready_to_push' && row.settlement_id ? (
+                        {!isReconciliationOnly('api_sync', row.marketplace_code, row.settlement_id) && row.overall_status === 'ready_to_push' && row.settlement_id ? (
                           <Checkbox
                             checked={selectedIds.has(row.id)}
                             onCheckedChange={() => toggleSelectRow(row.id)}
@@ -739,7 +740,7 @@ export default function ValidationSweep({
                         {row.bank_matched ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" /> : <XCircle className="h-3.5 w-3.5 text-muted-foreground mx-auto" />}
                       </td>
                       <td className="px-3 py-2 text-center">
-                        {row.settlement_id?.startsWith('shopify_auto_') ? (
+                        {isReconciliationOnly('api_sync', row.marketplace_code, row.settlement_id) ? (
                           <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400">🔍 Recon Only</Badge>
                         ) : (
                           <StatusPill status={row.overall_status} isApiSynced={apiSyncedCodes.has(row.marketplace_code)} />
@@ -767,7 +768,7 @@ export default function ValidationSweep({
                               </Tooltip>
                             </TooltipProvider>
                           )}
-                          {!row.settlement_id?.startsWith('shopify_auto_') && (
+                          {!isReconciliationOnly('api_sync', row.marketplace_code, row.settlement_id) && (
                             <RowAction
                               row={row}
                               pushing={pushing === row.id}

@@ -40,7 +40,7 @@ import {
   type SettlementForPosting,
 } from '@/utils/xero-posting-line-items';
 import { cn } from '@/lib/utils';
-import { isReconciliationOnly } from '@/utils/settlement-policy';
+import { isReconciliationOnly, getPushBlockReason } from '@/utils/settlement-policy';
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -266,9 +266,9 @@ export default function PushSafetyPreview({
             },
             lineItems: [],
             checks: [{
-              label: 'Reconciliation-only source (Shopify-derived marketplace)',
+              label: 'Reconciliation-only source — not pushable',
               status: 'red' as const,
-              detail: 'This settlement was auto-generated from Shopify orders and cannot be pushed to Xero. Upload the marketplace CSV settlement instead.',
+              detail: getPushBlockReason(s.source, s.marketplace, s.settlement_id) || 'This settlement contains order-level data only and cannot be pushed to Xero.',
             }],
             contactName: '',
             reference: `Xettle-${s.settlement_id}`,

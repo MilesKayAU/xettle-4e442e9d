@@ -13,6 +13,7 @@ import SettlementDetailDrawer from '@/components/shared/SettlementDetailDrawer';
 import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_CATALOG } from './MarketplaceSwitcher';
 import type { UserMarketplace } from './MarketplaceSwitcher';
+import { PUSHABLE_SOURCES } from '@/utils/settlementSources';
 import { syncSettlementToXero, syncXeroStatus, formatAUD, type StandardSettlement } from '@/utils/settlement-engine';
 import { toast } from 'sonner';
 import PushSafetyPreview from './PushSafetyPreview';
@@ -64,7 +65,7 @@ export default function SettlementsOverview({
         .from('settlements')
         .select('marketplace, period_end, status, xero_status, updated_at, settlement_id')
         .in('marketplace', codes)
-        .neq('source', 'api_sync')
+        .in('source', [...PUSHABLE_SOURCES])
         .order('period_end', { ascending: false });
 
       if (error) throw error;
@@ -172,7 +173,7 @@ export default function SettlementsOverview({
         .eq('status', 'ready_to_push')
         .eq('is_hidden', false)
         .eq('is_pre_boundary', false)
-        .neq('source', 'api_sync')
+        .in('source', [...PUSHABLE_SOURCES])
         .is('duplicate_of_settlement_id', null)
         .or('reconciliation_status.is.null,reconciliation_status.in.(reconciled,matched)')
         .order('period_end');

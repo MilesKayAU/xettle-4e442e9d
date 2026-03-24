@@ -54,7 +54,8 @@ export function useXeroSync({ loadSettlements }: UseXeroSyncOptions) {
   ) => {
     // Source Push Gate: check DB row fields BEFORE normalization
     if (isReconciliationOnly(settlement.source, settlement.marketplace, settlement.settlement_id)) {
-      toast.error('This is a Shopify-derived reconciliation record — push the marketplace CSV settlement instead.');
+      const { getPushBlockReason } = await import('@/utils/settlement-policy');
+      toast.error(getPushBlockReason(settlement.source, settlement.marketplace, settlement.settlement_id) || 'This settlement cannot be pushed to Xero.');
       return;
     }
 

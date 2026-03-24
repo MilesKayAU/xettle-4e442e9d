@@ -28,6 +28,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
 import { getCorsHeaders } from '../_shared/cors.ts';
 import { logger } from '../_shared/logger.ts';
+import { isReconciliationOnly } from '../_shared/settlementPolicy.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -385,8 +386,8 @@ async function processSettlement(
     return { settlement_id: sid, result: 'skipped', error: `Already ${settlement.posting_state}` };
   }
   // ─── Source Push Gate: reconciliation-only ─────────────────────
-  if (settlement.source === 'api_sync' && ((settlement.marketplace || '').startsWith('shopify_orders_') || (settlement.settlement_id || '').startsWith('shopify_auto_'))) {
-    return { settlement_id: sid, result: 'skipped', error: 'Reconciliation-only settlement (Shopify-derived)' };
+  if (isReconciliationOnly(settlement.source, settlement.marketplace, settlement.settlement_id)) {
+    return { settlement_id: sid, result: 'skipped', error: 'Reconciliation-only settlement — not pushable to Xero' };
   }
   // ─── Safety check 2: No existing Xero invoice ─────────────────
   if (settlement.xero_invoice_id) {
