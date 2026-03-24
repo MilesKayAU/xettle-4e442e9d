@@ -298,6 +298,121 @@ export default function ApiConnectionsPanel({
           {/* Bunnings Marketplace */}
           <MiraklConnectionPanel />
 
+          {/* Kogan Marketplace API */}
+          <Card className="border-border bg-muted/30">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-primary" />
+                  Kogan Marketplace API
+                </CardTitle>
+                <Badge variant={summary.kogan ? 'default' : 'outline'} className="text-[10px]">
+                  {summary.kogan ? 'Connected' : 'Not configured'}
+                </Badge>
+              </div>
+              <CardDescription className="text-xs mt-1">
+                Your Kogan account manager will provide your Seller ID and Seller Token. These are used for inventory visibility only — settlements still require CSV upload.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0 space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="kogan-seller-id" className="text-xs">Seller ID</Label>
+                <Input
+                  id="kogan-seller-id"
+                  placeholder="e.g. 12345"
+                  value={koganSellerId}
+                  onChange={(e) => setKoganSellerId(e.target.value)}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="kogan-seller-token" className="text-xs">Seller Token</Label>
+                <div className="relative">
+                  <Input
+                    id="kogan-seller-token"
+                    type={showKoganToken ? 'text' : 'password'}
+                    placeholder="Enter your seller token"
+                    value={koganSellerToken}
+                    onChange={(e) => setKoganSellerToken(e.target.value)}
+                    className="h-8 text-sm pr-8"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowKoganToken(!showKoganToken)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showKoganToken ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <Button
+                  size="sm"
+                  disabled={!koganSellerId.trim() || !koganSellerToken.trim() || koganSaving}
+                  onClick={async () => {
+                    if (!userId) return;
+                    setKoganSaving(true);
+                    try {
+                      await Promise.all([
+                        supabase.from('app_settings').upsert(
+                          { user_id: userId, key: 'kogan_api_seller_id', value: koganSellerId.trim() },
+                          { onConflict: 'user_id,key' }
+                        ),
+                        supabase.from('app_settings').upsert(
+                          { user_id: userId, key: 'kogan_api_seller_token', value: koganSellerToken.trim() },
+                          { onConflict: 'user_id,key' }
+                        ),
+                      ]);
+                      setSummary(prev => ({ ...prev, kogan: true }));
+                      toast.success('Kogan API credentials saved');
+                    } catch {
+                      toast.error('Failed to save Kogan credentials');
+                    } finally {
+                      setKoganSaving(false);
+                    }
+                  }}
+                  className="text-xs h-7"
+                >
+                  {koganSaving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                  Save
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!summary.kogan || koganTesting}
+                  onClick={async () => {
+                    setKoganTesting(true);
+                    setKoganTestResult(null);
+                    try {
+                      const { data, error } = await supabase.functions.invoke('fetch-kogan-inventory', {
+                        body: { limit: 1 },
+                      });
+                      if (error) throw error;
+                      if (data?.error && !data?.items?.length) {
+                        setKoganTestResult('fail');
+                        toast.error(`Kogan test failed: ${data.error}`);
+                      } else {
+                        setKoganTestResult('success');
+                        toast.success(`Kogan connected — ${data?.items?.length ?? 0} product(s) found`);
+                      }
+                    } catch (err: any) {
+                      setKoganTestResult('fail');
+                      toast.error(`Kogan test failed: ${err.message}`);
+                    } finally {
+                      setKoganTesting(false);
+                    }
+                  }}
+                  className="text-xs h-7"
+                >
+                  {koganTesting ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                  Test Connection
+                </Button>
+                {koganTestResult === 'success' && <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
+                {koganTestResult === 'fail' && <XCircle className="h-4 w-4 text-destructive" />}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Shopify Channel Management */}
           <ChannelManagement />
         </CardContent>
