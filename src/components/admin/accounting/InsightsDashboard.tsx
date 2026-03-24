@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { loadFulfilmentMethods, loadPostageCosts, getEffectiveMethod, type FulfilmentMethod } from '@/utils/fulfilment-settings';
+import { loadFulfilmentMethods, loadPostageCosts, loadFreeShippingThresholds, getEffectiveMethod, type FulfilmentMethod } from '@/utils/fulfilment-settings';
 import { ReconciliationHealth } from '@/components/shared/ReconciliationStatus';
 import MarketplaceProfitComparison from '@/components/insights/MarketplaceProfitComparison';
 import SkuComparisonView from '@/components/insights/SkuComparisonView';
