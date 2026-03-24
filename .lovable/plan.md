@@ -1,71 +1,84 @@
 
+Problem confirmed: the live Kogan PDF uploads are still being routed through the generic CSV parser path in some save flows, which is why users see “Could not find sales or net payout columns in the file.” That message can only come from `parseGenericCSV`, and the current Kogan handling is incomplete because Kogan PDFs are shown as companion files in the UI but `processAllConfirmed()` still iterates every detected file and calls `processFile()` on the PDF itself.
 
-## Audit: Canonical Rule Compliance Across Loaders and Insights
+What I found
+- `detectFile()` correctly classifies `Kogan_3446386.pdf` as `marketplace: 'kogan'`, `fileFormat: 'pdf'`, `dataCompleteness: 'partial'`.
+- The uploaded PDF itself parses structurally fine. The parsed content includes:
+  - `A/P Invoice 344840`
+  - `Monthly Seller Fee`
+  - `Total paid amount: 525.41 AUD`
+- In `SmartUploadFlow.tsx`, `preParseFile()` returns `[]` for Kogan PDFs intentionally.
+- But in `processFile()`, Kogan PDFs are not handled as a special case, so they fall into the generic parser branch and trigger the CSV-column error.
+- `processAllConfirmed()` currently processes every detected/reviewing settlement file, including Kogan PDFs, so bulk upload is guaranteed to hit this bug.
+- The current Kogan merge logic also grabs the first uploaded Kogan PDF globally, not the matched PDF for the specific CSV settlement. That is unsafe for bulk uploads and can merge the wrong remittance into the wrong settlement.
 
-### Verdict: 90% Compliant — 4 Gaps Found
+Implementation plan
 
-The SmartUploadFlow correctly routes through `saveSettlement()` → `saveSettlementCanonical()` for all settlement inserts. Source priority, sanity validation, and push gating are enforced. The Insights charts correctly exclude `api_sync` rows when CSV data exists, and `isReconciliationOnly()` is applied at all push surfaces.
+1. Make Kogan PDFs canonical companion files, not standalone settlement files in save flow
+- Update `processFile()` so:
+  - Kogan PDF never falls through to `parseGenericCSV` / `parseGenericXLSX`
+  - If user tries to save a Kogan PDF by itself, show a clear status like “Waiting for matching CSV” instead of an error
+- Update `processAllConfirmed()` to skip standalone Kogan PDF files entirely
+- Result: bulk upload no longer throws the misleading generic parser error
 
-However, 4 gaps exist:
+2. Make Kogan pairing the single source of truth for bulk and single saves
+- Use the existing `koganPairings` grouping as the canonical matching model
+- When saving a Kogan CSV, locate its matched PDF by doc number from the pairing map, not by “first Kogan PDF found”
+- If no matched PDF exists:
+  - save CSV-only with `metadata.missingPdf = true`
+  - preserve explicit warning that reconciliation is incomplete
+- If a matched PDF exists:
+  - merge only that PDF’s remittance values into that CSV settlement
 
----
+3. Tighten Kogan PDF parsing and pairing reliability
+- Extend doc-number extraction to support the real Kogan remittance layout consistently:
+  - `A/P Invoice`
+  - `A/P Credit note`
+  - `Journal Entry`
+  - remittance header number vs invoice doc number
+- Ensure pairing uses invoice doc numbers from paid documents table, not the remittance number in the filename/title
+- Add a fallback pairing rule when one CSV settlement and one PDF clearly overlap by date/period but doc number extraction is imperfect
 
-### Gap 1: InsightsDashboard `settlement_profit` query has no `user_id` filter
+4. Improve UX so the system is explicit about what is accurate vs incomplete
+- In the Kogan pairing card:
+  - clearly label each row as `Ready to save`, `Missing PDF`, or `Missing CSV`
+  - suppress any generic “sales/net payout column” errors for PDFs
+  - show PDF-only rows as informational, not failed
+- For CSV-only Kogan saves:
+  - show “Saved with warning — bank deposit may be wrong until PDF is added”
+- For PDF-only uploads:
+  - show “Recognised remittance advice — upload the matching CSV to complete this settlement”
 
-**File:** `src/components/admin/accounting/InsightsDashboard.tsx` (line 141-143)
+5. Make downstream analytics respect Kogan completeness status
+- Audit all insights loaders that use settlement totals so CSV-only Kogan settlements are visibly treated as incomplete where relevant
+- Specifically:
+  - keep saved revenue/order detail from CSV
+  - ensure net payout / fee-sensitive views can surface that `missingPdf` is present
+  - add subtle warnings in Insights where Kogan figures are based on incomplete settlement data
+- This keeps charts usable without pretending incomplete Kogan data is final
 
-```typescript
-// CURRENT — relies solely on RLS
-supabase.from('settlement_profit').select('marketplace_code, orders_count')
-```
+Files to update
+- `src/components/admin/accounting/SmartUploadFlow.tsx`
+  - skip Kogan PDFs in save loops
+  - handle Kogan PDF as companion-only file
+  - save via matched pair, not first-PDF-wins
+  - improve user-facing statuses/messages
+- `src/utils/kogan-remittance-parser.ts`
+  - harden paid-doc extraction and invoice doc-number matching
+- Potentially small follow-up touches in:
+  - `src/components/admin/accounting/InsightsDashboard.tsx`
+  - `src/components/insights/MarketplaceProfitComparison.tsx`
+  if incomplete Kogan settlements need an explicit warning state in analytics UI
 
-Compare with `MarketplaceProfitComparison.tsx` (line 110-112) which correctly adds `.eq('user_id', user.id)`. While RLS protects the data, the InsightsDashboard query is inconsistent and could silently return empty results if the RLS policy changes or auth state is stale.
+Expected outcome
+- Bulk uploading many Kogan PDFs will no longer fail with the generic CSV parser message
+- The uploader will accurately tell the user:
+  - which settlements are complete
+  - which are missing a PDF
+  - which are missing a CSV
+- Only matched CSV+PDF pairs will be merged
+- Insights and downstream profit views will use the right source state and flag incomplete Kogan settlements instead of silently treating them as fully reconciled
 
-**Fix:** Add `.eq('user_id', currentUser.id)` to `settlement_profit`, `marketplace_ad_spend`, `marketplace_shipping_costs`, `marketplace_shipping_stats`, and `order_shipping_estimates` queries. The `settlements` query also lacks it (line 126-132).
-
----
-
-### Gap 2: InsightsDashboard doesn't filter `settlement_profit` by active settlement IDs
-
-**File:** `src/components/admin/accounting/InsightsDashboard.tsx` (line 183-189)
-
-The `profitOrderCounts` aggregation sums ALL `settlement_profit` rows for the user — including rows from `duplicate_suppressed` or `shopify_auto_*` settlements that the settlements query (line 130-131) excludes. This means order counts may be inflated, leading to over-estimated shipping deductions.
-
-**Fix:** After loading both datasets, filter `profitOrderCounts` to only include `settlement_id`s that exist in the filtered settlements result set. Same pattern `MarketplaceProfitComparison` uses with `activeSettlementIds`.
-
----
-
-### Gap 3: `MarketplaceProfitComparison` doesn't filter PAC/shipping queries for suppressed settlements
-
-**File:** `src/components/insights/MarketplaceProfitComparison.tsx` (line 122-127)
-
-The `settlement_lines` query fetches ALL lines for the user including those belonging to suppressed settlements. When counting distinct order IDs for shipping calculation, this inflates the count.
-
-**Fix:** After building `activeSettlementIds`, filter `orderCountsRes` rows to only those whose `settlement_id` (via a join or post-filter) is in the active set.
-
----
-
-### Gap 4: `settlement_lines` inserts in SmartUploadFlow are not part of canonical action
-
-**File:** `src/components/admin/accounting/SmartUploadFlow.tsx` (lines 998-1152)
-
-Settlement line inserts happen directly via `supabase.from('settlement_lines').insert()` in 6+ places across SmartUploadFlow, ShopifyOrdersDashboard, and AccountingDashboard. These bypass the canonical layer. While `settlement_lines` writes don't have the same invariants as `settlements` (no source priority, no sanity check), this fragmentation means:
-- No consistent error handling
-- No audit logging
-- Settlement lines could be inserted without their parent settlement succeeding
-
-**Fix (lower priority):** Extract a `saveSettlementLines()` function into `src/actions/settlements.ts` that validates the parent settlement exists before inserting lines. Migrate all 6 call sites.
-
----
-
-### Files to Modify
-
-| File | Change | Priority |
-|------|--------|----------|
-| `src/components/admin/accounting/InsightsDashboard.tsx` | Add `user_id` filter to all queries; filter `profitOrderCounts` by active settlement IDs | High |
-| `src/components/insights/MarketplaceProfitComparison.tsx` | Filter order count query by active settlement IDs | Medium |
-| `src/actions/settlements.ts` | Add `saveSettlementLines()` canonical function | Low |
-| `src/components/admin/accounting/SmartUploadFlow.tsx` | Migrate line inserts to canonical function | Low |
-
-### No database changes needed
-
+Technical note
+- The live issue is real and reproducible from code inspection: the error text originates from `generic-csv-parser.ts`, and the only path that explains the screenshot is Kogan PDFs being incorrectly processed through the generic parser during bulk save.
+- The biggest correctness fix is not just “parse PDFs better”; it is making Kogan PDFs non-saveable standalone companions and binding merge logic to the exact pair instead of any uploaded Kogan PDF.
