@@ -1,48 +1,73 @@
 
 
-## Plan: Fix Double-Counting in MarketplaceProfitComparison
+## Plan: Fix Bunnings (and All Mirakl) Shipping Undercount
 
 ### Root Cause
 
-The profit ranking table double-counts revenue because `activeSettlementIds` (line 134) is built from ALL settlements including `api_sync` rows, but the `grouped` map (line 146-153) filters `api_sync` out when CSV data exists. Since the profit aggregation loop (line 176-193) uses `activeSettlementIds` to validate rows, `shopify_auto_*` profit entries still pass and get counted alongside CSV profit entries.
+Bunnings/Mirakl CSV settlements contain **summary-level lines** (1 revenue line, no order_ids). The `recalculate-profit` function calculates order count as `orderIds.size || revenueLines.length || 1`, which gives **1** for every Bunnings settlement. Shipping deduction = 1 × $9 = $9 per settlement.
 
-Additionally, `isMarginSuspicious()` (line 184) silently drops legitimate profit rows where margins exceed `(1 - commission_rate) * 100 + 5%`. Since there's no COGS, many rows have high margins (e.g., 85% for Bunnings) which may or may not trigger this filter depending on the commission estimate. This creates inconsistent filtering that makes totals appear wrong.
+Reality: A $1,257 Bunnings settlement contains ~30 orders. Correct shipping = ~$270, not $9.
+
+```text
+Current:   $1,131 revenue - $151 fees - $9 shipping  = $971 profit (85% margin)
+Corrected: $1,131 revenue - $151 fees - $270 shipping = $710 profit (63% margin)
+```
+
+This same issue applies to all Mirakl-sourced CSV settlements (Bunnings, BigW, Everyday Market, MyDeal) which use summary lines.
+
+**Shopify data IS correct** — Shopify payout settlements (source: `api`) contain only pure Shopify store orders. No sub-channel order IDs overlap. The $1,663 revenue and 65.9% margin for Shopify accurately reflects only direct Shopify store sales.
 
 ### Fix
 
-**1. Rebuild `activeSettlementIds` AFTER api_sync deduplication**
+**Cross-reference order counts from `shopify_auto_*` settlements**
 
-Move the `activeSettlementIds` construction to after line 153 (after the api_sync filtering loop). This way, `shopify_auto_*` settlement IDs are removed from the active set when CSV data exists, and their corresponding profit rows are excluded.
+File: `supabase/functions/recalculate-profit/index.ts`
+
+When the order count from settlement_lines is 0 or 1 for a CSV settlement, look up the matching `shopify_auto_[marketplace]` settlements for the same period and use their order count instead. These auto-settlements have accurate per-order data from Shopify.
+
+Implementation:
+1. Build a map of `marketplace → month → order_count` from `shopify_auto_*` settlement_profit rows
+2. When processing a CSV settlement where `orderIds.size <= 1`, look up the auto-settlement order count for the same marketplace and overlapping period
+3. Use that count for shipping calculation: `shippingOrderCount = autoOrderCount || ordersCount`
 
 ```text
-Before (line 134): activeSettlementIds includes shopify_auto_bunnings
-After (line 154):  activeSettlementIds excludes shopify_auto_bunnings when CSV bunnings data exists
+// Pseudocode
+const autoOrderCounts: Map<string, Map<string, number>> = new Map();
+// key: marketplace, value: Map<month_str, order_count>
+
+for (const s of settlements) {
+  if (s.settlement_id.startsWith('shopify_auto_')) {
+    const lines = linesBySettlement.get(s.settlement_id) || [];
+    const count = new Set(lines.filter(l => l.order_id).map(l => l.order_id)).size;
+    // Store by marketplace + month
+  }
+}
+
+// When processing CSV settlement with orderIds.size <= 1:
+const monthKey = s.period_end?.substring(0, 7); // e.g. "2026-01"
+const autoCount = autoOrderCounts.get(mp)?.get(monthKey);
+if (autoCount && autoCount > ordersCount) {
+  shippingOrderCount = autoCount;
+}
 ```
 
-**2. Remove `isMarginSuspicious` filter from profit aggregation**
+This gives Bunnings Jan: 36 orders × $9 = $324 shipping instead of $9.
 
-This filter was intended to catch data anomalies but it silently drops real data. With no COGS, all margins are high — this is expected, not suspicious. The filter should only apply when COGS data IS present (a margin of 95% WITH product costs would be suspicious; without costs it's just a payout ratio).
+### Expected Result
 
-Replace line 184 with a check that only filters when `total_cogs > 0`:
-- Fetch `total_cogs` in the profit query (add to select on line 93)
-- Only apply `isMarginSuspicious` when `total_cogs > 0`
-
-**3. Verify the recalculate-profit function actually ran**
-
-The edge function logs show only "booted" with no processing output. The function may have hit a silent error or wasn't invoked properly. Add a "Recalculate Profit" button to the Insights page (the Profit Ranking card header) so users can trigger it directly without navigating to Settings.
+| Marketplace | Before | After |
+|---|---|---|
+| Bunnings margin | 73.3% (shipping undercounted) | ~58-63% (realistic) |
+| Shopify margin | 65.9% (correct) | 65.9% (unchanged) |
+| Kogan margin | 56.2% (correct — already uses auto data) | 56.2% (unchanged) |
 
 ### Files Modified
 
 | File | Changes |
-|------|---------|
-| `src/components/insights/MarketplaceProfitComparison.tsx` | Move `activeSettlementIds` after dedup loop; add `total_cogs` to query; only apply `isMarginSuspicious` when COGS > 0; add recalculate button |
-
-### Expected Result After Fix
-
-- Bunnings revenue should reflect ONLY CSV settlements (not CSV + shopify_auto combined)
-- Shopify should show only pure Shopify orders (not all sub-channel orders)
-- No legitimate rows silently dropped by margin filter
-- Users can trigger profit recalculation directly from the Insights page
+|---|---|
+| `supabase/functions/recalculate-profit/index.ts` | Cross-reference auto-settlement order counts for CSV settlements with missing order IDs |
 
 ### No database changes needed
+
+After deploying, click "Recalculate" on the Insights page to refresh profit data.
 
