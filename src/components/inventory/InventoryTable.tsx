@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Search, ArrowUpDown } from 'lucide-react';
+import { Search, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export interface InventoryColumn {
@@ -12,6 +12,8 @@ export interface InventoryColumn {
   sortable?: boolean;
   render?: (value: any, row: any) => React.ReactNode;
 }
+
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
 interface InventoryTableProps {
   columns: InventoryColumn[];
@@ -42,6 +44,8 @@ export default function InventoryTable({
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const filtered = useMemo(() => {
     let result = data;
@@ -71,6 +75,13 @@ export default function InventoryTable({
     return result;
   }, [data, search, statusFilter, statusKey, sortKey, sortDir]);
 
+  // Reset to page 1 when filters change
+  React.useEffect(() => { setPage(1); }, [search, statusFilter, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pagedData = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+
   const toggleSort = (key: string) => {
     if (sortKey === key) {
       setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -89,6 +100,12 @@ export default function InventoryTable({
       </div>
     );
   }
+
+  // Pagination page numbers (up to 5 around current)
+  const pageNumbers: number[] = [];
+  const pStart = Math.max(1, safePage - 2);
+  const pEnd = Math.min(totalPages, pStart + 4);
+  for (let i = pStart; i <= pEnd; i++) pageNumbers.push(i);
 
   return (
     <div className="space-y-3">
@@ -136,14 +153,14 @@ export default function InventoryTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.length === 0 ? (
+            {pagedData.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={columns.length} className="text-center py-8 text-muted-foreground">
                   {emptyMessage}
                 </TableCell>
               </TableRow>
             ) : (
-              filtered.map((row, i) => (
+              pagedData.map((row, i) => (
                 <TableRow key={row.sku || row.id || i} className={row._muted ? 'opacity-50' : ''}>
                   {columns.map(col => (
                     <TableCell key={col.key} className="text-sm">
@@ -155,6 +172,49 @@ export default function InventoryTable({
             )}
           </TableBody>
         </Table>
+
+        {/* Pagination footer */}
+        {filtered.length > 0 && (
+          <div className="flex items-center justify-between text-xs text-muted-foreground px-4 py-3 border-t border-border/50">
+            <span>
+              Showing {((safePage - 1) * pageSize) + 1} to {Math.min(safePage * pageSize, filtered.length)} of {filtered.length} records
+            </span>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span>Rows per page</span>
+                <Select value={String(pageSize)} onValueChange={v => setPageSize(Number(v))}>
+                  <SelectTrigger className="w-[70px] h-7 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAGE_SIZE_OPTIONS.map(s => (
+                      <SelectItem key={s} value={String(s)}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="outline" size="sm" className="h-7 px-2 text-xs"
+                    disabled={safePage <= 1}
+                    onClick={() => setPage(safePage - 1)}
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5 mr-0.5" /> Previous
+                  </Button>
+                  <span className="px-2">Page {safePage} of {totalPages}</span>
+                  <Button
+                    variant="outline" size="sm" className="h-7 px-2 text-xs"
+                    disabled={safePage >= totalPages}
+                    onClick={() => setPage(safePage + 1)}
+                  >
+                    Next <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {hasMore && onLoadMore && (
