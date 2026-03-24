@@ -65,16 +65,17 @@ Deno.serve(async (req) => {
     const admin = createClient(supabaseUrl, supabaseServiceKey);
     const userId = user.id;
 
-    // Load user's fulfilment methods, postage costs, and MCF costs from app_settings
+    // Load user's fulfilment methods, postage costs, MCF costs, and free-shipping thresholds from app_settings
     const { data: settingsRows } = await admin
       .from("app_settings")
       .select("key, value")
       .eq("user_id", userId)
-      .or("key.like.fulfilment_method:%,key.like.postage_cost:%,key.like.mcf_cost:%");
+      .or("key.like.fulfilment_method:%,key.like.postage_cost:%,key.like.mcf_cost:%,key.like.free_shipping_threshold:%");
 
     const fulfilmentMethods: Record<string, string> = {};
     const postageCosts: Record<string, number> = {};
     const mcfCosts: Record<string, number> = {};
+    const freeShippingThresholds: Record<string, number> = {};
 
     for (const row of settingsRows || []) {
       if (row.key.startsWith("fulfilment_method:")) {
@@ -88,6 +89,10 @@ Deno.serve(async (req) => {
         const code = row.key.replace("mcf_cost:", "");
         const num = parseFloat(row.value || "");
         if (code && !isNaN(num) && num >= 0) mcfCosts[code] = num;
+      } else if (row.key.startsWith("free_shipping_threshold:")) {
+        const code = row.key.replace("free_shipping_threshold:", "");
+        const num = parseFloat(row.value || "");
+        if (code && !isNaN(num) && num > 0) freeShippingThresholds[code] = num;
       }
     }
 
@@ -101,8 +106,8 @@ Deno.serve(async (req) => {
         .is("duplicate_of_settlement_id", null)
     );
 
-    // Load settlement lines (paginated) and product costs
-    const [allLines, productCosts] = await Promise.all([
+    // Load settlement lines (paginated), product costs, and Shopify orders for threshold calc
+    const [allLines, productCosts, shopifyOrders] = await Promise.all([
       fetchAllRows(
         admin.from("settlement_lines")
           .select("settlement_id, sku, amount, order_id, transaction_type, fulfilment_channel")
@@ -113,7 +118,23 @@ Deno.serve(async (req) => {
           .select("sku, cost, currency, label")
           .eq("user_id", userId)
       ),
+      // Load Shopify orders to determine order values for free-shipping threshold
+      Object.keys(freeShippingThresholds).length > 0
+        ? fetchAllRows(
+            admin.from("shopify_orders")
+              .select("order_id, total_price, source_name")
+              .eq("user_id", userId)
+          )
+        : Promise.resolve([]),
     ]);
+
+    // Build order value lookup: order_id → total_price (for threshold checking)
+    const orderValueMap = new Map<string, number>();
+    for (const so of shopifyOrders as any[]) {
+      if (so.order_id && so.total_price != null) {
+        orderValueMap.set(String(so.order_id), Number(so.total_price));
+      }
+    }
 
     // Build cost lookup
     const costMap = new Map<string, number>();
@@ -269,6 +290,29 @@ Deno.serve(async (req) => {
         shippingOrderCount = ordersCount;
       }
 
+      // Apply free-shipping threshold: exclude orders over the threshold from shipping count
+      const threshold = freeShippingThresholds[mp] || freeShippingThresholds[mp.toLowerCase()] || 0;
+      if (threshold > 0 && orderIds.size > 0 && orderValueMap.size > 0) {
+        let belowThresholdCount = 0;
+        let matched = 0;
+        for (const oid of orderIds) {
+          const val = orderValueMap.get(oid);
+          if (val !== undefined) {
+            matched++;
+            if (val < threshold) belowThresholdCount++;
+          }
+        }
+        if (matched > 0) {
+          // Apply the below-threshold ratio to the shippingOrderCount
+          const belowRatio = belowThresholdCount / matched;
+          shippingOrderCount = Math.round(shippingOrderCount * belowRatio);
+          if (shippingOrderCount < 0) shippingOrderCount = 0;
+        }
+      } else if (threshold > 0 && shippingOrderCount > 1 && orderValueMap.size === 0) {
+        // No order-level data but threshold is set — log warning and keep full count
+        console.log(`[profit] ${mp}: free shipping threshold $${threshold} set but no order value data available`);
+      }
+
       // Calculate postage deduction using canonical shared function
       let postageDeduction = 0;
       let fulfilmentDataIncomplete = false;
@@ -312,7 +356,7 @@ Deno.serve(async (req) => {
         postage_deduction: round(postageDeduction),
         gross_profit: round(grossProfit),
         margin_percent: round(marginPercent),
-        orders_count: ordersCount,
+        orders_count: shippingOrderCount,
         units_sold: unitsSold,
         uncosted_sku_count: uncostedSkus.size,
         uncosted_revenue: round(uncostedRevenue),

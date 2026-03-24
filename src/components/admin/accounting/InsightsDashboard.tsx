@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { loadFulfilmentMethods, loadPostageCosts, getEffectiveMethod, type FulfilmentMethod } from '@/utils/fulfilment-settings';
+import { loadFulfilmentMethods, loadPostageCosts, loadFreeShippingThresholds, getEffectiveMethod, type FulfilmentMethod } from '@/utils/fulfilment-settings';
 import { ReconciliationHealth } from '@/components/shared/ReconciliationStatus';
 import MarketplaceProfitComparison from '@/components/insights/MarketplaceProfitComparison';
 import SkuComparisonView from '@/components/insights/SkuComparisonView';
@@ -69,6 +69,9 @@ interface MarketplaceStats {
   pacShippingAvg14: number | null;
   pacShippingSample: number;
   pacEstimateQuality: string | null;
+  // Shipping revenue & threshold
+  salesShipping: number;
+  freeShippingThreshold: number;
 }
 
 interface AdSpendRecord {
@@ -124,10 +127,10 @@ export default function InsightsDashboard() {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) { setStats([]); return; }
       const userId = currentUser.id;
-      const [settlementsRes, adSpendRes, shippingRes, fulfilmentMethods, postageCosts, profitOrdersRes, observedRatesRes, pacShippingStatsRes, pacQualityRes] = await Promise.all([
+      const [settlementsRes, adSpendRes, shippingRes, fulfilmentMethods, postageCosts, freeShippingThresholds, profitOrdersRes, observedRatesRes, pacShippingStatsRes, pacQualityRes] = await Promise.all([
         supabase
           .from('settlements')
-          .select('settlement_id, marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start, is_hidden, is_pre_boundary, source, raw_payload')
+          .select('settlement_id, marketplace, sales_principal, sales_shipping, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start, is_hidden, is_pre_boundary, source, raw_payload')
           .eq('user_id', userId)
           .eq('is_hidden', false)
           .is('duplicate_of_settlement_id', null)
@@ -143,6 +146,7 @@ export default function InsightsDashboard() {
           .eq('user_id', userId),
         loadFulfilmentMethods(userId),
         loadPostageCosts(userId),
+        loadFreeShippingThresholds(userId),
         supabase
           .from('settlement_profit')
           .select('settlement_id, marketplace_code, orders_count')
@@ -535,6 +539,8 @@ export default function InsightsDashboard() {
           pacShippingAvg14: pacStats?.avg14 ?? null,
           pacShippingSample: pacStats?.sample ?? 0,
           pacEstimateQuality: pacQualityByMp[mp] ?? null,
+          salesShipping: rows.reduce((sum, r) => sum + Math.abs((r as any).sales_shipping || 0), 0),
+          freeShippingThreshold: freeShippingThresholds[mp] || 0,
         });
       }
 
@@ -1353,8 +1359,14 @@ export default function InsightsDashboard() {
                     </th>
                     <th className="text-right px-3 py-2.5 font-medium text-foreground">
                       <Tooltip>
+                        <TooltipTrigger className="cursor-help underline decoration-dotted">Shipping Rev.</TooltipTrigger>
+                        <TooltipContent className="text-xs">Shipping revenue from settlements. Amazon reports this separately; other marketplaces bundle it into sales.</TooltipContent>
+                      </Tooltip>
+                    </th>
+                    <th className="text-right px-3 py-2.5 font-medium text-foreground">
+                      <Tooltip>
                         <TooltipTrigger className="cursor-help underline decoration-dotted">Est. Shipping</TooltipTrigger>
-                        <TooltipContent className="text-xs">Estimated shipping cost based on configured cost per order × order count. Shows "—" for marketplace-fulfilled channels.</TooltipContent>
+                        <TooltipContent className="text-xs">Estimated shipping cost based on configured cost per order × order count. Excludes orders above free-shipping threshold. Shows "—" for marketplace-fulfilled channels.</TooltipContent>
                       </Tooltip>
                     </th>
                     <th className="text-right px-3 py-2.5 font-medium text-foreground">Net</th>
@@ -1411,10 +1423,25 @@ export default function InsightsDashboard() {
                         )}
                       </td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
+                        {s.salesShipping > 0 ? (
+                          formatCurrency(s.salesShipping)
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">Incl. in sales</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
                         {s.fulfilmentMethod === 'marketplace_fulfilled' ? (
                           <span className="text-[10px] text-muted-foreground">—</span>
                         ) : s.estimatedShippingCost > 0 ? (
-                          formatCurrency(s.estimatedShippingCost)
+                          <Tooltip>
+                            <TooltipTrigger className="cursor-help">
+                              {formatCurrency(s.estimatedShippingCost)}
+                            </TooltipTrigger>
+                            <TooltipContent className="text-xs max-w-xs">
+                              {s.shippingCostPerOrder > 0 && `$${s.shippingCostPerOrder}/order`}
+                              {s.freeShippingThreshold > 0 && ` • Free shipping over $${s.freeShippingThreshold}`}
+                            </TooltipContent>
+                          </Tooltip>
                         ) : (
                           <Button variant="ghost" size="sm" className="h-5 text-[10px] px-1.5 text-primary" onClick={() => openShippingDialog(s.marketplace)}>
                             <Plus className="h-3 w-3 mr-0.5" /> Add

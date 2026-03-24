@@ -23,6 +23,8 @@ import {
   savePostageCost,
   loadMcfCosts,
   saveMcfCost,
+  loadFreeShippingThresholds,
+  saveFreeShippingThreshold,
   isAmazonCode,
 } from '@/utils/fulfilment-settings';
 import LoadingSpinner from '@/components/ui/loading-spinner';
@@ -58,6 +60,7 @@ export default function FulfilmentMethodsPanel() {
   const [marketplaces, setMarketplaces] = useState<MarketplaceRow[]>([]);
   const [methods, setMethods] = useState<Record<string, FulfilmentMethod>>({});
   const [postageCosts, setPostageCosts] = useState<Record<string, string>>({});
+  const [freeShippingThresholds, setFreeShippingThresholds] = useState<Record<string, string>>({});
   const [mcfCosts, setMcfCosts] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -73,7 +76,7 @@ export default function FulfilmentMethodsPanel() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        const [connRes, stored, costs, mcfCostsData] = await Promise.all([
+        const [connRes, stored, costs, mcfCostsData, thresholds] = await Promise.all([
           supabase
             .from('marketplace_connections')
             .select('marketplace_code, marketplace_name')
@@ -82,6 +85,7 @@ export default function FulfilmentMethodsPanel() {
           loadFulfilmentMethods(user.id),
           loadPostageCosts(user.id),
           loadMcfCosts(user.id),
+          loadFreeShippingThresholds(user.id),
         ]);
 
         // Deduplicate by marketplace_code (keep first occurrence)
@@ -104,7 +108,11 @@ export default function FulfilmentMethodsPanel() {
           mcfStrings[code] = val > 0 ? String(val) : '';
         }
         setMcfCosts(mcfStrings);
-
+        const thresholdStrings: Record<string, string> = {};
+        for (const [code, val] of Object.entries(thresholds)) {
+          thresholdStrings[code] = val > 0 ? String(val) : '';
+        }
+        setFreeShippingThresholds(thresholdStrings);
         // Check if mixed mode prompt was dismissed
         const { data: dismissed } = await supabase
           .from('app_settings')
@@ -221,6 +229,22 @@ export default function FulfilmentMethodsPanel() {
     }
   };
 
+  const handleThresholdSave = async (code: string, value: string) => {
+    const trimmed = value.trim();
+    const num = trimmed === '' ? 0 : parseFloat(trimmed);
+    if (isNaN(num) || num < 0) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      await saveFreeShippingThreshold(user.id, code, num);
+      setFreeShippingThresholds(prev => ({ ...prev, [code]: num > 0 ? String(num) : '' }));
+      toast.success(num > 0 ? `Free shipping threshold saved for ${code}` : `Free shipping threshold cleared for ${code}`);
+      recalcInBackground();
+    } catch {
+      toast.error('Failed to save free shipping threshold');
+    }
+  };
   const handleMcfSave = async (code: string, value: string) => {
     const num = parseFloat(value);
     if (isNaN(num) || num < 0) return;
@@ -279,6 +303,15 @@ export default function FulfilmentMethodsPanel() {
         const num = parseFloat(val || '');
         if (!isNaN(num) && num >= 0) {
           await saveMcfCost(user.id, mp.marketplace_code, num);
+        }
+      }
+
+      // Save free-shipping thresholds
+      for (const mp of marketplaces) {
+        const val = freeShippingThresholds[mp.marketplace_code]?.trim() || '';
+        const num = val === '' ? 0 : parseFloat(val);
+        if (!isNaN(num) && num >= 0) {
+          await saveFreeShippingThreshold(user.id, mp.marketplace_code, num);
         }
       }
 
@@ -416,6 +449,29 @@ export default function FulfilmentMethodsPanel() {
                     onBlur={(e) => handlePostageSave(mp.marketplace_code, e.target.value)}
                     className="pl-7 h-8 text-sm"
                   />
+                </div>
+                <div className="pt-1 space-y-1">
+                  <Label htmlFor={`threshold-${mp.marketplace_code}`} className="text-xs text-muted-foreground flex items-center gap-1">
+                    <DollarSign className="h-3 w-3" />
+                    Free shipping threshold (orders above this = no postage deduction)
+                  </Label>
+                  <div className="relative w-40">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                    <Input
+                      id={`threshold-${mp.marketplace_code}`}
+                      type="number"
+                      min={0}
+                      step={1}
+                      placeholder="e.g. 50"
+                      value={freeShippingThresholds[mp.marketplace_code] || ''}
+                      onChange={(e) =>
+                        setFreeShippingThresholds(prev => ({ ...prev, [mp.marketplace_code]: e.target.value }))
+                      }
+                      onBlur={(e) => handleThresholdSave(mp.marketplace_code, e.target.value)}
+                      className="pl-7 h-8 text-sm"
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Leave empty to apply postage to all orders</p>
                 </div>
               </div>
             )}
