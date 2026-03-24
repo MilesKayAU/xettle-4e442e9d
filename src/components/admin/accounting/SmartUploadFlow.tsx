@@ -1487,8 +1487,11 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
     const batchCsvDocNums = new Set<string>();
     for (const csv of koganCsvFiles) {
       const sid = csv.settlements?.[0]?.settlement_id || '';
-      const m = sid.match(/(\d{5,})/);
-      if (m) batchCsvDocNums.add(m[1]);
+      const km = sid.match(/^kogan_(\d+)$/);
+      const lm = sid.match(/_(\d{5,})(?:\s|$)/);
+      const fm = sid.match(/(\d{5,})/);
+      const num = km?.[1] || lm?.[1] || fm?.[1];
+      if (num) batchCsvDocNums.add(num);
     }
     
     const orphanedDocNums = allPdfDocNums.filter(d => !batchCsvDocNums.has(d));
