@@ -1458,7 +1458,8 @@ export default function InsightsDashboard() {
           <CardContent className="space-y-6">
             {stats.map((s) => {
               if (s.feeBreakdown.length === 0) return null;
-              const keepPct = s.totalSales > 0 ? Math.max(0, s.netPayout / s.totalSales) : 0;
+              const adjustedNet = s.netPayout - s.estimatedShippingCost;
+              const keepPct = s.totalSales > 0 ? Math.max(0, adjustedNet / s.totalSales) : 0;
               return (
                 <div key={s.marketplace} className="space-y-3">
                   <div className="flex items-center justify-between">
