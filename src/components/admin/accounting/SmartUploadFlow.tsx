@@ -904,16 +904,38 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
       // ── Kogan PDF + CSV merge: augment CSV settlement with PDF deductions ──
       if (marketplace === 'kogan' && !df.file.name.toLowerCase().endsWith('.pdf')) {
-        // Find the PAIRED Kogan PDF via koganPairings (not first-found)
+        // Find the PAIRED Kogan PDF via period-based matching (primary) or doc number (fallback)
         let koganPdfFile: DetectedFile | null = null;
         
-        // Extract doc number from this CSV's settlement
+        // Extract CSV period month
+        const csvPeriodStart = settlements[0]?.period_start;
+        let csvPeriodMonth: string | undefined;
+        if (csvPeriodStart) {
+          const d = new Date(csvPeriodStart);
+          if (!isNaN(d.getTime())) {
+            csvPeriodMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          }
+        }
+        
+        // Extract doc number from this CSV's settlement (fallback)
         const csvSettlementId = settlements[0]?.settlement_id || '';
         const csvDocMatch = csvSettlementId.match(/(\d{5,})/);
         const csvDocNumber = csvDocMatch?.[1] || '';
         
-        // Search for matching PDF by doc number
-        if (csvDocNumber) {
+        // Pass 1: period-based match
+        if (csvPeriodMonth) {
+          for (const f of filesRef.current) {
+            if (f.detection?.marketplace !== 'kogan' || !f.file.name.toLowerCase().endsWith('.pdf')) continue;
+            const pdfMonth = f.koganPdfPeriodMonth || f.koganRemittanceResult?.periodMonth;
+            if (pdfMonth && pdfMonth === csvPeriodMonth) {
+              koganPdfFile = f;
+              break;
+            }
+          }
+        }
+        
+        // Pass 2: doc number match (fallback)
+        if (!koganPdfFile && csvDocNumber) {
           for (const f of filesRef.current) {
             if (f.detection?.marketplace !== 'kogan' || !f.file.name.toLowerCase().endsWith('.pdf')) continue;
             const pdfDocNums = f.koganDocNumbers || [];
