@@ -350,6 +350,42 @@ export type Database = {
         }
         Relationships: []
       }
+      cached_inventory: {
+        Row: {
+          created_at: string | null
+          error: string | null
+          fetched_at: string
+          has_more: boolean | null
+          id: string
+          items: Json
+          partial: boolean | null
+          platform: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          error?: string | null
+          fetched_at?: string
+          has_more?: boolean | null
+          id?: string
+          items?: Json
+          partial?: boolean | null
+          platform: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          error?: string | null
+          fetched_at?: string
+          has_more?: boolean | null
+          id?: string
+          items?: Json
+          partial?: boolean | null
+          platform?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       channel_alerts: {
         Row: {
           actioned_at: string | null
