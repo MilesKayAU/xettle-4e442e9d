@@ -1,62 +1,103 @@
 
+Problem confirmed from the two attached files:
 
-## Plan: Fix Kogan CSV Parsing — Dates Missing and Garbage Settlement Groups
+- The PDF `Kogan_3618482_1.pdf` clearly contains:
+  - A/P Invoice `362490`
+  - Transfer Date `23/03/2026`
+  - Total paid amount `663.15 AUD`
+- The CSV `KGN-AUMKAKOGAU20260315_362490_2.csv` clearly contains:
+  - `APInvoice = 362490`
+  - `InvoiceDate = 20260315`
+  - `DateManifested = 20260301`
 
-### Root Cause
+So these two files do belong together. The match is failing because of code, not because of the files.
 
-The database shows **every Kogan CSV save attempt fails** with `format_missing_dates_requires_manual_entry`. The system events reveal the CSV is being split into garbage groups with settlement IDs like:
-- `APCreditNote` (header text)
-- `------------------------------` (separator line)
-- `ungrouped` (fallback)
-- `Monthly Marketplace Seller Fee` (non-order row)
-- `286964`, `362490` (actual AP Invoice numbers — correct but dateless)
+What is actually broken
 
-The Kogan CSV fingerprint maps `settlement_id → APInvoice` and `period_start → InvoiceDate`. The generic CSV parser groups rows by `APInvoice`, but:
-1. Non-data rows (headers, separators, credit note labels) become their own "settlements"
-2. The `InvoiceDate` column is empty or unparseable for many rows, so `period_start` and `period_end` end up null
-3. The date gate hard-blocks the save
+1. `parseKoganPayoutCSV()` is not parsing Kogan’s compact dates
+   - In `src/utils/kogan-remittance-parser.ts`, `tryParseDate()` only supports:
+     - `DD/MM/YYYY`
+     - `YYYY-MM-DD`
+   - Your Kogan CSV uses `YYYYMMDD` like `20260315`
+   - Result: the parser cannot derive `period_start` / `period_end`
 
-### Fix (3 parts)
+2. Because the CSV parse has no valid dates, the settlement never becomes a proper Kogan settlement
+   - This matches the backend warnings already being logged:
+     - `format_missing_dates_requires_manual_entry`
+     - settlement_id `362490`
 
-**1. Add Kogan-specific pre-processing to filter junk rows before parsing**
+3. The pairing UI then makes it worse
+   - In `src/components/admin/accounting/SmartUploadFlow.tsx`, if a CSV has no parsed settlement, the pairing card falls back to using the whole filename as the “doc number”
+   - That means it tries to match the PDF against:
+     - `KGN-AUMKAKOGAU20260315_362490_2`
+     instead of:
+     - `362490`
+   - So it incorrectly shows “Missing PDF” even though the PDF is right there
 
-File: `src/components/admin/accounting/SmartUploadFlow.tsx` (in `processFile`, around the Kogan CSV merge block)
+Implementation plan
 
-Before passing Kogan CSV to the generic parser, pre-filter the CSV text:
-- Strip rows where the `APInvoice` column is empty, a separator (`---`), or matches known non-settlement labels (`APCreditNote`, `Monthly Marketplace Seller Fee`)
-- This prevents the generic parser from creating garbage settlement groups
+1. Fix Kogan date parsing
+   - Update `tryParseDate()` in `src/utils/kogan-remittance-parser.ts`
+   - Add support for compact `YYYYMMDD`
+   - Use it for `InvoiceDate`, `DateManifested`, and `DateRemitted`
 
-**2. Ensure dates are extracted from Kogan CSVs**
+2. Make Kogan CSV parsing deterministic for this format
+   - Keep grouping by `APInvoice`
+   - Ensure `362490` produces a real settlement:
+     - `settlement_id = kogan_362490`
+     - `period_start = 2026-03-01`
+     - `period_end = 2026-03-31`
+     - `metadata.periodMonth = 2026-03`
 
-File: `src/utils/generic-csv-parser.ts`
+3. Fix pairing fallback logic in the upload UI
+   - In `SmartUploadFlow.tsx`, do not use the full filename as the primary fallback doc number for Kogan
+   - If settlements are missing, extract the numeric invoice from:
+     - parsed CSV content, or
+     - filename regex `_362490_`
+   - This ensures doc-number matching still works even before save
 
-The date parser may be failing on Kogan's date format. Check and handle the `InvoiceDate` column format (likely `DD/MM/YYYY` or `YYYY-MM-DD`). If the mapped date column has no parseable dates in a group, fall back to extracting dates from other columns like `DateManifested` or `DateRemitted`.
+4. Fix the false “Missing PDF” state
+   - If the CSV failed to parse into a proper settlement, show the real error:
+     - “CSV date format could not be parsed”
+   - Do not show “Missing PDF” when the real problem is a broken CSV parse
 
-**3. Add Kogan CSV as a dedicated parser path (like Bunnings/Shopify)**
+5. Add a narrow regression test
+   - Add a parser test covering:
+     - CSV with `InvoiceDate=20260315`
+     - PDF with A/P Invoice `362490`
+     - expected paired month `2026-03`
+   - This prevents the same bug returning
 
-File: `src/components/admin/accounting/SmartUploadFlow.tsx`
+Files to update
 
-Add a Kogan-specific branch in `processFile` (alongside the existing `bunnings`, `shopify_payments`, `shopify_orders` branches):
-- Pre-filter non-data rows from the CSV
-- Group remaining rows by `APInvoice` number
-- Extract dates from `InvoiceDate` or `DateManifested` columns
-- Calculate sales, fees, and net from `Total (AUD)`, `Commission (Inc GST)`, `Remitted` columns
-- Produce properly formed `StandardSettlement[]` objects with valid dates
+- `src/utils/kogan-remittance-parser.ts`
+  - add `YYYYMMDD` support
+  - ensure period month is built correctly from compact dates
 
-This dedicated path ensures Kogan CSVs never hit the generic parser's edge cases.
+- `src/components/admin/accounting/SmartUploadFlow.tsx`
+  - repair Kogan pairing fallback logic
+  - stop showing false “Missing PDF” when CSV parse failed
+  - prefer extracted invoice number over whole filename fallback
 
-### Files Modified
+Technical note
 
-| File | Changes |
-|------|---------|
-| `src/components/admin/accounting/SmartUploadFlow.tsx` | Add Kogan CSV dedicated parsing branch in `processFile`; pre-filter junk rows |
-| `src/utils/kogan-remittance-parser.ts` | Add `parseKoganPayoutCSV()` function for CSV parsing (alongside existing PDF parser) |
+The root cause is not the PDF matcher itself. The root cause is:
+```text
+CSV date parse fails
+→ no valid Kogan settlement object
+→ pairing code falls back to full filename instead of invoice number
+→ doc-number and month matching both fail
+→ UI incorrectly says “Missing PDF”
+```
 
-### No database changes needed
+Expected outcome after fix
 
-### Expected Outcome
-- Kogan CSVs save successfully with correct dates and settlement IDs
-- Junk rows (separators, credit note headers, seller fee rows) are filtered out
-- Each AP Invoice number becomes one settlement with valid period dates
-- PDF pairing then works via period-based matching as already implemented
+For these exact two files:
+```text
+CSV: APInvoice 362490, InvoiceDate 20260315
+PDF: A/P Invoice 362490, Transfer Date 23/03/2026
+```
 
+The upload flow should show one paired Kogan settlement for March 2026, with the PDF attached and ready to save correctly.
+
+No database changes needed.
