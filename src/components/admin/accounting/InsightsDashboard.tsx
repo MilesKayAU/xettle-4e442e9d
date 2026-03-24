@@ -1489,6 +1489,18 @@ export default function InsightsDashboard() {
                         <span className="text-xs tabular-nums text-muted-foreground w-20 text-right">{formatCurrency(fee.amount)}</span>
                       </div>
                     ))}
+                    
+                    {/* Est. Shipping row */}
+                    {s.estimatedShippingCost > 0 && (
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground w-28 shrink-0 text-right">Est. Shipping</span>
+                        <div className="flex-1 h-5 bg-muted/20 rounded-full overflow-hidden">
+                          <div className="h-full bg-chart-2/70 rounded-full transition-all duration-500" style={{ width: `${(s.estimatedShippingCost / s.totalSales) * 100}%` }} />
+                        </div>
+                        <span className="text-xs font-semibold tabular-nums text-foreground w-14 text-right">{formatPct(s.estimatedShippingCost / s.totalSales)}</span>
+                        <span className="text-xs tabular-nums text-muted-foreground w-20 text-right">{formatCurrency(s.estimatedShippingCost)}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Total fees summary */}
