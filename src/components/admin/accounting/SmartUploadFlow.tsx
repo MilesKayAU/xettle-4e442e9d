@@ -538,6 +538,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               csvHeaders: result ? (csvHeaders || undefined) : undefined,
               sampleRows: sampleRows || undefined,
               wasLowConfidence: isFirstContact || false,
+              koganDocNumbers: koganDocNumbers || undefined,
+              koganRemittanceResult: koganRemittanceResult || undefined,
             };
 
             if (someDupes) {
