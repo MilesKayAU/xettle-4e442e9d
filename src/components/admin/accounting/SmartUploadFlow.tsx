@@ -1804,17 +1804,12 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                             <Button
                               size="sm"
                               className="h-7 text-xs gap-1.5"
-                              disabled={pair.csvFile.status === 'saving'}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 processFile(pair.csvIdx!);
                               }}
                             >
-                              {pair.csvFile.status === 'saving' ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <CheckCircle2 className="h-3 w-3" />
-                              )}
+                              <CheckCircle2 className="h-3 w-3" />
                               {pair.hasPdf ? 'Save (Paired)' : 'Save (CSV Only)'}
                             </Button>
                             {!pair.hasPdf && (
