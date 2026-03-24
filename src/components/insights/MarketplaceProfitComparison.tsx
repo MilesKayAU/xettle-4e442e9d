@@ -185,8 +185,9 @@ export default function MarketplaceProfitComparison() {
         // Skip corrupted rows
         if (Math.abs(Number(row.gross_revenue) || 0) > 10_000_000) continue;
         if ((Number(row.gross_revenue) || 0) <= 0) continue;
-        // Skip rows with suspiciously high margins for marketplaces with known fees
-        if (isMarginSuspicious(row.marketplace_code, Number(row.margin_percent) || 0)) continue;
+        // Only apply suspicious margin filter when COGS data exists (otherwise high margins are expected payout ratios)
+        const totalCogs = Number((row as any).total_cogs) || 0;
+        if (totalCogs > 0 && isMarginSuspicious(row.marketplace_code, Number(row.margin_percent) || 0)) continue;
 
         const mp = row.marketplace_code;
         if (!mpMap.has(mp)) mpMap.set(mp, { revenue: 0, profit: 0, margins: [], count: 0 });
