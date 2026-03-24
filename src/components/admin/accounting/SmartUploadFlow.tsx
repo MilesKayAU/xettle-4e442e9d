@@ -178,7 +178,59 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
   const [mergingPdfDoc, setMergingPdfDoc] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<DetectedFile[]>([]);
-  filesRef.current = files;
+
+  // Re-parse stale in-memory Kogan CSV entries that were created by the old generic parser
+  useEffect(() => {
+    const staleKoganCsvs = files
+      .map((f, i) => ({ f, i }))
+      .filter(({ f }) => {
+        if (f.detection?.marketplace !== 'kogan' || f.file.name.toLowerCase().endsWith('.pdf')) return false;
+        const firstSettlementId = f.settlements?.[0]?.settlement_id || '';
+        return !!firstSettlementId && !/^kogan_\d+$/.test(firstSettlementId);
+      });
+
+    if (staleKoganCsvs.length === 0) return;
+
+    let cancelled = false;
+
+    (async () => {
+      const reparsed = await Promise.all(
+        staleKoganCsvs.map(async ({ f, i }) => {
+          try {
+            const text = await f.file.text();
+            const result = parseKoganPayoutCSV(text);
+            if (!result.success || result.settlements.length === 0) return null;
+            return { index: i, settlements: result.settlements };
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      if (cancelled) return;
+      const valid = reparsed.filter((r): r is { index: number; settlements: StandardSettlement[] } => !!r);
+      if (valid.length === 0) return;
+
+      setFiles(prev => {
+        const updated = [...prev];
+        for (const { index, settlements } of valid) {
+          if (!updated[index]) continue;
+          updated[index] = {
+            ...updated[index],
+            settlements,
+            error: undefined,
+            status: updated[index].status === 'error' ? 'detected' : updated[index].status,
+          };
+        }
+        return updated;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [files]);
+
 
   // Check if Shopify is connected and validate the token
   useEffect(() => {
