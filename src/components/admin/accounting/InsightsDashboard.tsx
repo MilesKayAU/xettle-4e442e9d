@@ -127,10 +127,10 @@ export default function InsightsDashboard() {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) { setStats([]); return; }
       const userId = currentUser.id;
-      const [settlementsRes, adSpendRes, shippingRes, fulfilmentMethods, postageCosts, profitOrdersRes, observedRatesRes, pacShippingStatsRes, pacQualityRes] = await Promise.all([
+      const [settlementsRes, adSpendRes, shippingRes, fulfilmentMethods, postageCosts, freeShippingThresholds, profitOrdersRes, observedRatesRes, pacShippingStatsRes, pacQualityRes] = await Promise.all([
         supabase
           .from('settlements')
-          .select('settlement_id, marketplace, sales_principal, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start, is_hidden, is_pre_boundary, source, raw_payload')
+          .select('settlement_id, marketplace, sales_principal, sales_shipping, gst_on_income, seller_fees, refunds, bank_deposit, fba_fees, other_fees, storage_fees, period_end, period_start, is_hidden, is_pre_boundary, source, raw_payload')
           .eq('user_id', userId)
           .eq('is_hidden', false)
           .is('duplicate_of_settlement_id', null)
@@ -146,6 +146,7 @@ export default function InsightsDashboard() {
           .eq('user_id', userId),
         loadFulfilmentMethods(userId),
         loadPostageCosts(userId),
+        loadFreeShippingThresholds(userId),
         supabase
           .from('settlement_profit')
           .select('settlement_id, marketplace_code, orders_count')
