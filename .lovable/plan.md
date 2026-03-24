@@ -1,73 +1,115 @@
 
 
-## Plan: Clickable Summary Filters + Linked Product Detection with Similarity Guard
+## Plan: Inventory Caching Layer + Background Sync
 
-### Feature 1 — Clickable Summary Card Filters
+### Problem
 
-**File: `src/components/inventory/UniversalInventoryTab.tsx`**
+Every time the inventory page loads, it fires 5 live API calls to external platforms (Shopify, Amazon, eBay, Kogan, Mirakl). Individual tabs also re-fetch on mount. This means:
+- Page load = 5 API calls (dashboard-level for Universal)
+- Switching to Shopify tab = 6th API call (tab-level)
+- Every page revisit = another 5 calls
 
-- Add `activeFilter` state: `null | 'out_of_stock' | 'variance'`
-- Make "Out of Stock" and "Price Variance Alerts" cards clickable — pass `onClick` and `active` props to `SummaryCard`
-- Active card gets `ring-2 ring-primary cursor-pointer` styling
-- Filter `unified` array before passing to `InventoryTable`:
-  - `out_of_stock` → `total_real_stock === 0`
-  - `variance` → `has_variance === true`
-- Clicking active card clears filter
-- "Total Real Stock" and "Total SKUs" cards remain non-clickable (informational only)
+No data is cached. No background sync exists.
 
-### Feature 2 — Linked Product Detection + Combine Prompt
+### Solution: Two-Layer Fix
 
-**Extend `UnifiedSku` interface** with:
-- `match_sources: string[]` — platforms that contributed (e.g. `['shopify', 'amazon_fba']`)
-- `match_method: 'exact' | 'normalised' | 'title' | 'manual' | null`
+**Layer 1 — Database cache with staleness check (immediate UX fix)**
 
-**Track match metadata in `resolve()`**: When a match is found via normalised SKU or title fallback, record the method and append the platform source.
+Store fetched inventory in a `cached_inventory` table. When the page loads, serve from cache instantly. Only call live APIs if cache is older than 24 hours or user explicitly requests a refresh.
 
-**Manual confirmed links**: Read `sku_links` from `inventoryRules` (stored in `app_settings`). Pre-seed the `normSkuIndex` with confirmed links before processing platform data. Use upsert logic when saving (deduplicate by canonical SKU).
+**Layer 2 — Daily background sync via scheduled-sync**
 
-**"Possible link?" prompt with similarity guard**:
-- Simple Levenshtein-based similarity check between normalised SKUs
-- Only surface prompt when similarity >= 70%
-- Cap at 3-5 visible suggestions at a time (first 5 highest-similarity candidates)
-- Short SKUs (< 3 chars normalised) never trigger suggestions
-- False negatives preferred over false positives
+Add inventory fetching to the existing `scheduled-sync` orchestrator so inventory is refreshed automatically every 24 hours alongside settlement syncs.
 
-**Similarity function** (inline, no dependency):
-```typescript
-function similarity(a: string, b: string): number {
-  if (!a || !b) return 0;
-  const longer = a.length > b.length ? a : b;
-  const shorter = a.length > b.length ? b : a;
-  if (longer.length === 0) return 1;
-  // Simple character overlap ratio
-  let matches = 0;
-  const used = new Set<number>();
-  for (const c of shorter) {
-    const idx = [...longer].findIndex((ch, i) => ch === c && !used.has(i));
-    if (idx >= 0) { matches++; used.add(idx); }
-  }
-  return matches / longer.length;
-}
+### Database Change
+
+New table: `cached_inventory`
+
+```sql
+CREATE TABLE public.cached_inventory (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  platform text NOT NULL,  -- 'shopify', 'amazon', 'ebay', 'kogan', 'mirakl'
+  items jsonb NOT NULL DEFAULT '[]',
+  has_more boolean DEFAULT false,
+  partial boolean DEFAULT false,
+  error text,
+  fetched_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz DEFAULT now(),
+  UNIQUE (user_id, platform)
+);
+
+ALTER TABLE public.cached_inventory ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users read own inventory cache"
+  ON public.cached_inventory FOR SELECT
+  TO authenticated USING (auth.uid() = user_id);
+
+CREATE POLICY "Service role manages inventory cache"
+  ON public.cached_inventory FOR ALL
+  TO service_role USING (true);
 ```
 
-**New column in table**: After SKU column, a narrow "Link" column showing:
-- Multi-source rows: colored `Badge` chips (e.g. "S + A" for Shopify + Amazon) with tooltip showing match method
-- Possible link candidates: muted "Link?" button that opens a small confirm dialog
-- Confirmed manual links: solid badge with "Manual" indicator
+### Edge Function Changes
 
-**Confirm action**: When user clicks "Link?" and confirms, add the link to `rules.sku_links` and call `saveRules` with upsert — if the canonical SKU already has a links entry, merge the new SKU into it rather than creating a duplicate.
+**Each inventory edge function** (`fetch-shopify-inventory`, `fetch-ebay-inventory`, etc.) — add a write-through step: after fetching from the external API, upsert results into `cached_inventory`. This happens server-side so the cache is always fresh after any fetch.
 
-### File: `src/hooks/useInventoryRules.ts`
+**New edge function: `read-cached-inventory`** — reads all 5 platform caches for a user in one call. Returns cached data + `fetched_at` timestamps so the UI knows how stale each platform's data is.
 
-- Add `sku_links: Array<{ canonical: string; linked: string[] }>` to `InventoryRules` interface, defaulting to `[]`
-- Ensure `saveRules` uses upsert (`onConflict: 'user_id,key'`) — already does
+### Frontend Changes
 
-### Files Modified
+**`src/components/inventory/useInventoryFetch.ts`**
+- Add a `fetchCached()` method that reads from `cached_inventory` first
+- The existing `fetch()` remains as the "force refresh" path
+- New `isCacheStale(threshold: number)` helper — default 24 hours
 
-| File | Changes |
-|------|---------|
-| `src/components/inventory/UniversalInventoryTab.tsx` | Clickable filters, match tracking, link badges, similarity guard, possible-link prompts (max 5), confirm-link handler |
-| `src/hooks/useInventoryRules.ts` | Add `sku_links` to interface + default |
+**`src/components/inventory/InventoryDashboard.tsx`**
+- On mount: call `read-cached-inventory` (single fast DB read, no external API calls)
+- Show cached data immediately with a "Last synced: X hours ago" indicator
+- If any platform cache is older than 24h, show a subtle "Data may be outdated" badge
+- Add a "Refresh All" button on the Universal tab that triggers live fetches for all platforms
+- Individual tabs: show cached data on mount, refresh button triggers live fetch
 
-### No database changes needed
+**Individual tabs** (`ShopifyInventoryTab`, `EbayInventoryTab`, etc.)
+- Remove `useEffect(() => { fetch(); }, [])` — no auto-fetch on mount
+- Accept `initialData` and `lastFetched` props from dashboard
+- Only call live API when user clicks Refresh
+
+**`supabase/functions/scheduled-sync/index.ts`**
+- Add inventory cache refresh as an optional step in the daily sync pipeline
+- Respects existing `auto_sync_enabled` toggles per platform
+
+### UX Flow
+
+```text
+User opens Inventory page
+  → Single DB query returns all 5 platform caches (instant)
+  → Data renders immediately
+  → "Last synced: 3 hours ago" shown per platform
+  → User clicks "Refresh All" → live API calls fire → cache updated
+  
+Next day at 2am AEST
+  → scheduled-sync refreshes inventory caches automatically
+  → User opens page → sees fresh data instantly
+```
+
+### Files
+
+| File | Action |
+|------|--------|
+| Migration | New `cached_inventory` table |
+| `supabase/functions/read-cached-inventory/index.ts` | **New** — reads all cached platforms |
+| `supabase/functions/fetch-shopify-inventory/index.ts` | Add cache upsert after fetch |
+| `supabase/functions/fetch-ebay-inventory/index.ts` | Add cache upsert after fetch |
+| `supabase/functions/fetch-amazon-inventory/index.ts` | Add cache upsert after fetch |
+| `supabase/functions/fetch-kogan-inventory/index.ts` | Add cache upsert after fetch |
+| `supabase/functions/fetch-mirakl-inventory/index.ts` | Add cache upsert after fetch |
+| `src/components/inventory/useInventoryFetch.ts` | Add cached read path |
+| `src/components/inventory/InventoryDashboard.tsx` | Load from cache on mount, add Refresh All |
+| `src/components/inventory/ShopifyInventoryTab.tsx` | Remove auto-fetch, accept cached data |
+| `src/components/inventory/EbayInventoryTab.tsx` | Remove auto-fetch, accept cached data |
+| `src/components/inventory/AmazonInventoryTab.tsx` | Remove auto-fetch, accept cached data |
+| `src/components/inventory/KoganInventoryTab.tsx` | Remove auto-fetch, accept cached data |
+| `src/components/inventory/MiraklInventoryTab.tsx` | Remove auto-fetch, accept cached data |
+| `supabase/functions/scheduled-sync/index.ts` | Add inventory refresh step |
 
