@@ -1,51 +1,28 @@
 
 
-## Plan: Inventory Rules Panel with Smart SKU Matching (Phase 1.1)
+## Plan: Fix Mirakl Inventory 401 — Use Shared Auth Helper
 
-### What We're Building
+### Root Cause
+The `fetch-mirakl-inventory` edge function builds its authorization header inline (lines 50-55) instead of using the shared `getMiraklAuthHeader()` helper. This means:
+- If `auth_mode` is `oauth`, expired tokens are **never refreshed** — the stale token is sent and gets 401
+- If `auth_header_type` is `x-api-key`, the wrong header name (`Authorization` instead of `X-API-KEY`) is used
+- The `both` mode fallback (OAuth → API key) is not implemented
 
-1. **`src/hooks/useInventoryRules.ts`** — Hook to load/save inventory rules from `app_settings` (key: `inventory_rules`). Returns current rules and a setter. Default rules: `{ physical_sources: ['shopify', 'amazon_fba'], fbm_from_shopify: true, mirror_platforms: { kogan: 'shopify', ebay: 'shopify', mirakl: 'shopify' } }`.
+The settlements function (`fetch-mirakl-settlements`) already uses `getMiraklAuthHeader()` correctly and works fine. The inventory function just needs to do the same.
 
-2. **`src/components/inventory/InventoryRulesPanel.tsx`** — Collapsible settings panel with:
-   - **Physical Stock Sources**: checkboxes for Shopify, Amazon FBA, Amazon FBM, Kogan, eBay, Mirakl
-   - **FBM Toggle**: "Amazon FBM stock comes from Shopify warehouse" (default checked)
-   - **Mirror Platforms**: read-only static text (Kogan → Shopify, eBay → Shopify, Mirakl → Shopify) with "Customizable in a future update" note
-   - **Live preview**: checkbox changes update a local state immediately; the Universal tab recalculates in real-time without requiring save. Save button persists to `app_settings`.
+### Fix
 
-3. **`src/components/inventory/UniversalInventoryTab.tsx`** — Updated to:
-   - Accept `inventoryRules` as a prop
-   - Use rules to calculate `total_real_stock` from only `physical_sources`
-   - Respect `fbm_from_shopify` toggle
-   - **Smart SKU matching** with normalisation on BOTH sides:
-     ```typescript
-     const normalise = (sku: string) => sku.toLowerCase().replace(/[-\s_]/g, '');
-     ```
-     Match priority: (1) exact SKU, (2) normalised SKU match, (3) exact title match **only if title.length > 20**, (4) treat as separate row
-   - Mirror platforms shown greyed out in table when excluded from totals
+**File: `supabase/functions/fetch-mirakl-inventory/index.ts`**
 
-4. **`src/components/inventory/InventoryDashboard.tsx`** — Load rules via `useInventoryRules`, pass to `UniversalInventoryTab`, render gear button to toggle `InventoryRulesPanel`. Panel state changes flow to Universal tab immediately.
+1. Import `getMiraklAuthHeader` from `../_shared/mirakl-token.ts`
+2. Replace the inline auth header construction (lines 50-55) with a call to `getMiraklAuthHeader(supabase, token)` which handles OAuth refresh, header type variants, and fallback logic
+3. Use the returned `{ headerName, headerValue }` in the fetch headers
 
-### SKU Matching Detail
+This is a ~5 line change. The shared helper already handles all auth modes, token refresh, and error cases.
 
-The `getOrCreate` function will be refactored to a two-pass approach:
-- First pass: build a lookup by normalised SKU and by title (only titles > 20 chars)
-- When inserting a new platform's item: check normalised SKU first, then title fallback, then create new entry
-- Both sides normalised — Shopify `COF-60` matches Amazon `cof60`
+### Files Modified
+1. `supabase/functions/fetch-mirakl-inventory/index.ts` — Replace inline auth with `getMiraklAuthHeader()` call
 
-### Files
-
-| File | Action |
-|------|--------|
-| `src/hooks/useInventoryRules.ts` | **New** |
-| `src/components/inventory/InventoryRulesPanel.tsx` | **New** |
-| `src/components/inventory/UniversalInventoryTab.tsx` | Modified — rules-aware calculation + smart SKU matching |
-| `src/components/inventory/InventoryDashboard.tsx` | Modified — wire up rules hook + panel |
-
-### No database changes needed
-Uses existing `app_settings` table with key `inventory_rules`.
-
-### Constraints
-- No settlement/validation/Xero imports
-- Mirror platforms read-only in Phase 1
-- No manual SKU mapping UI (Phase 2)
+### Redeploy
+Edge function will be redeployed automatically.
 
