@@ -138,7 +138,7 @@ export default function InventoryDashboard({ onNavigateToSettings }: { onNavigat
   ].filter(Boolean);
 
   const handleSaveRules = async () => {
-    await saveRules();
+    await saveRules(rules);
     setRulesOpen(false);
   };
 
