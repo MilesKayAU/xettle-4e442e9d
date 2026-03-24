@@ -222,7 +222,7 @@ export default function InventoryDashboard({ onNavigateToSettings }: { onNavigat
         </div>
       )}
       {activeTab === 'universal' && anyPartial && !universalLoading && (
-        <div className="flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/5 px-3 py-2 text-xs text-yellow-700 dark:text-yellow-400">
+        <div className="flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-xs text-muted-foreground">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
           Some platforms returned partial results. Totals may not reflect full inventory.
         </div>
