@@ -11,10 +11,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { ACTIVE_CONNECTION_STATUSES } from '@/constants/connection-status';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { PackageOpen, Settings2 } from 'lucide-react';
+import { PackageOpen, Settings2, AlertTriangle } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 import { useInventoryRules } from '@/hooks/useInventoryRules';
+import { useInventoryFetch } from './useInventoryFetch';
 
 import UniversalInventoryTab from './UniversalInventoryTab';
 import ShopifyInventoryTab from './ShopifyInventoryTab';
@@ -56,6 +57,13 @@ export default function InventoryDashboard({ onNavigateToSettings }: { onNavigat
 
   // Inventory rules (live state for preview, save persists)
   const { rules, setRules, saveRules, loading: rulesLoading, saving } = useInventoryRules();
+
+  // Platform-level fetches for Universal tab aggregation
+  const shopifyFetch = useInventoryFetch('fetch-shopify-inventory');
+  const amazonFetch = useInventoryFetch('fetch-amazon-inventory');
+  const koganFetch = useInventoryFetch('fetch-kogan-inventory');
+  const ebayFetch = useInventoryFetch('fetch-ebay-inventory');
+  const miraklFetch = useInventoryFetch('fetch-mirakl-inventory');
 
   // Also check for Kogan API creds in app_settings and direct token tables
   const [hasKoganCreds, setHasKoganCreds] = useState(false);
@@ -105,7 +113,34 @@ export default function InventoryDashboard({ onNavigateToSettings }: { onNavigat
     return false;
   };
 
+  // Auto-fetch all platform inventory once connections are loaded
+  const [universalFetched, setUniversalFetched] = useState(false);
+  useEffect(() => {
+    if (!connectionsLoaded || universalFetched) return;
+    setUniversalFetched(true);
+    if (hasShopifyToken || activeCodes.has('shopify_payments') || activeCodes.has('shopify_orders')) shopifyFetch.fetch();
+    if (hasAmazonToken || ['amazon_au', 'amazon_us', 'amazon_uk', 'amazon_ca'].some(c => activeCodes.has(c))) amazonFetch.fetch();
+    if (hasKoganCreds || activeCodes.has('kogan')) koganFetch.fetch();
+    if (hasEbayToken || activeCodes.has('ebay_au')) ebayFetch.fetch();
+    if (hasMiraklToken || ['bunnings_marketplace', 'baby_bunting', 'jb_hi_fi'].some(c => activeCodes.has(c))) miraklFetch.fetch();
+  }, [connectionsLoaded, universalFetched, activeCodes, hasShopifyToken, hasAmazonToken, hasKoganCreds, hasEbayToken, hasMiraklToken]);
+
   const visibleTabs = ALL_TABS.filter(t => t.key === 'universal' || hasConnection(t));
+
+  const universalLoading = shopifyFetch.loading || amazonFetch.loading || koganFetch.loading || ebayFetch.loading || miraklFetch.loading;
+  const anyPartial = shopifyFetch.partial || amazonFetch.partial || koganFetch.partial || ebayFetch.partial || miraklFetch.partial;
+  const platformErrors = [
+    shopifyFetch.error && 'Shopify',
+    amazonFetch.error && 'Amazon',
+    koganFetch.error && 'Kogan',
+    ebayFetch.error && 'eBay',
+    miraklFetch.error && 'Mirakl',
+  ].filter(Boolean);
+
+  const handleSaveRules = async () => {
+    await saveRules(rules);
+    setRulesOpen(false);
+  };
 
   if (!connectionsLoaded || rulesLoading) {
     return <LoadingSpinner size="lg" text="Loading inventory..." />;
@@ -155,7 +190,7 @@ export default function InventoryDashboard({ onNavigateToSettings }: { onNavigat
             <InventoryRulesPanel
               rules={rules}
               onChange={setRules}
-              onSave={saveRules}
+              onSave={handleSaveRules}
               saving={saving}
             />
           </CollapsibleContent>
@@ -179,11 +214,31 @@ export default function InventoryDashboard({ onNavigateToSettings }: { onNavigat
         ))}
       </div>
 
+      {/* Partial / error banners for Universal */}
+      {activeTab === 'universal' && platformErrors.length > 0 && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          Failed to load: {platformErrors.join(', ')}. Totals may be incomplete.
+        </div>
+      )}
+      {activeTab === 'universal' && anyPartial && !universalLoading && (
+        <div className="flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-xs text-muted-foreground">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          Some platforms returned partial results. Totals may not reflect full inventory.
+        </div>
+      )}
+
       {/* Tab content */}
       {activeTab === 'universal' && (
         <UniversalInventoryTab
-          platformData={{ shopify: [], amazon: [], kogan: [], ebay: [], mirakl: [] }}
-          loading={false}
+          platformData={{
+            shopify: shopifyFetch.data,
+            amazon: amazonFetch.data,
+            kogan: koganFetch.data,
+            ebay: ebayFetch.data,
+            mirakl: miraklFetch.data,
+          }}
+          loading={universalLoading}
           inventoryRules={rules}
         />
       )}
