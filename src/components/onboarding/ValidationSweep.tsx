@@ -301,7 +301,7 @@ export default function ValidationSweep({
   ), [allConnections]);
 
   const isUsefulRecon = useCallback((r: ValidationRow) => {
-    return isReconciliationOnly('api_sync', r.marketplace_code, r.settlement_id)
+    return isReconciliationOnly(r.settlement_source, r.marketplace_code, r.settlement_id)
       && !directApiCodes.has(r.marketplace_code)
       && r.overall_status !== 'duplicate_suppressed';
   }, [directApiCodes]);
