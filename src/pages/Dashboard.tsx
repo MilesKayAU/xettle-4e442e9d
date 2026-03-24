@@ -503,6 +503,7 @@ export default function Dashboard() {
   const [outstandingCount, setOutstandingCount] = useState(0);
   const [settlementCounts, setSettlementCounts] = useState<Record<string, number>>({});
   const [readyToPushCount, setReadyToPushCount] = useState(0);
+  const [koganMissingPdfCount, setKoganMissingPdfCount] = useState(0);
 
   // Derive API-connected marketplace codes dynamically from marketplace_connections + legacy token flags
   const apiConnectedCodes = useMemo(() => {
