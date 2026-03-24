@@ -1704,12 +1704,19 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
     for (const csv of csvFiles) {
       const settlementId = csv.settlements?.[0]?.settlement_id || '';
-      // Extract AP invoice doc number: try kogan_NNNN format first, then last 5+ digit group, then first 5+ digit group
+      // Extract AP invoice doc number: try kogan_NNNN format first, then digit groups, then filename extraction
       const koganIdMatch = settlementId.match(/^kogan_(\d+)$/);
       const lastDigitMatch = settlementId.match(/_(\d{5,})(?:\s|$)/);
       const firstDigitMatch = settlementId.match(/(\d{5,})/);
-      const docNumber = koganIdMatch?.[1] || lastDigitMatch?.[1] || firstDigitMatch?.[1] || csv.file.name.replace(/\.[^.]+$/, '');
-      const csvMonth = getCsvPeriodMonth(csv) || csv.settlements?.[0]?.metadata?.periodMonth;
+      // Filename fallback: extract invoice number from patterns like KGN-..._362490_2.csv
+      const filenameMatch = csv.file.name.match(/_(\d{5,})_/);
+      const docNumber = koganIdMatch?.[1] || lastDigitMatch?.[1] || firstDigitMatch?.[1] || filenameMatch?.[1] || csv.file.name.replace(/\.[^.]+$/, '');
+      let csvMonth = getCsvPeriodMonth(csv) || csv.settlements?.[0]?.metadata?.periodMonth;
+      // Fallback: extract month from filename like KGN-AUMKAKOGAU20260315_362490_2.csv
+      if (!csvMonth) {
+        const fnDateMatch = csv.file.name.match(/(\d{4})(\d{2})\d{2}/);
+        if (fnDateMatch) csvMonth = `${fnDateMatch[1]}-${fnDateMatch[2]}`;
+      }
 
       // Try matching PDF: first by doc number, then by period month
       let matchedPdf: (typeof pdfFiles)[0] | null = null;

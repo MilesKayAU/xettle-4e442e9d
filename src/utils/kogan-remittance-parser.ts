@@ -333,17 +333,24 @@ function parseCSVLine(line: string): string[] {
   return result;
 }
 
-/** Try parsing date in DD/MM/YYYY, YYYY-MM-DD, or M/D/YYYY formats */
+/** Try parsing date in DD/MM/YYYY, YYYY-MM-DD, YYYYMMDD, or M/D/YYYY formats */
 function tryParseDate(s: string): Date | null {
   if (!s) return null;
+  const trimmed = s.trim();
+  // YYYYMMDD (compact — Kogan CSVs use this, e.g. 20260315)
+  let m = trimmed.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (m) {
+    const d = new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
+    if (!isNaN(d.getTime())) return d;
+  }
   // DD/MM/YYYY
-  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  m = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (m) {
     const d = new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
     if (!isNaN(d.getTime())) return d;
   }
   // YYYY-MM-DD
-  m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  m = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m) {
     const d = new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
     if (!isNaN(d.getTime())) return d;
