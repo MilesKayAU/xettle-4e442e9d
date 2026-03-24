@@ -13,6 +13,7 @@ import SettlementDetailDrawer from '@/components/shared/SettlementDetailDrawer';
 import { supabase } from '@/integrations/supabase/client';
 import { MARKETPLACE_CATALOG } from './MarketplaceSwitcher';
 import type { UserMarketplace } from './MarketplaceSwitcher';
+import { PUSHABLE_SOURCES } from '@/utils/settlementSources';
 import { syncSettlementToXero, syncXeroStatus, formatAUD, type StandardSettlement } from '@/utils/settlement-engine';
 import { toast } from 'sonner';
 import PushSafetyPreview from './PushSafetyPreview';
