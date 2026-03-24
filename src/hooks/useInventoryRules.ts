@@ -5,10 +5,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
+export interface SkuLink {
+  canonical: string;
+  linked: string[];
+}
+
 export interface InventoryRules {
   physical_sources: string[];
   fbm_from_shopify: boolean;
   mirror_platforms: Record<string, string>;
+  sku_links: SkuLink[];
 }
 
 export const DEFAULT_INVENTORY_RULES: InventoryRules = {
