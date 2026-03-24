@@ -126,8 +126,16 @@ export default function ActionControlPanel({ userMarketplaces, onSwitchToUpload,
                     {missingCodes.length} settlement{missingCodes.length !== 1 ? 's' : ''} missing
                   </p>
                   <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                    {missingNames.join(', ')}
+                    {missingNames.map((name, i) => {
+                      const isKogan = missingCodes[i]?.toLowerCase().includes('kogan');
+                      return (
+                        <span key={i}>
+                          {i > 0 ? ', ' : ''}{name}{isKogan ? ' (CSV + PDF pair)' : ''}
+                        </span>
+                      );
+                    })}
                   </p>
+                </div>
                 </div>
                 <Button
                   size="sm"
