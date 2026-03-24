@@ -803,12 +803,14 @@ export default function InsightsDashboard() {
   // Now we pick the true best and annotate if it uses estimated data.
   const bestRatio = Math.max(...stats.map(s => s.returnRatio));
   const totalAllSales = stats.reduce((sum, s) => sum + s.totalSales, 0);
-  const totalAllNet = stats.reduce((sum, s) => sum + s.netPayout, 0);
+  const totalAllShipping = stats.reduce((sum, s) => sum + s.estimatedShippingCost, 0);
+  const totalAllNet = stats.reduce((sum, s) => sum + s.netPayout - s.estimatedShippingCost, 0);
   const totalAllFees = stats.reduce((sum, s) => sum + s.totalFees, 0);
   const totalAllAdSpend = stats.reduce((sum, s) => sum + s.adSpend, 0);
   const overallRatio = totalAllSales > 0 ? totalAllNet / totalAllSales : 0;
   const overallAfterAds = totalAllSales > 0 ? Math.max((totalAllNet - totalAllAdSpend) / totalAllSales, -1) : null;
   const netPctOfSales = totalAllSales > 0 ? (totalAllNet / totalAllSales * 100).toFixed(0) : '0';
+  const anyShippingDeducted = stats.some(s => s.estimatedShippingCost > 0);
 
   function formatPct(value: number): string {
     return `${(value * 100).toFixed(1)}%`;
