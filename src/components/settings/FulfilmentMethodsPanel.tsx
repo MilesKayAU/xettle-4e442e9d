@@ -76,7 +76,7 @@ export default function FulfilmentMethodsPanel() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        const [connRes, stored, costs, mcfCostsData] = await Promise.all([
+        const [connRes, stored, costs, mcfCostsData, thresholds] = await Promise.all([
           supabase
             .from('marketplace_connections')
             .select('marketplace_code, marketplace_name')
@@ -85,6 +85,7 @@ export default function FulfilmentMethodsPanel() {
           loadFulfilmentMethods(user.id),
           loadPostageCosts(user.id),
           loadMcfCosts(user.id),
+          loadFreeShippingThresholds(user.id),
         ]);
 
         // Deduplicate by marketplace_code (keep first occurrence)
