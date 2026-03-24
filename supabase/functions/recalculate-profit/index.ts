@@ -290,6 +290,29 @@ Deno.serve(async (req) => {
         shippingOrderCount = ordersCount;
       }
 
+      // Apply free-shipping threshold: exclude orders over the threshold from shipping count
+      const threshold = freeShippingThresholds[mp] || freeShippingThresholds[mp.toLowerCase()] || 0;
+      if (threshold > 0 && orderIds.size > 0 && orderValueMap.size > 0) {
+        let belowThresholdCount = 0;
+        let matched = 0;
+        for (const oid of orderIds) {
+          const val = orderValueMap.get(oid);
+          if (val !== undefined) {
+            matched++;
+            if (val < threshold) belowThresholdCount++;
+          }
+        }
+        if (matched > 0) {
+          // Apply the below-threshold ratio to the shippingOrderCount
+          const belowRatio = belowThresholdCount / matched;
+          shippingOrderCount = Math.round(shippingOrderCount * belowRatio);
+          if (shippingOrderCount < 0) shippingOrderCount = 0;
+        }
+      } else if (threshold > 0 && shippingOrderCount > 1 && orderValueMap.size === 0) {
+        // No order-level data but threshold is set — log warning and keep full count
+        console.log(`[profit] ${mp}: free shipping threshold $${threshold} set but no order value data available`);
+      }
+
       // Calculate postage deduction using canonical shared function
       let postageDeduction = 0;
       let fulfilmentDataIncomplete = false;
