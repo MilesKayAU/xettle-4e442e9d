@@ -12,7 +12,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Globe, CheckCircle2, XCircle, Info, FileText, ShoppingBag, RefreshCw, Clock } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Globe, CheckCircle2, XCircle, Info, FileText, ShoppingBag, RefreshCw, Clock, ShieldCheck, Loader2, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
 import { setSourcePreference } from '@/actions/settlements';
