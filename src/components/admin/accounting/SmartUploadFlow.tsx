@@ -491,7 +491,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       const offset = prev.length - uniqueFiles.length;
       for (const r of results) {
         if (r.status === 'fulfilled') {
-          const { idx, result, settlements, dbDupeIds, splitResult, csvHeaders, sampleRows, koganDocNumbers, koganRemittanceResult } = r.value;
+          const { idx, result, settlements, dbDupeIds, splitResult, csvHeaders, sampleRows, koganDocNumbers, koganPdfPeriodMonth, koganRemittanceResult } = r.value;
           const fileIdx = offset + idx;
           if (fileIdx < updated.length) {
             // If multi-marketplace split detected, show confirmation card
