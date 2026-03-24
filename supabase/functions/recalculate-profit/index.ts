@@ -65,16 +65,17 @@ Deno.serve(async (req) => {
     const admin = createClient(supabaseUrl, supabaseServiceKey);
     const userId = user.id;
 
-    // Load user's fulfilment methods, postage costs, and MCF costs from app_settings
+    // Load user's fulfilment methods, postage costs, MCF costs, and free-shipping thresholds from app_settings
     const { data: settingsRows } = await admin
       .from("app_settings")
       .select("key, value")
       .eq("user_id", userId)
-      .or("key.like.fulfilment_method:%,key.like.postage_cost:%,key.like.mcf_cost:%");
+      .or("key.like.fulfilment_method:%,key.like.postage_cost:%,key.like.mcf_cost:%,key.like.free_shipping_threshold:%");
 
     const fulfilmentMethods: Record<string, string> = {};
     const postageCosts: Record<string, number> = {};
     const mcfCosts: Record<string, number> = {};
+    const freeShippingThresholds: Record<string, number> = {};
 
     for (const row of settingsRows || []) {
       if (row.key.startsWith("fulfilment_method:")) {
@@ -88,6 +89,10 @@ Deno.serve(async (req) => {
         const code = row.key.replace("mcf_cost:", "");
         const num = parseFloat(row.value || "");
         if (code && !isNaN(num) && num >= 0) mcfCosts[code] = num;
+      } else if (row.key.startsWith("free_shipping_threshold:")) {
+        const code = row.key.replace("free_shipping_threshold:", "");
+        const num = parseFloat(row.value || "");
+        if (code && !isNaN(num) && num > 0) freeShippingThresholds[code] = num;
       }
     }
 
