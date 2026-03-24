@@ -1,5 +1,5 @@
 /**
- * eBay Inventory Tab.
+ * eBay Inventory Tab — Trading API (GetMyeBaySelling).
  * ISOLATION: No settlement, validation, or Xero push imports.
  */
 import { useEffect } from 'react';
@@ -7,42 +7,92 @@ import { useInventoryFetch } from './useInventoryFetch';
 import InventoryTable, { type InventoryColumn } from './InventoryTable';
 import InventoryRefreshBar from './InventoryRefreshBar';
 import InventoryEmptyState from './InventoryEmptyState';
+import { Badge } from '@/components/ui/badge';
+import { ExternalLink } from 'lucide-react';
 
 interface EbayItem {
+  item_id: string;
   sku: string;
+  has_sku: boolean;
   title: string;
   quantity: number;
-  price: number;
+  price: number | null;
   listing_status: string;
-  updated_at?: string;
+  url: string | null;
+  thumbnail: string | null;
+  updated_at: string | null;
 }
 
 const columns: InventoryColumn[] = [
-  { key: 'sku', label: 'SKU', sortable: true },
-  { key: 'title', label: 'Title', sortable: true },
+  {
+    key: 'thumbnail',
+    label: '',
+    render: (val) =>
+      val ? (
+        <img src={val as string} alt="" className="w-10 h-10 rounded object-cover" />
+      ) : (
+        <div className="w-10 h-10 rounded bg-muted" />
+      ),
+  },
+  {
+    key: 'sku',
+    label: 'SKU',
+    sortable: true,
+    render: (val, row: any) =>
+      row.has_sku ? (
+        <span className="font-mono text-sm">{val}</span>
+      ) : (
+        <span className="flex items-center gap-1.5">
+          <span className="font-mono text-sm text-muted-foreground">{row.item_id}</span>
+          <Badge variant="outline" className="text-xs">No SKU</Badge>
+        </span>
+      ),
+  },
+  {
+    key: 'title',
+    label: 'Title',
+    sortable: true,
+    render: (val, row: any) =>
+      row.url ? (
+        <a
+          href={row.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary hover:underline inline-flex items-center gap-1"
+        >
+          {val}
+          <ExternalLink className="w-3 h-3 flex-shrink-0" />
+        </a>
+      ) : (
+        <span>{val}</span>
+      ),
+  },
   { key: 'quantity', label: 'Qty', sortable: true },
   {
     key: 'price',
     label: 'Price',
     sortable: true,
-    render: (val) => val != null ? `$${Number(val).toFixed(2)}` : '—',
+    render: (val) => (val != null ? `$${Number(val).toFixed(2)}` : '—'),
   },
   { key: 'listing_status', label: 'Status' },
-  { key: 'updated_at', label: 'Last Updated' },
 ];
 
-export default function EbayInventoryTab({ connected, onNavigateToSettings }: { connected: boolean; onNavigateToSettings: () => void }) {
-  const { data, loading, loadingMore, hasMore, partial, error, lastFetched, fetch, loadMore } = useInventoryFetch<EbayItem>('fetch-ebay-inventory');
+export default function EbayInventoryTab({
+  connected,
+  onNavigateToSettings,
+}: {
+  connected: boolean;
+  onNavigateToSettings: () => void;
+}) {
+  const { data, loading, loadingMore, hasMore, partial, error, lastFetched, fetch, loadMore } =
+    useInventoryFetch<EbayItem>('fetch-ebay-inventory');
 
-  useEffect(() => { if (connected) fetch(); }, [connected]);
+  useEffect(() => {
+    if (connected) fetch();
+  }, [connected]);
 
   if (!connected) {
-    return (
-      <InventoryEmptyState
-        platform="eBay"
-        onNavigateToSettings={onNavigateToSettings}
-      />
-    );
+    return <InventoryEmptyState platform="eBay" onNavigateToSettings={onNavigateToSettings} />;
   }
 
   return (

@@ -68,51 +68,102 @@ serve(async (req: Request) => {
     let hasMore = false;
     let nextCursor: string | undefined;
 
-    // Fetch inventory items
-    let offset = cursor ? parseInt(cursor) : 0;
-    const pageSize = 100;
+    // Use eBay Trading API GetMyeBaySelling (works for all listing types)
+    const startPage = cursor ? parseInt(cursor) : 1;
+    const entriesPerPage = 200;
+    let currentPage = startPage;
 
     while (items.length < limit) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), PAGE_TIMEOUT_MS);
 
       try {
-        const url = `https://api.ebay.com/sell/inventory/v1/inventory_item?limit=${pageSize}&offset=${offset}`;
-        const resp = await fetch(url, {
-          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        const xmlBody = `<?xml version="1.0" encoding="utf-8"?>
+<GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <ActiveList>
+    <Include>true</Include>
+    <Pagination>
+      <EntriesPerPage>${entriesPerPage}</EntriesPerPage>
+      <PageNumber>${currentPage}</PageNumber>
+    </Pagination>
+  </ActiveList>
+  <DetailLevel>ReturnAll</DetailLevel>
+</GetMyeBaySellingRequest>`;
+
+        const resp = await fetch("https://api.ebay.com/ws/api.dll", {
+          method: "POST",
+          headers: {
+            "X-EBAY-API-SITEID": "15",
+            "X-EBAY-API-COMPATIBILITY-LEVEL": "1155",
+            "X-EBAY-API-CALL-NAME": "GetMyeBaySelling",
+            "X-EBAY-API-IAF-TOKEN": accessToken,
+            "Content-Type": "text/xml",
+          },
+          body: xmlBody,
           signal: controller.signal,
         });
         clearTimeout(timeout);
 
         if (!resp.ok) {
-          errorMsg = `eBay API error: ${resp.status}`;
+          errorMsg = `eBay Trading API error: ${resp.status}`;
           partial = items.length > 0;
           break;
         }
 
-        const data = await resp.json();
-        const inventoryItems = data.inventoryItems || [];
+        const xml = await resp.text();
 
-        if (inventoryItems.length === 0) break;
-
-        for (const item of inventoryItems) {
-          items.push({
-            sku: item.sku || "unknown",
-            title: item.product?.title || item.sku || "Unknown",
-            quantity: item.availability?.shipToLocationAvailability?.quantity ?? 0,
-            price: item.product?.aspects?.Price?.[0] ? parseFloat(item.product.aspects.Price[0]) : null,
-            listing_status: item.condition || "USED_EXCELLENT",
-            updated_at: null,
-          });
-          if (items.length >= limit) break;
+        // Check for API-level errors
+        const ackMatch = xml.match(/<Ack>(.*?)<\/Ack>/);
+        if (ackMatch && ackMatch[1] === "Failure") {
+          const errMsg = xml.match(/<ShortMessage>(.*?)<\/ShortMessage>/);
+          errorMsg = `eBay error: ${errMsg?.[1] || "Unknown error"}`;
+          partial = items.length > 0;
+          break;
         }
 
-        if (data.total > offset + pageSize && items.length < limit) {
-          offset += pageSize;
+        // Parse pagination
+        const totalPagesMatch = xml.match(/<ActiveList>[\s\S]*?<PaginationResult>[\s\S]*?<TotalNumberOfPages>(\d+)<\/TotalNumberOfPages>/);
+        const totalPages = totalPagesMatch ? parseInt(totalPagesMatch[1]) : 1;
+
+        // Extract items using regex (predictable XML structure)
+        const itemRegex = /<Item>([\s\S]*?)<\/Item>/g;
+        let match;
+        while ((match = itemRegex.exec(xml)) !== null && items.length < limit) {
+          const itemXml = match[1];
+          const extract = (tag: string) => {
+            const m = itemXml.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`));
+            return m ? m[1].trim() : null;
+          };
+
+          const itemId = extract("ItemID") || "";
+          const sku = extract("SKU") || "";
+          const title = extract("Title") || "Unknown";
+          const quantityAvailable = parseInt(extract("QuantityAvailable") || "0");
+          const currentPrice = extract("CurrentPrice");
+          const priceVal = currentPrice ? parseFloat(currentPrice.replace(/[^0-9.]/g, "")) : null;
+          const viewItemURL = extract("ViewItemURL") || null;
+          const galleryURL = extract("GalleryURL") || null;
+
+          items.push({
+            item_id: itemId,
+            sku: sku || itemId,
+            has_sku: sku !== "",
+            title,
+            quantity: quantityAvailable,
+            price: priceVal,
+            listing_status: "Active",
+            url: viewItemURL,
+            thumbnail: galleryURL,
+            updated_at: null,
+          });
+        }
+
+        if (currentPage < totalPages && items.length < limit) {
+          currentPage++;
         } else {
-          if (data.total > offset + pageSize) {
+          if (currentPage < totalPages) {
             hasMore = true;
-            nextCursor = String(offset + pageSize);
+            nextCursor = String(currentPage + 1);
           }
           break;
         }
