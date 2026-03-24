@@ -423,7 +423,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
 
       const queueRows: SettlementRow[] = actionableOnly
         ? ((validationRes.data || []) as any[])
-            .filter((row) => !row.settlement_id?.startsWith('shopify_auto_'))
+            .filter((row) => !isReconciliationOnly((row as any).source, row.marketplace_code, row.settlement_id))
             .map((row) => {
               const existing = row.settlement_id ? settlementMap.get(row.settlement_id) : undefined;
               if (existing) return { ...existing, dashboard_origin: 'settlement' as const };
