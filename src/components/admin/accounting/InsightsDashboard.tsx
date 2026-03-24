@@ -999,7 +999,12 @@ export default function InsightsDashboard() {
         <ReconciliationHealth />
 
         {/* Cross-Marketplace Profit Comparison */}
-        <MarketplaceProfitComparison />
+        <div className="space-y-1">
+          <MarketplaceProfitComparison />
+          <p className="text-[10px] text-muted-foreground italic px-1">
+            Profit ranking uses SKU-level cost data — margins may differ from payout-based metrics above.
+          </p>
+        </div>
 
         {/* SKU Profit Comparison */}
         <SkuComparisonView />
