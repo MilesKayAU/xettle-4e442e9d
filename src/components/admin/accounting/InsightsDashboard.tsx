@@ -539,6 +539,8 @@ export default function InsightsDashboard() {
           pacShippingAvg14: pacStats?.avg14 ?? null,
           pacShippingSample: pacStats?.sample ?? 0,
           pacEstimateQuality: pacQualityByMp[mp] ?? null,
+          salesShipping: rows.reduce((sum, r) => sum + Math.abs((r as any).sales_shipping || 0), 0),
+          freeShippingThreshold: freeShippingThresholds[mp] || 0,
         });
       }
 
