@@ -136,7 +136,6 @@ export default function ActionControlPanel({ userMarketplaces, onSwitchToUpload,
                     })}
                   </p>
                 </div>
-                </div>
                 <Button
                   size="sm"
                   variant="outline"
