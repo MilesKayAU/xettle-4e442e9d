@@ -768,7 +768,7 @@ export default function ValidationSweep({
                               </Tooltip>
                             </TooltipProvider>
                           )}
-                          {!row.settlement_id?.startsWith('shopify_auto_') && (
+                          {!isReconciliationOnly('api_sync', row.marketplace_code, row.settlement_id) && (
                             <RowAction
                               row={row}
                               pushing={pushing === row.id}
