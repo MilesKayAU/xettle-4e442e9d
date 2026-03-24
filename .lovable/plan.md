@@ -1,103 +1,77 @@
 
-Problem confirmed from the two attached files:
 
-- The PDF `Kogan_3618482_1.pdf` clearly contains:
-  - A/P Invoice `362490`
-  - Transfer Date `23/03/2026`
-  - Total paid amount `663.15 AUD`
-- The CSV `KGN-AUMKAKOGAU20260315_362490_2.csv` clearly contains:
-  - `APInvoice = 362490`
-  - `InvoiceDate = 20260315`
-  - `DateManifested = 20260301`
+## Audit: How Kogan Notifications Reach the Customer Today
 
-So these two files do belong together. The match is failing because of code, not because of the files.
+### What currently works
 
-What is actually broken
+1. **Upload Flow (SmartUploadFlow.tsx)** — The Kogan pairing card is well-built:
+   - Groups CSVs and PDFs by doc number/period
+   - Shows "✅ Paired", "⚠ Missing PDF", "⚠ No saved Kogan settlement found"
+   - Warns that CSV-only totals exclude returns/ad spend/seller fees
+   - "Upload missing files" button opens file picker
+   - "Merge PDF into Saved Settlement" for late-PDF uploads
 
-1. `parseKoganPayoutCSV()` is not parsing Kogan’s compact dates
-   - In `src/utils/kogan-remittance-parser.ts`, `tryParseDate()` only supports:
-     - `DD/MM/YYYY`
-     - `YYYY-MM-DD`
-   - Your Kogan CSV uses `YYYYMMDD` like `20260315`
-   - Result: the parser cannot derive `period_start` / `period_end`
+2. **Validation Sweep (run-validation-sweep/index.ts)** — Kogan auto-generated settlements (`shopify_auto_kogan_*`) do create `settlement_needed` rows, which feed the "Upload Needed" card in Settlements Overview.
 
-2. Because the CSV parse has no valid dates, the settlement never becomes a proper Kogan settlement
-   - This matches the backend warnings already being logged:
-     - `format_missing_dates_requires_manual_entry`
-     - settlement_id `362490`
+3. **Dashboard cards** — RecentSettlements and RecentUploads both include Kogan in their label maps.
 
-3. The pairing UI then makes it worse
-   - In `src/components/admin/accounting/SmartUploadFlow.tsx`, if a CSV has no parsed settlement, the pairing card falls back to using the whole filename as the “doc number”
-   - That means it tries to match the PDF against:
-     - `KGN-AUMKAKOGAU20260315_362490_2`
-     instead of:
-     - `362490`
-   - So it incorrectly shows “Missing PDF” even though the PDF is right there
+4. **DailyTaskStrip** — Shows a generic "N marketplaces have no recent settlement" banner when `missingSettlementCount > 0`.
 
-Implementation plan
+### What is missing or weak
 
-1. Fix Kogan date parsing
-   - Update `tryParseDate()` in `src/utils/kogan-remittance-parser.ts`
-   - Add support for compact `YYYYMMDD`
-   - Use it for `InvoiceDate`, `DateManifested`, and `DateRemitted`
+| Gap | Where it should appear | Current state |
+|-----|----------------------|---------------|
+| **No Kogan-specific upload guidance on the dashboard** | DailyTaskStrip / ActionControlPanel | The strip says "N marketplaces have no recent settlement" but doesn't name Kogan or explain that CSV+PDF pairs are required |
+| **No explanation that Kogan needs TWO files** | Upload flow header, WelcomeGuide, OnboardingTodos | The pairing card shows the state but there's no upfront instruction before the user drops files |
+| **ActionControlPanel "Upload Needed" card doesn't distinguish Kogan** | ActionControlPanel.tsx | Lists all missing marketplaces generically — doesn't note Kogan requires CSV+PDF pair |
+| **Missing settlement banner in upload sheet** | Dashboard.tsx upload overlay | Shows `missingSettlements` list from validation, but Kogan entries don't mention "CSV + PDF required" |
+| **No persistent dashboard notification for Kogan with missingPdf=true** | Dashboard home, ActionControlPanel | If a Kogan CSV was saved without its PDF, there's no ongoing alert telling the user to upload the PDF to fix the net payout |
+| **SettlementCoverageMap** | Onboarding coverage map | Shows Kogan periods but doesn't highlight that red cells specifically need CSV+PDF |
 
-2. Make Kogan CSV parsing deterministic for this format
-   - Keep grouping by `APInvoice`
-   - Ensure `362490` produces a real settlement:
-     - `settlement_id = kogan_362490`
-     - `period_start = 2026-03-01`
-     - `period_end = 2026-03-31`
-     - `metadata.periodMonth = 2026-03`
+### Plan: Add Kogan-Specific Notifications Across 4 Surfaces
 
-3. Fix pairing fallback logic in the upload UI
-   - In `SmartUploadFlow.tsx`, do not use the full filename as the primary fallback doc number for Kogan
-   - If settlements are missing, extract the numeric invoice from:
-     - parsed CSV content, or
-     - filename regex `_362490_`
-   - This ensures doc-number matching still works even before save
+**1. Upload flow — Add upfront Kogan pairing guidance**
 
-4. Fix the false “Missing PDF” state
-   - If the CSV failed to parse into a proper settlement, show the real error:
-     - “CSV date format could not be parsed”
-   - Do not show “Missing PDF” when the real problem is a broken CSV parse
+File: `src/components/admin/accounting/SmartUploadFlow.tsx`
 
-5. Add a narrow regression test
-   - Add a parser test covering:
-     - CSV with `InvoiceDate=20260315`
-     - PDF with A/P Invoice `362490`
-     - expected paired month `2026-03`
-   - This prevents the same bug returning
+Before the pairing card, when Kogan files are detected, show a one-line info banner:
+> "Kogan settlements require both a CSV (order data) and PDF (Remittance Advice) for accurate reconciliation. Upload both files together for best results."
 
-Files to update
+This appears only when Kogan files are in the upload list but not all pairs are complete.
 
-- `src/utils/kogan-remittance-parser.ts`
-  - add `YYYYMMDD` support
-  - ensure period month is built correctly from compact dates
+**2. Dashboard DailyTaskStrip — Name Kogan specifically**
 
-- `src/components/admin/accounting/SmartUploadFlow.tsx`
-  - repair Kogan pairing fallback logic
-  - stop showing false “Missing PDF” when CSV parse failed
-  - prefer extracted invoice number over whole filename fallback
+File: `src/components/dashboard/DailyTaskStrip.tsx`
 
-Technical note
+When `missingSettlementCount > 0`, enhance the banner to list which marketplaces need uploads (passed from Dashboard.tsx). For Kogan specifically, append "(CSV + PDF pair)".
 
-The root cause is not the PDF matcher itself. The root cause is:
-```text
-CSV date parse fails
-→ no valid Kogan settlement object
-→ pairing code falls back to full filename instead of invoice number
-→ doc-number and month matching both fail
-→ UI incorrectly says “Missing PDF”
-```
+File: `src/pages/Dashboard.tsx`
 
-Expected outcome after fix
+Pass the marketplace names (not just the count) to DailyTaskStrip so it can render them.
 
-For these exact two files:
-```text
-CSV: APInvoice 362490, InvoiceDate 20260315
-PDF: A/P Invoice 362490, Transfer Date 23/03/2026
-```
+**3. ActionControlPanel — Kogan-specific "Upload Needed" detail**
 
-The upload flow should show one paired Kogan settlement for March 2026, with the PDF attached and ready to save correctly.
+File: `src/components/admin/accounting/ActionControlPanel.tsx`
 
-No database changes needed.
+In the "Upload Needed" card, when a missing marketplace is Kogan, add a subtitle: "Requires CSV + PDF pair".
+
+**4. Dashboard — Alert for saved Kogan settlements with missingPdf=true**
+
+File: `src/pages/Dashboard.tsx`
+
+Query settlements where `marketplace ILIKE '%kogan%' AND metadata->>'missingPdf' = 'true'`. If any exist, show a small amber banner:
+> "N Kogan settlement(s) saved without PDF — net payout may not match bank deposit. Upload the Remittance PDF to correct."
+
+With a button that opens the upload sheet.
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `src/components/admin/accounting/SmartUploadFlow.tsx` | Add Kogan pairing guidance banner above pairing card |
+| `src/components/dashboard/DailyTaskStrip.tsx` | Accept marketplace names list; show Kogan "(CSV + PDF)" note |
+| `src/pages/Dashboard.tsx` | Pass marketplace names to DailyTaskStrip; add missingPdf Kogan alert query + banner |
+| `src/components/admin/accounting/ActionControlPanel.tsx` | Add "CSV + PDF pair" subtitle for Kogan in Upload Needed card |
+
+### No database changes needed
+
