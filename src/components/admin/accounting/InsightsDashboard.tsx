@@ -345,6 +345,7 @@ export default function InsightsDashboard() {
             : rows.reduce((sum, r) => sum + (r.bank_deposit || 0), 0);
         // Cap ratio at 1.0 — a return > $1 per $1 sold is impossible
         const returnRatio = totalSales > 0 ? Math.min(netPayout / totalSales, 1) : 0;
+        const feesOnlyLoad = totalSales > 0 ? Math.min(totalFees / totalSales, 1) : 0;
         const feeLoad = totalSales > 0 ? Math.min(totalFees / totalSales, 1) : 0;
         const commissionTotal = Math.abs(rows.reduce((sum, r) => sum + (r.seller_fees || 0), 0));
         const avgCommission = totalSales > 0 ? Math.min(commissionTotal / totalSales, 1) : 0;
