@@ -1423,10 +1423,25 @@ export default function InsightsDashboard() {
                         )}
                       </td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
+                        {s.salesShipping > 0 ? (
+                          formatCurrency(s.salesShipping)
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">Incl. in sales</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
                         {s.fulfilmentMethod === 'marketplace_fulfilled' ? (
                           <span className="text-[10px] text-muted-foreground">—</span>
                         ) : s.estimatedShippingCost > 0 ? (
-                          formatCurrency(s.estimatedShippingCost)
+                          <Tooltip>
+                            <TooltipTrigger className="cursor-help">
+                              {formatCurrency(s.estimatedShippingCost)}
+                            </TooltipTrigger>
+                            <TooltipContent className="text-xs max-w-xs">
+                              {s.shippingCostPerOrder > 0 && `$${s.shippingCostPerOrder}/order`}
+                              {s.freeShippingThreshold > 0 && ` • Free shipping over $${s.freeShippingThreshold}`}
+                            </TooltipContent>
+                          </Tooltip>
                         ) : (
                           <Button variant="ghost" size="sm" className="h-5 text-[10px] px-1.5 text-primary" onClick={() => openShippingDialog(s.marketplace)}>
                             <Plus className="h-3 w-3 mr-0.5" /> Add
