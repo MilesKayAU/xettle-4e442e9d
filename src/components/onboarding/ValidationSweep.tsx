@@ -793,7 +793,7 @@ export default function ValidationSweep({
                               </Tooltip>
                             </TooltipProvider>
                           )}
-                          {!isReconciliationOnly('api_sync', row.marketplace_code, row.settlement_id) && (
+                          {!isReconciliationOnly(row.settlement_source, row.marketplace_code, row.settlement_id) && (
                             <RowAction
                               row={row}
                               pushing={pushing === row.id}
