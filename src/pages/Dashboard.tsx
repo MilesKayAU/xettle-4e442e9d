@@ -692,7 +692,21 @@ export default function Dashboard() {
     }
   }, [user, loadMarketplaces]);
 
-  // Auto-sweep marketplace_validation if empty but active connections exist
+  // Check for Kogan settlements saved without PDF (missingPdf=true)
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const { count } = await supabase
+          .from('settlements')
+          .select('id', { count: 'exact', head: true })
+          .ilike('marketplace', '%kogan%')
+          .eq('metadata->>missingPdf', 'true');
+        setKoganMissingPdfCount(count ?? 0);
+      } catch { /* silent */ }
+    })();
+  }, [user]);
+
   useEffect(() => {
     if (!user) return;
     (async () => {
