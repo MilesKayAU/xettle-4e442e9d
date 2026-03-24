@@ -1351,17 +1351,23 @@ export default function InsightsDashboard() {
                         <TooltipContent className="text-xs">Total advertising spend (analytics only — not synced to accounting)</TooltipContent>
                       </Tooltip>
                     </th>
+                    <th className="text-right px-3 py-2.5 font-medium text-foreground">
+                      <Tooltip>
+                        <TooltipTrigger className="cursor-help underline decoration-dotted">Est. Shipping</TooltipTrigger>
+                        <TooltipContent className="text-xs">Estimated shipping cost based on configured cost per order × order count. Shows "—" for marketplace-fulfilled channels.</TooltipContent>
+                      </Tooltip>
+                    </th>
                     <th className="text-right px-3 py-2.5 font-medium text-foreground">Net</th>
                     <th className="text-right px-3 py-2.5 font-medium text-foreground">
                       <Tooltip>
                         <TooltipTrigger className="cursor-help underline decoration-dotted">Payout</TooltipTrigger>
-                        <TooltipContent className="text-xs">Net Settlement ÷ Gross Sales (after marketplace fees)</TooltipContent>
+                        <TooltipContent className="text-xs">(Net Settlement − Est. Shipping) ÷ Gross Sales</TooltipContent>
                       </Tooltip>
                     </th>
                     <th className="text-right px-3 py-2.5 font-medium text-foreground">
                       <Tooltip>
                         <TooltipTrigger className="cursor-help underline decoration-dotted">After Ads</TooltipTrigger>
-                        <TooltipContent className="text-xs">(Net Settlement − Ad Spend) ÷ Gross Sales</TooltipContent>
+                        <TooltipContent className="text-xs">(Net Settlement − Ad Spend − Est. Shipping) ÷ Gross Sales</TooltipContent>
                       </Tooltip>
                     </th>
                   </tr>
@@ -1374,6 +1380,12 @@ export default function InsightsDashboard() {
                           <span className="font-medium text-foreground">{s.label}</span>
                           {s.returnRatio === bestRatio && stats.length > 1 && (
                             <Badge variant="outline" className="text-[9px] h-3.5 border-primary/30 text-primary px-1">Best</Badge>
+                          )}
+                          {s.estimatedShippingCost > 0 && (
+                            <Badge variant="outline" className="text-[9px] h-3.5 border-chart-2/50 text-chart-2 px-1">
+                              <Truck className="h-2 w-2 mr-0.5" />
+                              Incl. shipping
+                            </Badge>
                           )}
                           {s.hasMissingFeeData && (
                             <Badge variant="outline" className="text-[9px] h-3.5 border-amber-400/50 text-amber-600 dark:text-amber-400 px-1">
@@ -1398,10 +1410,21 @@ export default function InsightsDashboard() {
                           </Button>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums font-medium text-foreground">{formatCurrency(s.netPayout)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
+                        {s.fulfilmentMethod === 'marketplace_fulfilled' ? (
+                          <span className="text-[10px] text-muted-foreground">—</span>
+                        ) : s.estimatedShippingCost > 0 ? (
+                          formatCurrency(s.estimatedShippingCost)
+                        ) : (
+                          <Button variant="ghost" size="sm" className="h-5 text-[10px] px-1.5 text-primary" onClick={() => openShippingDialog(s.marketplace)}>
+                            <Plus className="h-3 w-3 mr-0.5" /> Add
+                          </Button>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums font-medium text-foreground">{formatCurrency(s.netPayout - s.estimatedShippingCost)}</td>
                       <td className={`px-3 py-2.5 text-right tabular-nums font-bold ${getRatioColor(s.returnRatio)}`}>{formatPct(s.returnRatio)}</td>
-                      <td className={`px-3 py-2.5 text-right tabular-nums font-bold ${s.returnAfterAds !== null && s.adSpend > 0 ? getRatioColor(s.returnAfterAds) : 'text-muted-foreground'}`}>
-                        {s.adSpend > 0 && s.returnAfterAds !== null ? formatPct(s.returnAfterAds) : '—'}
+                      <td className={`px-3 py-2.5 text-right tabular-nums font-bold ${s.returnAfterAdsAndShipping !== null && s.adSpend > 0 ? getRatioColor(s.returnAfterAdsAndShipping) : 'text-muted-foreground'}`}>
+                        {s.adSpend > 0 && s.returnAfterAdsAndShipping !== null ? formatPct(s.returnAfterAdsAndShipping) : '—'}
                       </td>
                     </tr>
                   ))}
