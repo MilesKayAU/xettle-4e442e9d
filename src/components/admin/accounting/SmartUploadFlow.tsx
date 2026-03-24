@@ -1575,6 +1575,9 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       
       toast.success(`Kogan PDF merged into Settlement ${docNumber} — net payout updated to ${formatAUD(pdfResult.totalPaidAmount)}.`);
       onSettlementsSaved?.();
+      
+      // Trigger validation sweep so dashboard cards reflect the merged PDF
+      triggerValidationSweep();
     } catch (err: any) {
       toast.error('PDF merge failed: ' + (err.message || 'Unknown error'));
     } finally {
