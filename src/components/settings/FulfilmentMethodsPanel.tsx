@@ -60,6 +60,7 @@ export default function FulfilmentMethodsPanel() {
   const [marketplaces, setMarketplaces] = useState<MarketplaceRow[]>([]);
   const [methods, setMethods] = useState<Record<string, FulfilmentMethod>>({});
   const [postageCosts, setPostageCosts] = useState<Record<string, string>>({});
+  const [freeShippingThresholds, setFreeShippingThresholds] = useState<Record<string, string>>({});
   const [mcfCosts, setMcfCosts] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
