@@ -98,13 +98,19 @@ export default function ApiConnectionsPanel({
       if (!user) return;
       setUserId(user.id);
 
-      const [xeroRes, amazonRes, shopifyRes, ebayRes, miraklRes] = await Promise.all([
+      const [xeroRes, amazonRes, shopifyRes, ebayRes, miraklRes, koganIdRes, koganTokenRes] = await Promise.all([
         supabase.from('app_settings').select('value').eq('user_id', user.id).eq('key', 'xero_tenant_id').maybeSingle(),
         supabase.from('amazon_tokens').select('id').eq('user_id', user.id).limit(1),
         supabase.from('shopify_tokens').select('id').eq('user_id', user.id).limit(1),
         supabase.from('ebay_tokens').select('id').eq('user_id', user.id).limit(1),
         supabase.from('mirakl_tokens').select('id').eq('user_id', user.id).limit(1),
+        supabase.from('app_settings').select('value').eq('user_id', user.id).eq('key', 'kogan_api_seller_id').maybeSingle(),
+        supabase.from('app_settings').select('value').eq('user_id', user.id).eq('key', 'kogan_api_seller_token').maybeSingle(),
       ]);
+
+      const hasKogan = !!(koganIdRes.data?.value && koganTokenRes.data?.value);
+      if (koganIdRes.data?.value) setKoganSellerId(koganIdRes.data.value);
+      if (koganTokenRes.data?.value) setKoganSellerToken(koganTokenRes.data.value);
 
       setSummary({
         xero: !!(xeroRes.data?.value),
@@ -112,6 +118,7 @@ export default function ApiConnectionsPanel({
         shopify: !!(shopifyRes.data && shopifyRes.data.length > 0),
         ebay: !!(ebayRes.data && ebayRes.data.length > 0),
         mirakl: !!(miraklRes.data && miraklRes.data.length > 0),
+        kogan: hasKogan,
       });
 
       // Load auto-sync flags
