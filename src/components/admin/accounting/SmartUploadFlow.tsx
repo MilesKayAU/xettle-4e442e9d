@@ -1964,9 +1964,14 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                               <span className="text-muted-foreground text-[10px]">({pair.existingDbSettlement!.settlement_id})</span>
                             </div>
                           ) : (
-                            <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
-                              <FileSpreadsheet className="h-3 w-3" />
-                              <span>Missing CSV — order details unavailable</span>
+                            <div className="flex flex-col gap-0.5">
+                              <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                                <FileSpreadsheet className="h-3 w-3" />
+                                <span>No saved Kogan settlement found for this invoice</span>
+                              </div>
+                              <span className="text-[10px] text-muted-foreground pl-[18px]">
+                                Upload the matching CSV to create a complete settlement pair
+                              </span>
                             </div>
                           )}
                           {pair.pdfFile ? (
