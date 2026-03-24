@@ -345,6 +345,7 @@ export default function InsightsDashboard() {
             : rows.reduce((sum, r) => sum + (r.bank_deposit || 0), 0);
         // Cap ratio at 1.0 — a return > $1 per $1 sold is impossible
         const returnRatio = totalSales > 0 ? Math.min(netPayout / totalSales, 1) : 0;
+        const feesOnlyLoad = totalSales > 0 ? Math.min(totalFees / totalSales, 1) : 0;
         const feeLoad = totalSales > 0 ? Math.min(totalFees / totalSales, 1) : 0;
         const commissionTotal = Math.abs(rows.reduce((sum, r) => sum + (r.seller_fees || 0), 0));
         const avgCommission = totalSales > 0 ? Math.min(commissionTotal / totalSales, 1) : 0;
@@ -463,17 +464,18 @@ export default function InsightsDashboard() {
         }
         const finalOther = otherFeesTotal;
 
+        // Separate fee-only breakdown (no refunds) and refund breakdown
         const feeBreakdown: FeeBreakdown[] = [];
         if (finalCommission > 0) feeBreakdown.push({ label: 'Commission', amount: finalCommission, pctOfSales: totalSales > 0 ? finalCommission / totalSales : 0, color: 'bg-primary' });
-        if (totalRefunds > 0) feeBreakdown.push({ label: 'Refunds', amount: totalRefunds, pctOfSales: totalSales > 0 ? totalRefunds / totalSales : 0, color: 'bg-muted-foreground/60' });
         if (fbaTotal > 0) feeBreakdown.push({ label: 'FBA Fulfilment', amount: fbaTotal, pctOfSales: totalSales > 0 ? fbaTotal / totalSales : 0, color: 'bg-destructive' });
         if (storageTotal > 0) feeBreakdown.push({ label: 'Storage', amount: storageTotal, pctOfSales: totalSales > 0 ? storageTotal / totalSales : 0, color: 'bg-muted-foreground' });
         if (finalOther > 0) feeBreakdown.push({ label: 'Other fees', amount: finalOther, pctOfSales: totalSales > 0 ? finalOther / totalSales : 0, color: 'bg-muted-foreground/40' });
         feeBreakdown.sort((a, b) => b.amount - a.amount);
 
-        // ─── Compute feeLoad from breakdown so Total row always equals sum of rows ───
+        // ─── Compute feeLoad from fee-only breakdown (excludes refunds) ───
         const breakdownTotal = feeBreakdown.reduce((sum, f) => sum + f.amount, 0);
         const consistentFeeLoad = totalSales > 0 ? Math.min(breakdownTotal / totalSales, 1) : 0;
+        const refundLoad = totalSales > 0 ? totalRefunds / totalSales : 0;
 
         // PAC shipping estimate data
         const pacStats = pacStatsByMp[mp];
@@ -855,11 +857,12 @@ export default function InsightsDashboard() {
 
   // Stacked bar segments for $1 breakdown
   function getStackedSegments(s: MarketplaceStats) {
-    if (s.totalSales <= 0) return { net: 0, ads: 0, fees: 0 };
-    const feePct = s.feeLoad;
+    if (s.totalSales <= 0) return { net: 0, ads: 0, fees: 0, refunds: 0 };
+    const refundPct = s.totalRefunds / s.totalSales;
+    const feePct = s.feeLoad; // fees only (no refunds)
     const adsPct = s.adSpend / s.totalSales;
-    const netPct = Math.max(0, 1 - feePct - adsPct);
-    return { net: netPct * 100, ads: adsPct * 100, fees: feePct * 100 };
+    const netPct = Math.max(0, 1 - feePct - adsPct - refundPct);
+    return { net: netPct * 100, ads: adsPct * 100, fees: feePct * 100, refunds: refundPct * 100 };
   }
 
   return (
@@ -937,9 +940,9 @@ export default function InsightsDashboard() {
           </Card>
           <Card>
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs text-muted-foreground font-medium">Marketplace Fees Paid</p>
-              <p className="text-xl font-bold text-destructive mt-1">{formatCurrency(totalAllFees)}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{formatPct(totalAllSales > 0 ? totalAllFees / totalAllSales : 0)} of sales</p>
+              <p className="text-xs text-muted-foreground font-medium">Marketplace Fees</p>
+              <p className="text-xl font-bold text-destructive mt-1">{formatCurrency(totalAllFees - stats.reduce((sum, s) => sum + s.totalRefunds, 0))}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{formatPct(totalAllSales > 0 ? (totalAllFees - stats.reduce((sum, s) => sum + s.totalRefunds, 0)) / totalAllSales : 0)} of sales</p>
             </CardContent>
           </Card>
           <Card>
@@ -996,7 +999,12 @@ export default function InsightsDashboard() {
         <ReconciliationHealth />
 
         {/* Cross-Marketplace Profit Comparison */}
-        <MarketplaceProfitComparison />
+        <div className="space-y-1">
+          <MarketplaceProfitComparison />
+          <p className="text-[10px] text-muted-foreground italic px-1">
+            Profit ranking uses SKU-level cost data — margins may differ from payout-based metrics above.
+          </p>
+        </div>
 
         {/* SKU Profit Comparison */}
         <SkuComparisonView />
@@ -1092,6 +1100,14 @@ export default function InsightsDashboard() {
                         <TooltipContent className="text-xs">${(segments.ads / 100).toFixed(2)} advertising</TooltipContent>
                       </Tooltip>
                     )}
+                    {segments.refunds > 0 && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="h-full bg-chart-4 transition-all duration-500" style={{ width: `${segments.refunds}%` }} />
+                        </TooltipTrigger>
+                        <TooltipContent className="text-xs">${(segments.refunds / 100).toFixed(2)} refunds</TooltipContent>
+                      </Tooltip>
+                    )}
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <div className="h-full bg-muted-foreground/50 rounded-r-full transition-all duration-500" style={{ width: `${segments.fees}%` }} />
@@ -1101,7 +1117,7 @@ export default function InsightsDashboard() {
                   </div>
 
                   {/* Legend */}
-                  <div className="flex gap-3 text-[10px] text-muted-foreground">
+                  <div className="flex gap-3 text-[10px] text-muted-foreground flex-wrap">
                     <span className="flex items-center gap-1">
                       <span className="h-2 w-2 rounded-full bg-primary inline-block" />
                       ${(segments.net / 100).toFixed(2)} you keep
@@ -1110,6 +1126,12 @@ export default function InsightsDashboard() {
                       <span className="flex items-center gap-1">
                         <span className="h-2 w-2 rounded-full bg-accent inline-block" />
                         ${(segments.ads / 100).toFixed(2)} ads
+                      </span>
+                    )}
+                    {segments.refunds > 0 && (
+                      <span className="flex items-center gap-1">
+                        <span className="h-2 w-2 rounded-full bg-chart-4 inline-block" />
+                        ${(segments.refunds / 100).toFixed(2)} refunds
                       </span>
                     )}
                     <span className="flex items-center gap-1">
@@ -1406,9 +1428,15 @@ export default function InsightsDashboard() {
 
                   {/* Total fees summary */}
                   <div className="flex items-center justify-between text-xs border-t border-border pt-2">
-                    <span className="text-muted-foreground font-medium">Total fees + refunds</span>
-                    <span className="font-bold text-foreground tabular-nums">{formatPct(s.feeLoad + (s.totalSales > 0 ? s.totalRefunds / s.totalSales : 0))} of sales</span>
+                    <span className="text-muted-foreground font-medium">Total fees</span>
+                    <span className="font-bold text-foreground tabular-nums">{formatPct(s.feeLoad)} of sales</span>
                   </div>
+                  {s.totalRefunds > 0 && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">+ Refunds</span>
+                      <span className="font-semibold text-foreground tabular-nums">{formatPct(s.totalSales > 0 ? s.totalRefunds / s.totalSales : 0)} of sales ({formatCurrency(s.totalRefunds)})</span>
+                    </div>
+                  )}
 
                   {/* Biggest cost driver callout */}
                   {s.feeBreakdown.length > 0 && (
