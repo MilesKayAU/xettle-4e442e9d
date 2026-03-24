@@ -968,6 +968,25 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
     }
 
     const meta = settlement.metadata || {};
+    
+    // Extract Kogan advertising fees from metadata (stored by PDF merge)
+    const koganAdFeesExGst = meta.koganAdvertisingFees 
+      ? Math.round(Math.abs(meta.koganAdvertisingFees) / 1.1 * 100) / 100 
+      : 0;
+    const koganSellerFeeExGst = meta.koganMonthlySellerFee
+      ? Math.round(meta.koganMonthlySellerFee / 1.1 * 100) / 100
+      : 0;
+    
+    // Separate advertising from general fees so Xero can map to correct COA
+    // fees_ex_gst already includes ad fees + seller fees (added during PDF merge)
+    // We need to break them out into their own columns
+    const baseFees = -(Math.abs(settlement.fees_ex_gst));
+    const advertisingCosts = koganAdFeesExGst > 0 ? -koganAdFeesExGst : 0;
+    // Remove ad fees from seller_fees so they're not double-counted
+    const sellerFees = koganAdFeesExGst > 0 ? baseFees + koganAdFeesExGst + koganSellerFeeExGst : baseFees;
+    // Monthly seller fee goes to other_fees
+    const otherFees = -Math.abs((meta.subscriptionAmount || 0) + (meta.manualDebitInclGst || 0) + (meta.otherChargesInclGst || 0) + koganSellerFeeExGst);
+
     const { saveSettlementCanonical } = await import('@/actions/settlements');
     const canonResult = await saveSettlementCanonical({
       row: {
@@ -978,10 +997,11 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
         period_end: settlement.period_end,
         sales_principal: settlement.sales_ex_gst,
         sales_shipping: meta.shippingExGst || 0,
-        seller_fees: -(Math.abs(settlement.fees_ex_gst)),
+        seller_fees: sellerFees,
         refunds: meta.refundsExGst || 0,
         reimbursements: (meta.refundCommissionExGst || 0) + (meta.manualCreditInclGst || 0),
-        other_fees: -Math.abs((meta.subscriptionAmount || 0) + (meta.manualDebitInclGst || 0) + (meta.otherChargesInclGst || 0)),
+        advertising_costs: advertisingCosts,
+        other_fees: otherFees,
         gst_on_income: settlement.gst_on_sales,
         gst_on_expenses: -Math.abs(settlement.gst_on_fees),
         bank_deposit: settlement.net_payout,
