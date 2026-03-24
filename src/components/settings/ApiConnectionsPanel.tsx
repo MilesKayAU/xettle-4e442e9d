@@ -72,12 +72,21 @@ export default function ApiConnectionsPanel({
     shopify: false,
     ebay: false,
     mirakl: false,
+    kogan: false,
   });
   const [subChannels, setSubChannels] = useState<SubChannelPref[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [autoSyncFlags, setAutoSyncFlags] = useState<Record<string, boolean>>({});
   const [lastSyncRun, setLastSyncRun] = useState<Date | null>(null);
   const [syncFrequencyHours, setSyncFrequencyHours] = useState<number | null>(null);
+
+  // Kogan credential state
+  const [koganSellerId, setKoganSellerId] = useState('');
+  const [koganSellerToken, setKoganSellerToken] = useState('');
+  const [koganSaving, setKoganSaving] = useState(false);
+  const [koganTesting, setKoganTesting] = useState(false);
+  const [koganTestResult, setKoganTestResult] = useState<'success' | 'fail' | null>(null);
+  const [showKoganToken, setShowKoganToken] = useState(false);
 
   useEffect(() => {
     checkConnections();
