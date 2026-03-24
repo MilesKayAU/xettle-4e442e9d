@@ -1345,8 +1345,13 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
     setProcessingAll(true);
     const currentFiles = filesRef.current;
     for (let i = 0; i < currentFiles.length; i++) {
-      const s = currentFiles[i].status;
-      if ((s === 'detected' || s === 'reviewing') && currentFiles[i].detection?.isSettlementFile) {
+      const f = currentFiles[i];
+      const s = f.status;
+      if ((s === 'detected' || s === 'reviewing') && f.detection?.isSettlementFile) {
+        // Skip Kogan PDFs — they are companion files merged during CSV save
+        if (f.detection.marketplace === 'kogan' && f.file.name.toLowerCase().endsWith('.pdf')) {
+          continue;
+        }
         await processFile(i);
       }
     }
