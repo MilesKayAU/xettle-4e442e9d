@@ -511,6 +511,8 @@ export default function Dashboard() {
   const [settlementCounts, setSettlementCounts] = useState<Record<string, number>>({});
   const [readyToPushCount, setReadyToPushCount] = useState(0);
   const [koganMissingPdfCount, setKoganMissingPdfCount] = useState(0);
+  const [pushPreviewOpen, setPushPreviewOpen] = useState(false);
+  const [pushPreviewSettlements, setPushPreviewSettlements] = useState<Array<{ settlementId: string; marketplace: string }>>([]);
 
   // Derive API-connected marketplace codes dynamically from marketplace_connections + legacy token flags
   const apiConnectedCodes = useMemo(() => {
