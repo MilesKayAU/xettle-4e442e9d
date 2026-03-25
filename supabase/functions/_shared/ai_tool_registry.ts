@@ -556,7 +556,11 @@ export async function executeTool(
         ]);
 
         const s = settRes.data;
-        if (!s) return JSON.stringify({ error: "Settlement not found", settlement_id: sid });
+        if (!s) {
+          console.warn(`[analyzeReconciliationGap] Settlement not found: ${sid}`);
+          return JSON.stringify({ error: "Settlement not found", settlement_id: sid });
+        }
+        console.log(`[analyzeReconciliationGap] Found settlement: ${s.marketplace}, bank_deposit=${s.bank_deposit}`);
 
         const sales = (s.sales_principal || 0) + (s.sales_shipping || 0);
         const fees = Math.abs(s.seller_fees || 0) + Math.abs(s.fba_fees || 0) + Math.abs(s.storage_fees || 0) + Math.abs(s.advertising_costs || 0) + Math.abs(s.other_fees || 0);
