@@ -45,15 +45,17 @@ function ScanRow({
   timestamp,
   isRunning,
   isAnyRunning,
+  hasFailed,
   onRun,
 }: {
   def: ScanDefinition;
   timestamp: string | null;
   isRunning: boolean;
   isAnyRunning: boolean;
+  hasFailed?: boolean;
   onRun: () => void;
 }) {
-  const freshness = getFreshness(timestamp);
+  const freshness = getFreshness(timestamp, hasFailed);
   const cfg = statusConfig[freshness];
 
   return (
@@ -67,7 +69,7 @@ function ScanRow({
       </div>
       <div className="flex items-center gap-2 shrink-0 ml-3">
         <span className="text-xs text-muted-foreground whitespace-nowrap">
-          {isRunning ? 'Running…' : relativeTime(timestamp)}
+          {isRunning ? 'Running…' : hasFailed ? 'Failed' : relativeTime(timestamp)}
         </span>
         <Button
           size="sm"
