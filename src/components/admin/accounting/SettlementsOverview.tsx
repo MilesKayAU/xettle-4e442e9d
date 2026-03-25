@@ -53,6 +53,8 @@ export default function SettlementsOverview({
   const [pendingBatchCode, setPendingBatchCode] = useState<string | null>(null);
   const [drawerSettlementId, setDrawerSettlementId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerAutoVerify, setDrawerAutoVerify] = useState(false);
+  const [batchRefetching, setBatchRefetching] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
