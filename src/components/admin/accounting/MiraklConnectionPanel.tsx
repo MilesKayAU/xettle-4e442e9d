@@ -507,21 +507,39 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
             </div>
 
             {lastError && (
-              <Alert variant="destructive" className="py-2">
-                <AlertDescription className="text-xs flex items-center justify-between gap-2">
-                  <span className="truncate">{lastError}</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0 gap-1 text-xs h-6"
-                    onClick={handleReportIssue}
-                    disabled={reporting}
-                  >
-                    {reporting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Flag className="h-3 w-3" />}
-                    Report Issue
-                  </Button>
-                </AlertDescription>
-              </Alert>
+              <div className="space-y-2">
+                <Alert variant="destructive" className="py-2">
+                  <AlertDescription className="text-xs flex items-center justify-between gap-2">
+                    <span>{lastError}</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 gap-1 text-xs h-6"
+                      onClick={handleReportIssue}
+                      disabled={reporting}
+                    >
+                      {reporting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Flag className="h-3 w-3" />}
+                      Report Issue
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+                {lastDiagnostic && (
+                  <Alert className="py-2 border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                    <AlertDescription className="text-xs text-amber-700 dark:text-amber-400">
+                      <strong>Diagnostic:</strong> {lastDiagnostic}
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {lastSuggestion && (
+                  <Alert className="py-2 border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800">
+                    <Info className="h-3.5 w-3.5 text-blue-500" />
+                    <AlertDescription className="text-xs text-blue-700 dark:text-blue-400">
+                      <strong>Fix:</strong> {lastSuggestion}
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
             )}
 
             <Button
