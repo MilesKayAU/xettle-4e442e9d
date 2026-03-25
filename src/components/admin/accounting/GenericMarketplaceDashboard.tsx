@@ -310,7 +310,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
     return isGapBlocking(gap);
   }).length, [settlements]);
   const pushedCount = useMemo(() => settlements.filter(s => ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(s.status || '')).length, [settlements]);
-  const unpushedCount = useMemo(() => settlements.filter(s => s.status === 'ingested' || s.status === 'ready_to_push').length, [settlements]);
+  const unpushedCount = useMemo(() => settlements.filter(s => validationStatusMap[s.settlement_id] === 'ready_to_push').length, [settlements, validationStatusMap]);
 
   useAiPageContext(() => ({
     routeId: 'settlements',
