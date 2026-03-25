@@ -812,9 +812,19 @@ export async function executeTool(
           }
         }
 
-        return JSON.stringify({
-          settlement_id: sid,
+        // ── Account mapping check ──
+        const REQUIRED_CATEGORIES = ["Sales", "Seller Fees", "Refunds", "Other Fees", "Shipping"];
+        const mappedCategories = (mappingRes.data || []).map((m: any) => m.category);
+        const missingMappings = REQUIRED_CATEGORIES.filter(c => !mappedCategories.includes(c));
+        let accountMappingWarning: string | null = null;
+        if (missingMappings.length > 0) {
+          accountMappingWarning = `Missing account mappings for ${s.marketplace}: ${missingMappings.join(", ")}. Configure these in Settings > Account Mapping before pushing to Xero.`;
+        }
+
+        const result = {
+          settlement_id: resolvedSid,
           marketplace: s.marketplace,
+          id_match_method: matchMethod,
           financial_breakdown: {
             sales,
             fees,
@@ -837,7 +847,27 @@ export async function executeTool(
           validation_status: valRes.data?.overall_status || "unknown",
           reconciliation_confidence: valRes.data?.reconciliation_confidence,
           confidence_reason: valRes.data?.reconciliation_confidence_reason,
+          account_mapping_warning: accountMappingWarning,
+          missing_account_mappings: missingMappings.length > 0 ? missingMappings : undefined,
+        };
+
+        // Log completion to system_events
+        await serviceClient.from("system_events").insert({
+          user_id: userId,
+          event_type: "ai_gap_analysis_complete",
+          severity: "info",
+          settlement_id: resolvedSid,
+          marketplace_code: s.marketplace,
+          details: {
+            settlement_id: resolvedSid,
+            recommended_action: recommendedAction,
+            gap_amount: validationGap,
+            id_match_method: matchMethod,
+            missing_mappings: missingMappings.length > 0 ? missingMappings : undefined,
+          },
         });
+
+        return JSON.stringify(result);
       }
 
       default:
