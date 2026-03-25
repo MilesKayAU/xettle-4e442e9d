@@ -328,12 +328,12 @@ Deno.serve(async (req) => {
     }
   }
 
-  // 4.7. Fetch Mirakl settlements (per-user)
-  console.log("[scheduled-sync] Step 4.7: Mirakl fetch (per-user)...");
+  // 4.7. Fetch Mirakl settlements (per-user) — runs unconditionally (no elapsed guard)
+  // Mirakl fetches are fast (<10s) and were previously starved by the timeout.
+  console.log("[scheduled-sync] Step 4.7: Mirakl fetch (per-user, guaranteed)...");
   const miraklUserIds = [...new Set((miraklTokens || []).map(t => t.user_id))];
-  // Filter out users who disabled auto-sync for mirakl
   const eligibleMiraklUsers = miraklUserIds.filter(uid => isAutoSyncEnabled(uid, 'mirakl'));
-  if (eligibleMiraklUsers.length > 0 && Date.now() - startTime < MAX_ELAPSED_MS) {
+  if (eligibleMiraklUsers.length > 0) {
     results.mirakl = { users: eligibleMiraklUsers.length, results: [] };
     for (const uid of eligibleMiraklUsers) {
       const syncFrom = userSyncFromMap[uid] || defaultSyncFrom;
@@ -341,8 +341,6 @@ Deno.serve(async (req) => {
       (results.mirakl.results as any[]).push({ user_id: uid, ...miraklResult });
       if (miraklResult?.error) stepErrors.push('mirakl');
     }
-  } else if (eligibleMiraklUsers.length > 0) {
-    results.mirakl = { skipped: true, reason: 'elapsed_timeout' };
   } else {
     results.mirakl = { skipped: true, reason: miraklUserIds.length > 0 ? 'all_users_disabled' : 'no_mirakl_users' };
   }

@@ -233,8 +233,12 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
       setApiVerification(res.data);
       setApiVerifyOpen(true);
     } catch (err: any) {
-      toast.error(`API verification failed: ${err.message}`);
-      setApiVerification({ verdict: 'api_error', error: err.message });
+      const is401 = err.message?.includes('401') || err.message?.includes('Unauthorized');
+      const errorMsg = is401
+        ? 'Your Bunnings API key was rejected (401). Please verify it\'s still valid in the Bunnings seller portal and update it in Settings > API Connections.'
+        : `API verification failed: ${err.message}`;
+      toast.error(errorMsg, { duration: is401 ? 8000 : 4000 });
+      setApiVerification({ verdict: 'api_error', error: err.message, is_auth_error: is401 });
       setApiVerifyOpen(true);
     } finally {
       setApiVerifying(false);
