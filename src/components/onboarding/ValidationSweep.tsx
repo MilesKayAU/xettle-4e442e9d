@@ -875,6 +875,19 @@ export default function ValidationSweep({
         open={drawerOpen}
         onClose={() => { setDrawerOpen(false); setDrawerSettlementId(null); }}
       />
+
+      {uploadDialogRow && (
+        <InlineUploadDialog
+          open={!!uploadDialogRow}
+          onClose={() => setUploadDialogRow(null)}
+          marketplaceCode={uploadDialogRow.marketplace_code}
+          periodLabel={uploadDialogRow.period_label}
+          periodStart={uploadDialogRow.period_start}
+          periodEnd={uploadDialogRow.period_end}
+          onComplete={() => { setUploadDialogRow(null); loadData(); }}
+          onOpenFullUpload={(code, period) => onSwitchToUpload?.(code, period)}
+        />
+      )}
     </div>
   );
 }
