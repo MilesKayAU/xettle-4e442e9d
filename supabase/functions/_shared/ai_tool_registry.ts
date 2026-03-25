@@ -604,37 +604,36 @@ export async function executeTool(
         const [valRes, xeroMatchRes, bankTxRes, linesRes, feeObsRes, outstandingRes, mappingRes] = await Promise.all([
           serviceClient.from("marketplace_validation")
             .select("reconciliation_difference, overall_status, reconciliation_status, reconciliation_confidence, reconciliation_confidence_reason")
-            .eq("user_id", userId)
+            .eq("user_id", resolvedOwnerId)
             .eq("settlement_id", resolvedSid)
             .maybeSingle(),
           serviceClient.from("xero_accounting_matches")
             .select("xero_invoice_id, xero_invoice_number, xero_status, xero_type, match_method, matched_amount, matched_contact, matched_date")
-            .eq("user_id", userId)
+            .eq("user_id", resolvedOwnerId)
             .eq("settlement_id", resolvedSid)
             .maybeSingle(),
           serviceClient.from("bank_transactions")
             .select("amount, date, description, contact_name, xero_status, reference")
-            .eq("user_id", userId)
+            .eq("user_id", resolvedOwnerId)
             .order("date", { ascending: false })
             .limit(200),
           serviceClient.from("settlement_lines")
             .select("amount, amount_type, amount_description, transaction_type, accounting_category, order_id")
-            .eq("user_id", userId)
+            .eq("user_id", resolvedOwnerId)
             .eq("settlement_id", resolvedSid)
             .order("amount", { ascending: true })
             .limit(50),
           serviceClient.from("marketplace_fee_observations")
             .select("fee_type, observed_rate, observed_amount, base_amount, fee_category")
-            .eq("user_id", userId)
+            .eq("user_id", resolvedOwnerId)
             .eq("settlement_id", resolvedSid),
           serviceClient.from("outstanding_invoices_cache")
             .select("xero_invoice_id, invoice_number, total, amount_due, status, contact_name, date, due_date")
-            .eq("user_id", userId)
+            .eq("user_id", resolvedOwnerId)
             .limit(50),
-          // Check account mappings from app_settings (the actual mapping store)
           serviceClient.from("app_settings")
             .select("value")
-            .eq("user_id", userId)
+            .eq("user_id", resolvedOwnerId)
             .eq("key", "accounting_xero_account_codes")
             .maybeSingle(),
         ]);
