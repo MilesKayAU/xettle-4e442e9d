@@ -221,6 +221,13 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose, au
     })();
   }, []);
 
+  // Auto-verify on mount when autoVerify prop is set
+  useEffect(() => {
+    if (autoVerify && open && settlement?.settlement_id && isAdmin && !apiVerification && !apiVerifying) {
+      handleVerifyApi();
+    }
+  }, [autoVerify, open, settlement?.settlement_id, isAdmin]);
+
   // Universal API verification handler
   const handleVerifyApi = useCallback(async () => {
     if (!settlement?.settlement_id) return;
