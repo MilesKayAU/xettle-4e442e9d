@@ -797,6 +797,26 @@ async function sweepUser(adminSupabase: any, userId: string) {
           console.error(`[validation-sweep] upsert error for ${mc}/${pl}:`, upsertErr)
           await logEvent(adminSupabase, userId, 'validation_sweep_error', { error: upsertErr.message, marketplace: mc, period: pl }, 'error', mc, null, pl)
         }
+
+        // Sync settlements.status to match trigger-computed validation status
+        if (!upsertErr && record.settlement_id) {
+          const { data: finalRow } = await adminSupabase
+            .from('marketplace_validation')
+            .select('overall_status')
+            .eq('user_id', userId)
+            .eq('marketplace_code', mc)
+            .eq('period_label', pl)
+            .maybeSingle()
+          if (finalRow?.overall_status) {
+            const skipStatuses = ['duplicate_suppressed', 'already_recorded', 'archived', 'reconciliation_only']
+            await adminSupabase
+              .from('settlements')
+              .update({ status: finalRow.overall_status, updated_at: new Date().toISOString() })
+              .eq('settlement_id', record.settlement_id)
+              .eq('user_id', userId)
+              .not('status', 'in', `(${skipStatuses.join(',')})`)
+          }
+        }
       } catch (rowErr: any) {
         // Mark as failed
         await adminSupabase.from('marketplace_validation')
