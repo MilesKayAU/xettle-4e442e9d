@@ -206,6 +206,38 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
     })();
   }, [settlement?.marketplace, settlement?.status, readinessKey]);
 
+  // Check admin status
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase.rpc('has_role', { _role: 'admin' });
+        setIsAdmin(!!data);
+      } catch { setIsAdmin(false); }
+    })();
+  }, []);
+
+  // Mirakl API verification handler
+  const handleVerifyMirakl = useCallback(async () => {
+    if (!settlement?.settlement_id) return;
+    setApiVerifying(true);
+    setApiVerification(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await supabase.functions.invoke('verify-mirakl-settlement', {
+        body: { settlement_id: settlement.settlement_id },
+      });
+      if (res.error) throw new Error(res.error.message);
+      setApiVerification(res.data);
+      setApiVerifyOpen(true);
+    } catch (err: any) {
+      toast.error(`API verification failed: ${err.message}`);
+      setApiVerification({ verdict: 'api_error', error: err.message });
+      setApiVerifyOpen(true);
+    } finally {
+      setApiVerifying(false);
+    }
+  }, [settlement?.settlement_id]);
+
   const handleDismissCandidate = useCallback(async () => {
     if (!externalCandidate?.id) return;
     setDismissingCandidate(true);
