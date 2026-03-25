@@ -1,69 +1,58 @@
 
 
-# AI Scan Diagnosis Report — Bunnings Settlement BUN-2301-2026-03-14
+# Fix Debit Period Detection in AI Gap Analysis
 
-## What the AI actually said
+## Problem
+The `analyzeReconciliationGap` tool returns `contact_marketplace` for Bunnings settlement BUN-2301-2026-03-14, which has a negative bank deposit (-$50). This is a normal debit period (fees exceeded sales), not a gap requiring marketplace contact. The existing Bunnings branch (line 893) even diagnoses "fee-only period" but doesn't set the correct action.
 
-The AI scan returned a weak, generic response:
-- "detailed gap breakdown is currently unavailable"
-- Mentioned bank deposit of -$50.00
-- Flagged 5 missing account mappings (Sales, Seller Fees, Refunds, Other Fees, Shipping)
-- Recommended fixing account mappings first
+Additionally, `sync-settlement-to-xero` already handles ACCPAY for negative settlements (line 738: `netAmount < 0 → ACCPAY`), so no changes needed there.
 
-The pre-AI rule-based text in the table row shows: "Bank deposit is lower than computed net — there may be deductions not captured in the settlement fields." This comes from `diagnoseGapReason()`, NOT from the upgraded tool.
+## Plan
 
-## What went wrong with the AI scan
+### 1. Add debit period detection at Priority 0 in the decision tree
+**File:** `supabase/functions/_shared/ai_tool_registry.ts` (~line 846, before the existing `if` chain)
 
-The upgraded tool code (lines 513-768 in `ai_tool_registry.ts`) is **structurally correct** — 7 parallel queries via `Promise.all()`, proper Bunnings rules, bank matching with ±$1 tolerance. The code itself is sound.
+Insert two new rules before all existing checks:
+- **Priority 0a:** `bankDeposit < 0 && expectedNet > 0` — marketplace debited the account; fees/refunds exceeded sales
+- **Priority 0b:** `bankDeposit < 0 && expectedNet <= 0` — pure fee debit, no sales
 
-However, the AI model's response ("detailed gap breakdown is currently unavailable") strongly suggests one of two things happened:
+Both set `recommended_action = 'record_as_bill'` with clear explanation that this should be an ACCPAY bill in Xero.
 
-1. **The tool returned `{ error: "Settlement not found" }`** — The query at line 519 uses `.eq("settlement_id", sid)` against the `settlements` table. If the settlement_id format passed from the UI (`BUN-2301-2026-03-14`) doesn't exactly match what's stored in `settlements.settlement_id`, the query returns null and the tool short-circuits at line 558.
+### 2. Update the Bunnings-specific branch
+**File:** `supabase/functions/_shared/ai_tool_registry.ts` (lines 893-905)
 
-2. **The AI model chose not to call the tool** — The prompt says "Use the analyzeReconciliationGap tool" but the model may have attempted its own analysis instead of invoking the tool, which means none of the 7 queries ran.
+The Bunnings branch currently handles `bankDeposit < 0` in diagnosis text but still falls through. After fix #1, debit periods will be caught before reaching this branch, so no change needed here — but we'll verify the flow is correct.
 
-## What the code SHOULD have returned for Bunnings with a $550.73 gap
+### 3. Add `record_as_bill` to the client-side registry
+**File:** `src/ai/tools/aiToolRegistry.ts`
 
-Based on lines 691-703, the Bunnings rule would fire:
-- `absGap` = 550.73 (> $5 threshold)
-- `recommended_action` = `"investigate_gap"`
-- `recommended_action_reason` = "Bunnings gap exceeds $5. Check PDF extraction quality."
-- `diagnosis` = "Bunnings PDF extraction can produce rounding errors." (or negative deposit variant)
+Update the tool description to mention the `record_as_bill` action in the available actions list.
 
-Plus the 5 new data sections: xero_status, bank_match, top_line_items, fee_analysis, outstanding_invoices.
+### 4. Redeploy the edge function
+Deploy `ai-assistant` to pick up the updated `ai_tool_registry.ts`.
 
-## The $550.73 gap itself — is it real?
+## Technical Detail
 
-With bank_deposit = -$50.00 and a gap of -$550.73, that means `expected_net ≈ $500.73`. A -$50 bank deposit on a Bunnings settlement strongly suggests:
-- This is a **fee-only period** (no sales, just monthly platform fees / commission adjustments)
-- OR the bank deposit field was incorrectly captured from the PDF
+The debit period check inserts at line ~846, before `if (xeroMatch && ...)`:
 
-The gap is likely **real data** — either the PDF parser missed revenue lines, or this genuinely was a debit period where Bunnings charged fees exceeding sales.
+```typescript
+// Priority 0 — Debit period: bank deposit is negative
+if (bankDeposit < 0 && expectedNet > 0) {
+  diagnosis = `Bank deposit is negative ($${bankDeposit.toFixed(2)}), meaning the marketplace debited your account this period. Fees and refunds exceeded sales. This should be recorded as a bill (ACCPAY) in Xero.`;
+  gapType = "debit_period";
+  recommendedAction = "record_as_bill";
+  recommendedActionReason = `Bank deposit is -$${Math.abs(bankDeposit).toFixed(2)} against computed net of $${expectedNet.toFixed(2)}. This is a debit period where marketplace deductions exceeded sales. Record as an ACCPAY bill, not an ACCREC invoice.`;
+} else if (bankDeposit < 0 && expectedNet <= 0) {
+  diagnosis = `Both bank deposit ($${bankDeposit.toFixed(2)}) and computed net ($${expectedNet.toFixed(2)}) are negative. Pure fee debit period with no net sales.`;
+  gapType = "debit_period";
+  recommendedAction = "record_as_bill";
+  recommendedActionReason = `Pure fee debit period. Record as ACCPAY bill in Xero.`;
+}
+```
 
-## The missing account mappings
+The existing `sync-settlement-to-xero` line 738 already does `netAmount < 0 → ACCPAY` for all marketplaces including Bunnings — no changes needed there.
 
-All 5 categories missing (Sales, Seller Fees, Refunds, Other Fees, Shipping) means Bunnings has **never been mapped** in the Account Mapper. This is a separate blocker from the gap — even if the gap resolves, pushing is blocked until mappings are configured.
-
-## Recommended fixes
-
-### Fix 1: Verify tool invocation (debug why AI said "unavailable")
-Check edge function logs for the `ai-assistant` call to confirm whether `analyzeReconciliationGap` was actually invoked and what it returned. The settlement_id format may not match.
-
-### Fix 2: Strengthen the AI prompt to force tool use
-The current prompt in `handleAiScan` (line 152) says "Use the analyzeReconciliationGap tool" but the model can ignore this. Add a system message or use function_call forcing if the AI model supports it.
-
-### Fix 3: Investigate the Bunnings settlement data
-The -$50 bank deposit with $500+ computed net is a significant discrepancy. Check the original Bunnings PDF to verify whether revenue lines were captured correctly by the parser.
-
-## Files involved
-
-| File | Role |
-|------|------|
-| `supabase/functions/_shared/ai_tool_registry.ts` (lines 513-768) | Tool execution — code is correct |
-| `src/components/dashboard/GapTriageTable.tsx` (lines 135-197) | AI scan trigger — prompt may need strengthening |
-| `src/utils/diagnose-gap-reason.ts` | Rule-based fallback text shown in table row (working correctly) |
-
-## Summary
-
-The system coding is correct. The 7-query forensic tool, the Bunnings-specific rules, and the decision tree are all properly implemented. The issue is that **the AI model either didn't call the tool or the settlement wasn't found by ID**. The next step is to check the edge function logs to confirm which scenario occurred, then fix accordingly.
+## Files Modified
+- `supabase/functions/_shared/ai_tool_registry.ts` — add debit period rules
+- `src/ai/tools/aiToolRegistry.ts` — update description
 
