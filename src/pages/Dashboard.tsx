@@ -362,6 +362,8 @@ export default function Dashboard() {
   const [showBankMapper, setShowBankMapper] = useState(false);
   const [pipelineFilter, setPipelineFilter] = useState<{ marketplace: string; month: string } | null>(null);
   const [settlementStatusFilter, setSettlementStatusFilter] = useState<string | null>(null);
+  const [drawerSettlementId, setDrawerSettlementId] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     if (!user) return;
