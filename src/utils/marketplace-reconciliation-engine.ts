@@ -404,27 +404,28 @@ export async function autoReconcileSettlement(
       if (valErr) console.error('[marketplace_validation] recon upsert error:', valErr);
     });
 
-    // ─── Auto-promote: ingested → ready_to_push when reconciliation is matched ───
-    // NEVER promote shopify_auto_* analytics records — they are for insights only
+    // ─── Status promotion is handled server-side by the validation sweep ───
+    // Client-side code must NEVER write status = 'ready_to_push' directly.
+    // Instead, trigger a validation sweep to re-evaluate this settlement.
     if (result.status === 'matched' && !isReconciliationOnly(undefined, undefined, settlementId)) {
-      const { error: promoteErr } = await supabase
-        .from('settlements')
-        .update({
-          status: 'ready_to_push',
-          reconciliation_status: 'matched',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', user.id)
-        .eq('settlement_id', settlementId)
-        .eq('status', 'ingested')           // Only promote from ingested (guard)
-        .eq('is_hidden', false)
-        .eq('is_pre_boundary', false)
-        .is('duplicate_of_settlement_id', null);
-
-      if (promoteErr) {
-        console.error('[autoReconcile] Failed to promote settlement to ready_to_push:', promoteErr);
-      } else {
-        logger.debug(`[autoReconcile] Settlement ${settlementId} promoted to ready_to_push`);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+          fetch(`https://${projectId}.supabase.co/functions/v1/run-validation-sweep`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ settlementId }),
+          }).catch(err => {
+            console.error('[autoReconcile] Failed to trigger validation sweep:', err);
+          });
+          logger.debug(`[autoReconcile] Triggered validation sweep for settlement ${settlementId}`);
+        }
+      } catch (err) {
+        console.error('[autoReconcile] Error triggering validation sweep:', err);
       }
     }
   } catch (err) {

@@ -668,13 +668,14 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
     );
   }
 
-  // Use validation pipeline counts when in actionableOnly (homepage) mode
-  const displayReadyCount = actionableOnly && validationCounts ? validationCounts.ready : counts.ready;
-  const displayReadyTotal = actionableOnly && validationCounts ? validationCounts.readyTotal : counts.readyTotal;
-  const displayUploadNeeded = actionableOnly && validationCounts ? validationCounts.uploadNeeded : 0;
-  const displayUploadManual = actionableOnly && validationCounts ? validationCounts.uploadNeededManual : 0;
-  const displayUploadApi = actionableOnly && validationCounts ? validationCounts.uploadNeededApi : 0;
-  const displayGaps = actionableOnly && validationCounts ? validationCounts.gaps : 0;
+  // ALWAYS use validation pipeline counts — marketplace_validation is the sole source of truth
+  // for readiness, in both homepage (actionableOnly) and full ledger modes
+  const displayReadyCount = validationCounts ? validationCounts.ready : 0;
+  const displayReadyTotal = validationCounts ? validationCounts.readyTotal : 0;
+  const displayUploadNeeded = validationCounts ? validationCounts.uploadNeeded : 0;
+  const displayUploadManual = validationCounts ? validationCounts.uploadNeededManual : 0;
+  const displayUploadApi = validationCounts ? validationCounts.uploadNeededApi : 0;
+  const displayGaps = validationCounts ? validationCounts.gaps : 0;
 
   // In actionableOnly mode, show "all clear" when nothing needs action
   if (actionableOnly && displayReadyCount === 0 && counts.attention === 0 && displayUploadManual === 0) {
