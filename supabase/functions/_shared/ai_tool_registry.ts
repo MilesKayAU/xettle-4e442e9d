@@ -520,6 +520,46 @@ export async function executeTool(
         // in the dashboard that belongs to another workspace user.
         let resolvedOwnerId = userId;
         let validationLookupMethod = "viewer_validation_exact";
+        let matchMethod = "exact";
+
+        const logGapAnalysisError = async (
+          stage: string,
+          error: { message?: string; code?: string } | null | undefined,
+          settlementIdForLog = sid,
+          marketplaceCode?: string | null,
+        ) => {
+          const lookupError = error?.message || "Unknown query error";
+          const lookupErrorCode = error?.code;
+
+          await serviceClient.from("system_events").insert({
+            user_id: resolvedOwnerId,
+            event_type: "ai_gap_analysis_complete",
+            severity: "error",
+            settlement_id: settlementIdForLog,
+            marketplace_code: marketplaceCode ?? null,
+            details: {
+              viewer_user_id: userId,
+              resolved_owner_id: resolvedOwnerId,
+              settlement_id: settlementIdForLog,
+              settlement_found: false,
+              failed_stage: stage,
+              lookup_error: lookupError,
+              lookup_error_code: lookupErrorCode,
+              id_match_method: matchMethod,
+            },
+          });
+
+          return JSON.stringify({
+            error: stage.startsWith("settlement_lookup") ? "Settlement query failed" : "Gap analysis query failed",
+            lookup_error: lookupError,
+            lookup_error_code: lookupErrorCode,
+            failed_stage: stage,
+            settlement_id: settlementIdForLog,
+            id_match_method: matchMethod,
+            resolved_owner_id: resolvedOwnerId,
+          });
+        };
+
         let validationRow = viewerClient
           ? await viewerClient.from("marketplace_validation")
               .select("settlement_id, user_id, marketplace_code, period_start, period_end, overall_status, reconciliation_status, reconciliation_difference, reconciliation_confidence, reconciliation_confidence_reason")
@@ -527,12 +567,20 @@ export async function executeTool(
               .maybeSingle()
           : { data: null };
 
+        if (validationRow?.error) {
+          return await logGapAnalysisError("validation_lookup_exact", validationRow.error, sid);
+        }
+
         if (!validationRow?.data && viewerClient) {
           validationLookupMethod = "viewer_validation_ilike";
           validationRow = await viewerClient.from("marketplace_validation")
             .select("settlement_id, user_id, marketplace_code, period_start, period_end, overall_status, reconciliation_status, reconciliation_difference, reconciliation_confidence, reconciliation_confidence_reason")
             .ilike("settlement_id", sid)
             .maybeSingle();
+
+          if (validationRow?.error) {
+            return await logGapAnalysisError("validation_lookup_ilike", validationRow.error, sid);
+          }
         }
 
         if (!validationRow?.data && viewerClient) {
@@ -542,6 +590,10 @@ export async function executeTool(
             .ilike("settlement_id", `%${sid}%`)
             .limit(1)
             .maybeSingle();
+
+          if (validationRow?.error) {
+            return await logGapAnalysisError("validation_lookup_partial", validationRow.error, sid);
+          }
         }
 
         if (validationRow?.data?.user_id) {
@@ -549,30 +601,57 @@ export async function executeTool(
         }
 
         // ── Settlement lookup with fallbacks against the resolved owner ──
-        let matchMethod = validationRow?.data ? `${validationLookupMethod}_settlement_exact` : "exact";
+        matchMethod = validationRow?.data ? `${validationLookupMethod}_settlement_exact` : "exact";
         let settRes = await serviceClient.from("settlements")
-          .select("settlement_id, marketplace, source, period_end, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, bank_deposit, net_amount, gst_on_income, gst_on_expenses, metadata")
+          .select("settlement_id, marketplace, source, period_start, period_end, status, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, bank_deposit, net_ex_gst, gst_on_income, gst_on_expenses, raw_payload")
           .eq("user_id", resolvedOwnerId)
           .eq("settlement_id", validationRow?.data?.settlement_id || sid)
           .maybeSingle();
 
+        if (settRes.error) {
+          return await logGapAnalysisError(
+            "settlement_lookup_exact",
+            settRes.error,
+            validationRow?.data?.settlement_id || sid,
+            validationRow?.data?.marketplace_code,
+          );
+        }
+
         if (!settRes.data) {
           matchMethod = validationRow?.data ? `${validationLookupMethod}_settlement_ilike` : "ilike";
           settRes = await serviceClient.from("settlements")
-            .select("settlement_id, marketplace, source, period_end, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, bank_deposit, net_amount, gst_on_income, gst_on_expenses, metadata")
+            .select("settlement_id, marketplace, source, period_start, period_end, status, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, bank_deposit, net_ex_gst, gst_on_income, gst_on_expenses, raw_payload")
             .eq("user_id", resolvedOwnerId)
             .ilike("settlement_id", validationRow?.data?.settlement_id || sid)
             .maybeSingle();
+
+          if (settRes.error) {
+            return await logGapAnalysisError(
+              "settlement_lookup_ilike",
+              settRes.error,
+              validationRow?.data?.settlement_id || sid,
+              validationRow?.data?.marketplace_code,
+            );
+          }
         }
 
         if (!settRes.data) {
           matchMethod = validationRow?.data ? `${validationLookupMethod}_settlement_partial` : "partial";
           settRes = await serviceClient.from("settlements")
-            .select("settlement_id, marketplace, source, period_end, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, bank_deposit, net_amount, gst_on_income, gst_on_expenses, metadata")
+            .select("settlement_id, marketplace, source, period_start, period_end, status, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, bank_deposit, net_ex_gst, gst_on_income, gst_on_expenses, raw_payload")
             .eq("user_id", resolvedOwnerId)
             .ilike("settlement_id", `%${validationRow?.data?.settlement_id || sid}%`)
             .limit(1)
             .maybeSingle();
+
+          if (settRes.error) {
+            return await logGapAnalysisError(
+              "settlement_lookup_partial",
+              settRes.error,
+              validationRow?.data?.settlement_id || sid,
+              validationRow?.data?.marketplace_code,
+            );
+          }
         }
 
         // Log invocation to system_events
@@ -595,6 +674,21 @@ export async function executeTool(
         const s = settRes.data;
         if (!s) {
           console.warn(`[analyzeReconciliationGap] Settlement not found after all fallbacks: ${sid}`);
+          await serviceClient.from("system_events").insert({
+            user_id: resolvedOwnerId,
+            event_type: "ai_gap_analysis_complete",
+            severity: "error",
+            settlement_id: sid,
+            marketplace_code: validationRow?.data?.marketplace_code ?? null,
+            details: {
+              viewer_user_id: userId,
+              resolved_owner_id: resolvedOwnerId,
+              settlement_id: sid,
+              settlement_found: false,
+              failed_stage: "settlement_lookup_not_found",
+              id_match_method: matchMethod,
+            },
+          });
           return JSON.stringify({ error: "Settlement not found", settlement_id: sid, id_match_method: matchMethod, resolved_owner_id: resolvedOwnerId, fallbacks_tried: ["viewer_validation_exact", "viewer_validation_ilike", "viewer_validation_partial", "settlement_exact", "settlement_ilike", "settlement_partial"] });
         }
         console.log(`[analyzeReconciliationGap] Found settlement via ${matchMethod}: ${s.marketplace}, bank_deposit=${s.bank_deposit}`);
@@ -638,15 +732,32 @@ export async function executeTool(
             .maybeSingle(),
         ]);
 
+        const queryErrors = [
+          ["validation_query", valRes.error],
+          ["xero_match_query", xeroMatchRes.error],
+          ["bank_transactions_query", bankTxRes.error],
+          ["settlement_lines_query", linesRes.error],
+          ["fee_observations_query", feeObsRes.error],
+          ["outstanding_invoices_query", outstandingRes.error],
+          ["account_mapping_query", mappingRes.error],
+        ].filter(([, error]) => !!error);
+
+        if (queryErrors.length > 0) {
+          const [stage, error] = queryErrors[0] as [string, { message?: string; code?: string }];
+          return await logGapAnalysisError(stage, error, resolvedSid, validationRow?.data?.marketplace_code || s.marketplace);
+        }
+
         const sales = (s.sales_principal || 0) + (s.sales_shipping || 0);
         const fees = Math.abs(s.seller_fees || 0) + Math.abs(s.fba_fees || 0) + Math.abs(s.storage_fees || 0) + Math.abs(s.advertising_costs || 0) + Math.abs(s.other_fees || 0);
         const refunds = s.refunds || 0;
         const reimbursements = s.reimbursements || 0;
-        const expectedNet = sales - fees + refunds + reimbursements;
+        const componentNet = sales - fees + refunds + reimbursements;
+        const expectedNet = s.net_ex_gst ?? componentNet;
         const bankDeposit = s.bank_deposit || 0;
         const computedGap = bankDeposit - expectedNet;
         const validationGap = valRes.data?.reconciliation_difference ?? computedGap;
         const absGap = Math.abs(validationGap);
+        const rawPayload = s.raw_payload && typeof s.raw_payload === "object" ? s.raw_payload : null;
 
         // ── Xero status ──
         const xeroMatch = xeroMatchRes.data;
@@ -767,7 +878,7 @@ export async function executeTool(
             recommendedActionReason = "eBay data may be stale. Review line items and consider re-syncing.";
           }
         } else if (marketplace.includes("kogan")) {
-          const hasPdf = s.metadata?.pdfMerged || s.metadata?.hasPdf;
+          const hasPdf = !!(rawPayload?.pdfMerged || rawPayload?.hasPdf);
           if (!hasPdf) {
             diagnosis = "Kogan CSV doesn't include returns, ad fees, or monthly seller fees. Upload the Remittance PDF to capture all deductions.";
             gapType = "real";
@@ -851,7 +962,24 @@ export async function executeTool(
         // ── Account mapping check ──
         // Mappings are stored in app_settings as JSON: { "Category:Marketplace": "code", "Category": "code" }
         const REQUIRED_CATEGORIES = ["Sales", "Seller Fees", "Refunds", "Other Fees", "Shipping"];
-        const mappingJson = mappingRes.data?.value ? (typeof mappingRes.data.value === "string" ? JSON.parse(mappingRes.data.value) : mappingRes.data.value) : {};
+        let mappingJson: Record<string, any> = {};
+        if (mappingRes.data?.value) {
+          if (typeof mappingRes.data.value === "string") {
+            try {
+              mappingJson = JSON.parse(mappingRes.data.value);
+            } catch (error) {
+              const lookupError = error instanceof Error ? error.message : "Invalid account mapping JSON";
+              return await logGapAnalysisError(
+                "account_mapping_parse",
+                { message: lookupError },
+                resolvedSid,
+                validationRow?.data?.marketplace_code || s.marketplace,
+              );
+            }
+          } else if (typeof mappingRes.data.value === "object") {
+            mappingJson = mappingRes.data.value;
+          }
+        }
         const marketplaceName = (s.marketplace || "").charAt(0).toUpperCase() + (s.marketplace || "").slice(1); // e.g. "bunnings" -> "Bunnings"
         const missingMappings = REQUIRED_CATEGORIES.filter(cat => {
           // Check marketplace-specific key first (e.g. "Sales:Bunnings"), then base key (e.g. "Sales")
@@ -872,6 +1000,8 @@ export async function executeTool(
             fees,
             refunds,
             reimbursements,
+            component_net: componentNet,
+            settlement_net: expectedNet,
             expected_net: expectedNet,
             bank_deposit: bankDeposit,
           },
@@ -899,7 +1029,7 @@ export async function executeTool(
           event_type: "ai_gap_analysis_complete",
           severity: "info",
           settlement_id: resolvedSid,
-          marketplace_code: s.marketplace,
+          marketplace_code: validationRow?.data?.marketplace_code || s.marketplace,
           details: {
             settlement_id: resolvedSid,
             recommended_action: recommendedAction,
