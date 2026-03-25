@@ -34,6 +34,7 @@ import { toast } from 'sonner';
 import { isBankMatchRequired } from '@/constants/settlement-rails';
 import { isReconciliationOnly } from '@/utils/settlement-policy';
 import { PUSHABLE_SOURCES } from '@/utils/settlementSources';
+import { isGapBlocking } from '@/utils/canonical-recon-status';
 
 interface SettlementRow {
   id: string;
