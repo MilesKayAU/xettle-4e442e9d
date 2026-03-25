@@ -1346,6 +1346,16 @@ export default function Dashboard() {
         open={drawerOpen}
         onClose={() => { setDrawerOpen(false); setDrawerSettlementId(null); }}
       />
+
+      <PushSafetyPreview
+        open={pushPreviewOpen}
+        onClose={() => { setPushPreviewOpen(false); setPushPreviewSettlements([]); }}
+        settlements={pushPreviewSettlements}
+        onPushComplete={() => {
+          setPushPreviewOpen(false);
+          setPushPreviewSettlements([]);
+        }}
+      />
     </div>
   );
 }

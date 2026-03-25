@@ -234,15 +234,14 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
             <div className="flex flex-col gap-2">
               <div className="flex gap-2">
                 <Button
-                  variant={!syncCutoffDate ? "destructive" : "outline"}
+                  variant="outline"
                   size="sm"
-                  onClick={handleFetchNow}
+                  onClick={handleTestConnection}
                   disabled={fetching}
                   className="gap-1.5"
-                  title={!syncCutoffDate ? 'Set a sync cutoff date in Settings first' : undefined}
                 >
                   {fetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                  {fetching ? 'Fetching...' : !syncCutoffDate ? '⚠ Set Cutoff Date' : 'Fetch All'}
+                  {fetching ? 'Testing...' : 'Test Connection'}
                 </Button>
                 <Button
                   variant="outline"
@@ -255,20 +254,6 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
                   Disconnect
                 </Button>
               </div>
-              {fetchProgress && (
-                <div className="text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1.5 flex items-center gap-2">
-                  <Loader2 className="h-3 w-3 animate-spin shrink-0" />
-                  <span>{fetchProgress.status}</span>
-                  {fetchProgress.total > 0 && (
-                    <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden ml-1">
-                      <div
-                        className="h-full bg-primary rounded-full transition-all duration-500"
-                        style={{ width: `${Math.round((fetchProgress.current / fetchProgress.total) * 100)}%` }}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           </div>
         ) : !isPaid ? (
