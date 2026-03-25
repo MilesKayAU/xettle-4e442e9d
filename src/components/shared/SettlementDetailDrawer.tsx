@@ -818,7 +818,7 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
                         {apiVerification.verdict === 'no_data' && (
                           <div className="flex items-center gap-2 p-2 rounded-md bg-muted border border-border text-xs">
                             <Info className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-muted-foreground">No transactions found in Mirakl API for this period/document</span>
+                            <span className="text-muted-foreground">No transactions found in API for this period</span>
                           </div>
                         )}
                         {apiVerification.verdict === 'api_error' && (
