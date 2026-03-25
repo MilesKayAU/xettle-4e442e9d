@@ -143,7 +143,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   {
     name: "analyzeReconciliationGap",
     description:
-      "[Read-only] Analyze a settlement's reconciliation gap. Returns financial breakdown, gap amount, rule-based diagnosis, and whether the gap is likely real or a data artifact. This is a lookup-only tool that does not modify any data.",
+      "[Read-only] Comprehensive forensic analysis of a settlement's reconciliation gap. Cross-references settlement financials, Xero invoice status, bank deposit matches, line-item breakdown (top 50 by magnitude), fee anomaly detection, and outstanding invoices. Returns structured diagnosis with a constrained recommended_action enum the UI can act on. This is a lookup-only tool that does not modify any data.",
     parameters: {
       type: "object",
       properties: {
@@ -512,7 +512,7 @@ export async function executeTool(
 
       case "analyzeReconciliationGap": {
         const sid = toolInput.settlementId;
-        const [settRes, valRes] = await Promise.all([
+        const [settRes, valRes, xeroMatchRes, bankTxRes, linesRes, feeObsRes, outstandingRes] = await Promise.all([
           serviceClient.from("settlements")
             .select("settlement_id, marketplace, source, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, bank_deposit, net_amount, gst_on_income, gst_on_expenses, metadata")
             .eq("user_id", userId)
@@ -523,6 +523,35 @@ export async function executeTool(
             .eq("user_id", userId)
             .eq("settlement_id", sid)
             .maybeSingle(),
+          // Xero accounting match (pushed by Xettle or external tool)
+          serviceClient.from("xero_accounting_matches")
+            .select("xero_invoice_id, xero_invoice_number, xero_status, xero_type, match_method, matched_amount, matched_contact, matched_date")
+            .eq("user_id", userId)
+            .eq("settlement_id", sid)
+            .maybeSingle(),
+          // Bank transactions — find matching deposit by amount
+          serviceClient.from("bank_transactions")
+            .select("amount, date, description, contact_name, xero_status, reference")
+            .eq("user_id", userId)
+            .order("date", { ascending: false })
+            .limit(200),
+          // Settlement line items — top 50 by absolute amount
+          serviceClient.from("settlement_lines")
+            .select("amount, amount_type, amount_description, transaction_type, accounting_category, order_id")
+            .eq("user_id", userId)
+            .eq("settlement_id", sid)
+            .order("amount", { ascending: true })
+            .limit(50),
+          // Fee observations for this settlement
+          serviceClient.from("marketplace_fee_observations")
+            .select("fee_type, observed_rate, observed_amount, base_amount, fee_category")
+            .eq("user_id", userId)
+            .eq("settlement_id", sid),
+          // Outstanding invoices cache
+          serviceClient.from("outstanding_invoices_cache")
+            .select("xero_invoice_id, invoice_number, total, amount_due, status, contact_name, date, due_date")
+            .eq("user_id", userId)
+            .limit(50),
         ]);
 
         const s = settRes.data;
@@ -538,49 +567,177 @@ export async function executeTool(
         const validationGap = valRes.data?.reconciliation_difference ?? computedGap;
         const absGap = Math.abs(validationGap);
 
+        // ── Xero status ──
+        const xeroMatch = xeroMatchRes.data;
+        const postedBy = xeroMatch
+          ? (xeroMatch.match_method === "xettle_push" ? "xettle"
+            : xeroMatch.match_method === "reference_match" ? "external"
+            : xeroMatch.match_method === "fuzzy_match" ? "external"
+            : "unknown")
+          : null;
+        const xeroStatus = xeroMatch
+          ? {
+              pushed: true,
+              invoice_id: xeroMatch.xero_invoice_id,
+              invoice_number: xeroMatch.xero_invoice_number,
+              status: xeroMatch.xero_status,
+              type: xeroMatch.xero_type,
+              posted_by: postedBy,
+              matched_amount: xeroMatch.matched_amount,
+              matched_contact: xeroMatch.matched_contact,
+              matched_date: xeroMatch.matched_date,
+            }
+          : { pushed: false };
+
+        // ── Bank match ──
+        const bankTxns = bankTxRes.data || [];
+        const depositAbs = Math.abs(bankDeposit);
+        const netAbs = Math.abs(expectedNet);
+        const bankMatch = bankTxns.find((tx: any) => {
+          const txAmt = Math.abs(tx.amount || 0);
+          return Math.abs(txAmt - depositAbs) < 1.00 || Math.abs(txAmt - netAbs) < 1.00;
+        });
+        const bankMatchResult = bankMatch
+          ? { found: true, amount: bankMatch.amount, date: bankMatch.date, description: bankMatch.description, contact: bankMatch.contact_name }
+          : { found: false };
+
+        // ── Top line items (sorted by absolute amount desc) ──
+        const rawLines = linesRes.data || [];
+        const topLines = rawLines
+          .sort((a: any, b: any) => Math.abs(b.amount || 0) - Math.abs(a.amount || 0))
+          .slice(0, 50)
+          .map((l: any) => ({
+            amount: l.amount,
+            type: l.amount_type || l.transaction_type,
+            description: l.amount_description,
+            category: l.accounting_category,
+            order_id: l.order_id,
+          }));
+
+        // ── Fee analysis ──
+        const feeObs = feeObsRes.data || [];
+        const feeAnalysis = feeObs.length > 0
+          ? feeObs.map((f: any) => ({
+              fee_type: f.fee_type,
+              observed_rate: f.observed_rate,
+              observed_amount: f.observed_amount,
+              base_amount: f.base_amount,
+              category: f.fee_category,
+            }))
+          : [];
+
+        // ── Outstanding invoices (matching by amount) ──
+        const outstandingInvoices = (outstandingRes.data || [])
+          .filter((inv: any) => {
+            const invTotal = Math.abs(inv.total || 0);
+            return Math.abs(invTotal - depositAbs) < 2.00 || Math.abs(invTotal - netAbs) < 2.00;
+          })
+          .slice(0, 5)
+          .map((inv: any) => ({
+            invoice_number: inv.invoice_number,
+            total: inv.total,
+            amount_due: inv.amount_due,
+            status: inv.status,
+            contact: inv.contact_name,
+            date: inv.date,
+            due_date: inv.due_date,
+          }));
+
         // Rule-based diagnosis
         const marketplace = (s.marketplace || "").toLowerCase();
         const source = s.source || "";
         let diagnosis = "";
-        let gapType: "real" | "artifact" | "uncertain" = "uncertain";
+        let gapType: string = "uncertain";
+        let recommendedAction: string = "investigate_gap";
+        let recommendedActionReason = "";
 
-        if (source === "api" && marketplace.includes("ebay")) {
+        // Check if already recorded externally first
+        if (xeroMatch && (xeroMatch.xero_status === "PAID" || xeroMatch.xero_status === "AUTHORISED") && postedBy === "external") {
+          diagnosis = `Already posted to Xero by external tool as ${xeroMatch.xero_invoice_number || xeroMatch.xero_invoice_id} (${xeroMatch.xero_status}).`;
+          gapType = "already_handled";
+          recommendedAction = "mark_already_recorded";
+          recommendedActionReason = `External accounting tool has already posted this settlement. Mark as already recorded to prevent duplicate.`;
+        } else if (absGap < 1.00) {
+          diagnosis = "Gap is within the $1.00 rounding tolerance.";
+          gapType = "artifact";
+          recommendedAction = "rounding_safe_to_push";
+          recommendedActionReason = `Gap of ${validationGap.toFixed(2)} is within rounding tolerance. Safe to push to Xero.`;
+        } else if (source === "api" && marketplace.includes("ebay")) {
           const feeTotal = Math.abs(s.seller_fees || 0);
           if (feeTotal > 0 && Math.abs(absGap - feeTotal) < 1.00) {
             diagnosis = "eBay API returned net amounts (fees already deducted) but fees were subtracted again. This is a data artifact — re-sync eBay to fix.";
             gapType = "artifact";
+            recommendedAction = "rerun_validation";
+            recommendedActionReason = "eBay double-fee artifact detected. Re-syncing should resolve.";
           } else {
             diagnosis = "eBay settlement may have stale data from a previous API sync.";
             gapType = "uncertain";
+            recommendedAction = "investigate_gap";
+            recommendedActionReason = "eBay data may be stale. Review line items and consider re-syncing.";
           }
         } else if (marketplace.includes("kogan")) {
           const hasPdf = s.metadata?.pdfMerged || s.metadata?.hasPdf;
           if (!hasPdf) {
             diagnosis = "Kogan CSV doesn't include returns, ad fees, or monthly seller fees. Upload the Remittance PDF to capture all deductions.";
             gapType = "real";
+            recommendedAction = "upload_settlement_csv";
+            recommendedActionReason = "Kogan Remittance PDF is missing. Upload it to capture the full fee breakdown.";
           } else {
             diagnosis = "Kogan PDF adjustments may not have been fully captured.";
             gapType = "uncertain";
+            recommendedAction = "investigate_gap";
+            recommendedActionReason = "PDF was uploaded but gap persists. Review line items for uncaptured adjustments.";
           }
         } else if (marketplace.includes("bunnings")) {
           diagnosis = bankDeposit < 0
             ? "Bunnings bank deposit is negative — likely a fee-only period."
             : "Bunnings PDF extraction can produce rounding errors.";
-          gapType = absGap < 5 ? "artifact" : "uncertain";
+          if (absGap < 5) {
+            gapType = "artifact";
+            recommendedAction = "rounding_safe_to_push";
+            recommendedActionReason = "Bunnings rounding variance under $5. Safe to push.";
+          } else {
+            gapType = "uncertain";
+            recommendedAction = "investigate_gap";
+            recommendedActionReason = "Bunnings gap exceeds $5. Check PDF extraction quality.";
+          }
         } else if (marketplace.includes("mydeal")) {
           if ((s.sales_principal || 0) === 0 && Math.abs(s.seller_fees || 0) > 0) {
             diagnosis = "MyDeal has fees but no sales captured — CSV column mapping may need review.";
             gapType = "real";
+            recommendedAction = "upload_settlement_csv";
+            recommendedActionReason = "Sales data missing from MyDeal CSV. Re-upload with correct column mapping.";
           }
         } else if (marketplace.includes("shopify")) {
           diagnosis = "Shopify payout may include GST components not broken out in fields.";
-          gapType = absGap < 2 ? "artifact" : "uncertain";
+          if (absGap < 2) {
+            gapType = "artifact";
+            recommendedAction = "rounding_safe_to_push";
+            recommendedActionReason = "Shopify rounding variance under $2. Safe to push.";
+          } else {
+            gapType = "uncertain";
+            recommendedAction = "investigate_gap";
+            recommendedActionReason = "Shopify gap may reflect missing GST breakdown or uncaptured payment adjustments.";
+          }
         }
 
-        if (!diagnosis) {
-          diagnosis = validationGap > 0
+        if (!diagnosis || recommendedAction === "investigate_gap") {
+          if (!diagnosis) {
+            diagnosis = validationGap > 0
             ? "Bank deposit exceeds computed net — possible uncaptured income (reimbursements, adjustments)."
             : "Computed net exceeds bank deposit — possible uncaptured deductions (ad spend, returns, fees).";
+          }
+          // Fallback recommended action based on data availability
+          if (!s.sales_principal && !s.seller_fees) {
+            recommendedAction = "upload_settlement_csv";
+            recommendedActionReason = "No settlement data found. Upload the settlement file to populate financials.";
+          } else if (absGap > 50) {
+            recommendedAction = "contact_marketplace";
+            recommendedActionReason = `Gap of $${absGap.toFixed(2)} is significant. Review line items and contact marketplace if unexplained.`;
+          }
+          if (!recommendedActionReason) {
+            recommendedActionReason = "Gap detected. Review the financial breakdown and line items to identify the source.";
+          }
         }
 
         return JSON.stringify({
@@ -597,7 +754,14 @@ export async function executeTool(
           gap_amount: validationGap,
           gap_direction: validationGap > 0 ? "bank_higher" : validationGap < 0 ? "net_higher" : "balanced",
           gap_type: gapType,
+          xero_status: xeroStatus,
+          bank_match: bankMatchResult,
+          top_line_items: topLines,
+          fee_analysis: feeAnalysis,
+          outstanding_invoices: outstandingInvoices,
           diagnosis,
+          recommended_action: recommendedAction,
+          recommended_action_reason: recommendedActionReason,
           validation_status: valRes.data?.overall_status || "unknown",
           reconciliation_confidence: valRes.data?.reconciliation_confidence,
           confidence_reason: valRes.data?.reconciliation_confidence_reason,
