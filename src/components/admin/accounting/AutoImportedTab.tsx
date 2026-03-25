@@ -80,6 +80,7 @@ type AuditStatus = 'complete' | 'in_xero' | 'bank_only' | 'review' | 'ready_to_p
 function deriveAuditStatus(
   s: AutoImportedSettlement,
   xeroMatch: XeroMatch | undefined,
+  validationStatus?: string | null,
 ): AuditStatus {
   if (s.status === 'already_recorded') return 'pre_boundary';
 
@@ -91,12 +92,8 @@ function deriveAuditStatus(
   if (hasXero && !hasBank) return 'in_xero';
   if (hasFuzzyXero) return 'review';
   if (!hasXero && hasBank) return 'bank_only';
-  // Canonical gap check — compute gap from settlement component fields
-  const net = s.bank_deposit || 0;
-  const computed = (s.sales_principal || 0) + (s.seller_fees || 0) + (s.fba_fees || 0) +
-    (s.storage_fees || 0) + (s.refunds || 0) + (s.reimbursements || 0);
-  const gap = (computed === 0 && net === 0) ? 0 : net - computed;
-  if (s.status === 'ready_to_push' || isReconSafeForPush(gap)) return 'ready_to_push';
+  // Pushability determined exclusively by marketplace_validation.overall_status
+  if (validationStatus === 'ready_to_push') return 'ready_to_push';
   return 'unknown';
 }
 
