@@ -154,6 +154,21 @@ Deno.serve(async (req) => {
     const errors = allResults.filter((r) => r.error);
     console.log(`[fetch-mirakl-settlements] ✅ Done — imported: ${totalImported}, skipped: ${totalSkipped}, empty: ${totalEmpty}, errors: ${errors.length}`);
 
+    // Log mirakl_fetch_complete event for Data Integrity scanner freshness tracking
+    await adminClient.from("system_events").insert({
+      user_id: targetUserId,
+      event_type: "mirakl_fetch_complete",
+      severity: errors.length > 0 ? "warning" : "info",
+      marketplace_code: "bunnings",
+      details: {
+        imported: totalImported,
+        skipped: totalSkipped,
+        empty_skipped: totalEmpty,
+        errors: errors.length,
+        connections_count: connections.length,
+      },
+    });
+
     if (errors.length > 0 && errors.length === allResults.length) {
       const firstError = errors[0].error;
       return new Response(
