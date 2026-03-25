@@ -1,77 +1,72 @@
 
 
-## Audit: How Kogan Notifications Reach the Customer Today
+## Plan: Inline Upload Dialog Per Row Instead of Page Navigation
 
-### What currently works
+### Problem
+When users click "Upload" on a row in the Settlements Overview table, it navigates them away to the full upload page. They lose context, can't see their list of outstanding items, and have to go back and forth. There's no contextual guidance about what specific files are needed for that marketplace/period.
 
-1. **Upload Flow (SmartUploadFlow.tsx)** — The Kogan pairing card is well-built:
-   - Groups CSVs and PDFs by doc number/period
-   - Shows "✅ Paired", "⚠ Missing PDF", "⚠ No saved Kogan settlement found"
-   - Warns that CSV-only totals exclude returns/ad spend/seller fees
-   - "Upload missing files" button opens file picker
-   - "Merge PDF into Saved Settlement" for late-PDF uploads
+### Solution
+Replace the navigate-away behavior with an inline upload dialog (modal) that:
+1. Opens right on the page when clicking "Upload" on any row
+2. Shows marketplace-specific guidance (e.g. Kogan needs CSV + PDF, Big W needs one CSV, etc.)
+3. Shows the expected date range for that period
+4. Accepts file drops/picks and processes them inline
+5. Closes back to the same table view after upload completes
 
-2. **Validation Sweep (run-validation-sweep/index.ts)** — Kogan auto-generated settlements (`shopify_auto_kogan_*`) do create `settlement_needed` rows, which feed the "Upload Needed" card in Settlements Overview.
+### Implementation
 
-3. **Dashboard cards** — RecentSettlements and RecentUploads both include Kogan in their label maps.
+**1. Create `InlineUploadDialog` component**
 
-4. **DailyTaskStrip** — Shows a generic "N marketplaces have no recent settlement" banner when `missingSettlementCount > 0`.
+File: `src/components/admin/accounting/InlineUploadDialog.tsx`
 
-### What is missing or weak
+A Dialog/Sheet component that receives:
+- `marketplaceCode` — which marketplace
+- `periodLabel` — expected period (e.g. "2026-03-01 → 2026-03-28")
+- `periodStart` / `periodEnd` — date bounds
+- `onComplete` — callback to refresh the table
 
-| Gap | Where it should appear | Current state |
-|-----|----------------------|---------------|
-| **No Kogan-specific upload guidance on the dashboard** | DailyTaskStrip / ActionControlPanel | The strip says "N marketplaces have no recent settlement" but doesn't name Kogan or explain that CSV+PDF pairs are required |
-| **No explanation that Kogan needs TWO files** | Upload flow header, WelcomeGuide, OnboardingTodos | The pairing card shows the state but there's no upfront instruction before the user drops files |
-| **ActionControlPanel "Upload Needed" card doesn't distinguish Kogan** | ActionControlPanel.tsx | Lists all missing marketplaces generically — doesn't note Kogan requires CSV+PDF pair |
-| **Missing settlement banner in upload sheet** | Dashboard.tsx upload overlay | Shows `missingSettlements` list from validation, but Kogan entries don't mention "CSV + PDF required" |
-| **No persistent dashboard notification for Kogan with missingPdf=true** | Dashboard home, ActionControlPanel | If a Kogan CSV was saved without its PDF, there's no ongoing alert telling the user to upload the PDF to fix the net payout |
-| **SettlementCoverageMap** | Onboarding coverage map | Shows Kogan periods but doesn't highlight that red cells specifically need CSV+PDF |
+Content:
+- Header: marketplace name + period range
+- Guidance section based on marketplace:
+  - **Kogan**: "Upload 2 files: a CSV (order data) and PDF (Remittance Advice) for this period"
+  - **Other marketplaces**: "Upload 1 settlement CSV file for this period"
+- File drop zone with file picker button
+- After files are selected, show detected file names and a "Save" button
+- Uses the existing `processFile` logic from SmartUploadFlow (extracted into a shared util or called directly)
 
-### Plan: Add Kogan-Specific Notifications Across 4 Surfaces
+**2. Update `ValidationSweep.tsx` — Wire dialog into RowAction**
 
-**1. Upload flow — Add upfront Kogan pairing guidance**
+Replace `onUpload={() => onSwitchToUpload?.(row.marketplace_code, row.period_label)}` with opening the new `InlineUploadDialog` with the row's marketplace and period data.
 
-File: `src/components/admin/accounting/SmartUploadFlow.tsx`
+Add state for tracking which row's dialog is open:
+- `uploadDialogRow: { marketplace_code, period_label, period_start, period_end } | null`
 
-Before the pairing card, when Kogan files are detected, show a one-line info banner:
-> "Kogan settlements require both a CSV (order data) and PDF (Remittance Advice) for accurate reconciliation. Upload both files together for best results."
+When upload completes, close dialog and re-run the sweep to refresh the table.
 
-This appears only when Kogan files are in the upload list but not all pairs are complete.
+**3. Update `ActionCentre.tsx` — Wire dialog into "Upload now" and individual rows**
 
-**2. Dashboard DailyTaskStrip — Name Kogan specifically**
+Same pattern: instead of `onSwitchToUpload(buildMissingList())`, open the inline dialog for the specific marketplace. The "Upload now" button at the bottom can still navigate to the full upload page for bulk uploads, but individual row items get inline dialogs.
 
-File: `src/components/dashboard/DailyTaskStrip.tsx`
+### Marketplace Guidance Map
 
-When `missingSettlementCount > 0`, enhance the banner to list which marketplaces need uploads (passed from Dashboard.tsx). For Kogan specifically, append "(CSV + PDF pair)".
+Built into the dialog component:
+```
+kogan → "2 files required: CSV (order data) + PDF (Remittance Advice)"
+bigw → "1 file: CSV settlement report from Big W Marketplace Hub"
+mydeal → "1 file: CSV settlement report from MyDeal Seller Portal"
+everyday_market → "1 file: CSV settlement report"
+default → "1 file: Settlement CSV for this period"
+```
 
-File: `src/pages/Dashboard.tsx`
-
-Pass the marketplace names (not just the count) to DailyTaskStrip so it can render them.
-
-**3. ActionControlPanel — Kogan-specific "Upload Needed" detail**
-
-File: `src/components/admin/accounting/ActionControlPanel.tsx`
-
-In the "Upload Needed" card, when a missing marketplace is Kogan, add a subtitle: "Requires CSV + PDF pair".
-
-**4. Dashboard — Alert for saved Kogan settlements with missingPdf=true**
-
-File: `src/pages/Dashboard.tsx`
-
-Query settlements where `marketplace ILIKE '%kogan%' AND metadata->>'missingPdf' = 'true'`. If any exist, show a small amber banner:
-> "N Kogan settlement(s) saved without PDF — net payout may not match bank deposit. Upload the Remittance PDF to correct."
-
-With a button that opens the upload sheet.
+Each entry also shows the expected date range from the validation row.
 
 ### Files Modified
 
 | File | Changes |
 |------|---------|
-| `src/components/admin/accounting/SmartUploadFlow.tsx` | Add Kogan pairing guidance banner above pairing card |
-| `src/components/dashboard/DailyTaskStrip.tsx` | Accept marketplace names list; show Kogan "(CSV + PDF)" note |
-| `src/pages/Dashboard.tsx` | Pass marketplace names to DailyTaskStrip; add missingPdf Kogan alert query + banner |
-| `src/components/admin/accounting/ActionControlPanel.tsx` | Add "CSV + PDF pair" subtitle for Kogan in Upload Needed card |
+| `src/components/admin/accounting/InlineUploadDialog.tsx` | **New** — Modal with marketplace-specific guidance, file drop zone, inline processing |
+| `src/components/onboarding/ValidationSweep.tsx` | Add dialog state; change RowAction upload to open dialog instead of navigating |
+| `src/components/dashboard/ActionCentre.tsx` | Add dialog state for individual upload items; keep bulk "Upload now" as page navigation |
 
 ### No database changes needed
 
