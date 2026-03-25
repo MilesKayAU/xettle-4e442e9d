@@ -56,6 +56,7 @@ interface SettlementRow {
   storage_fees: number | null;
   advertising_costs: number | null;
   is_pre_boundary: boolean;
+  reconciliation_difference?: number | null;
   dashboard_origin?: 'settlement' | 'validation';
   queue_type?: 'manual_upload' | 'api_sync';
 }
