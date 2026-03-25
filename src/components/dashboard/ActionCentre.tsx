@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import SettlementDetailDrawer from '@/components/shared/SettlementDetailDrawer';
+import InlineUploadDialog from '@/components/admin/accounting/InlineUploadDialog';
 import { triggerValidationSweep, formatAUD, MARKETPLACE_LABELS, GATEWAY_CODES, MARKETPLACE_ALIASES } from '@/utils/settlement-engine';
 import { isBankMatchRequired } from '@/constants/settlement-rails';
 import { toast } from 'sonner';
