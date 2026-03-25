@@ -219,14 +219,13 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
     })();
   }, []);
 
-  // Mirakl API verification handler
-  const handleVerifyMirakl = useCallback(async () => {
+  // Universal API verification handler
+  const handleVerifyApi = useCallback(async () => {
     if (!settlement?.settlement_id) return;
     setApiVerifying(true);
     setApiVerification(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await supabase.functions.invoke('verify-mirakl-settlement', {
+      const res = await supabase.functions.invoke('verify-settlement', {
         body: { settlement_id: settlement.settlement_id },
       });
       if (res.error) throw new Error(res.error.message);
@@ -235,7 +234,7 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
     } catch (err: any) {
       const is401 = err.message?.includes('401') || err.message?.includes('Unauthorized');
       const errorMsg = is401
-        ? 'Your Bunnings API key was rejected (401). Please verify it\'s still valid in the Bunnings seller portal and update it in Settings > API Connections.'
+        ? 'Your API key was rejected (401). Please verify it\'s still valid and update it in Settings > API Connections.'
         : `API verification failed: ${err.message}`;
       toast.error(errorMsg, { duration: is401 ? 8000 : 4000 });
       setApiVerification({ verdict: 'api_error', error: err.message, is_auth_error: is401 });
@@ -766,14 +765,8 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
               </>
             )}
 
-            {/* API Verification — Admin only, Mirakl/Bunnings settlements */}
+            {/* API Verification — Admin only, any marketplace with potential API connection */}
             {isAdmin && settlement.marketplace && (
-              settlement.marketplace.toLowerCase().includes('bunnings') ||
-              settlement.marketplace.toLowerCase().includes('catch') ||
-              settlement.marketplace.toLowerCase().includes('mydeal') ||
-              settlement.marketplace.toLowerCase().includes('kogan') ||
-              settlement.source === 'mirakl_api'
-            ) && (
               <>
                 <Separator />
                 <div className="space-y-2">
@@ -782,11 +775,11 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
                       variant="outline"
                       size="sm"
                       className="h-7 text-xs gap-1.5"
-                      onClick={handleVerifyMirakl}
+                      onClick={handleVerifyApi}
                       disabled={apiVerifying}
                     >
                       <Search className="h-3.5 w-3.5" />
-                      {apiVerifying ? 'Verifying via API…' : 'Verify via Mirakl API'}
+                      {apiVerifying ? 'Verifying via API…' : 'Verify via API'}
                     </Button>
                   )}
 
@@ -825,13 +818,19 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
                         {apiVerification.verdict === 'no_data' && (
                           <div className="flex items-center gap-2 p-2 rounded-md bg-muted border border-border text-xs">
                             <Info className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-muted-foreground">No transactions found in Mirakl API for this period/document</span>
+                            <span className="text-muted-foreground">No transactions found in API for this period</span>
                           </div>
                         )}
                         {apiVerification.verdict === 'api_error' && (
                           <div className="flex items-center gap-2 p-2 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-xs">
                             <AlertTriangle className="h-4 w-4 text-red-600" />
                             <span className="text-red-800 dark:text-red-200">{apiVerification.error || 'API error'}</span>
+                          </div>
+                        )}
+                        {apiVerification.verdict === 'no_api_connection' && (
+                          <div className="flex items-center gap-2 p-2 rounded-md bg-muted border border-border text-xs">
+                            <Info className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-muted-foreground">{apiVerification.error || 'No API connection found for this marketplace'}</span>
                           </div>
                         )}
 
@@ -920,7 +919,7 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
                           variant="ghost"
                           size="sm"
                           className="h-6 text-[10px] gap-1"
-                          onClick={handleVerifyMirakl}
+                          onClick={handleVerifyApi}
                           disabled={apiVerifying}
                         >
                           <Search className="h-3 w-3" />

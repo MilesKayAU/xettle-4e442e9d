@@ -2,78 +2,30 @@
 
 ## Universal Settlement API Verification
 
-### Problem
-The current verification system is Mirakl-only. The edge function (`verify-mirakl-settlement`), the UI button ("Verify via Mirakl API"), and the transaction filter logic all assume Mirakl. This means:
-- eBay API settlements have no verification path
-- Amazon API settlements have no verification path
-- CSV-uploaded settlements for any marketplace fail verification because the filter tries to match document numbers extracted from PDF filenames (e.g. `BUN-2301-...`) against API transaction references — which never match
-- Future marketplace APIs would each need a bespoke verify function
+### Architecture
 
-### Solution
+The `verify-settlement` edge function is a universal API verification router that supports all marketplace types:
 
-Build a single universal `verify-settlement` edge function that detects the marketplace type and routes to the correct API verification path. The UI becomes marketplace-agnostic.
+- **Mirakl** (Bunnings, Catch, MyDeal): Fetches transaction logs from Mirakl API
+- **eBay**: Fetches payouts from eBay Sell Finances API  
+- **Amazon**: Placeholder — SP-API settlement reports require async report generation (coming soon)
+- **Unknown marketplaces**: Returns `no_api_connection` verdict with diagnostic info
 
----
+### Source-Aware Filtering (Mirakl)
 
-### Step 1 — Create `verify-settlement` universal edge function
+The Mirakl verification path uses source-aware filtering to prevent false "No Data" results:
 
-A new function that:
-1. Loads the settlement from DB
-2. Detects the marketplace type from `settlement.marketplace` and available API connections (`mirakl_tokens`, `ebay_tokens`, `amazon_tokens`)
-3. Routes to the correct verification logic:
-   - **Mirakl marketplaces** (Bunnings, Catch, etc.): Reuse existing Mirakl API fetch logic but with **fixed filtering** — for `csv_upload` source, match by date range only (no document number matching); for `mirakl_api` source, match by the actual payout reference
-   - **eBay**: Fetch from eBay Sell Finances API `/sell/finances/v1/payout` for the matching period, compare totals
-   - **Amazon**: Fetch from SP-API settlement reports for the matching period, compare totals
-   - **No API connection**: Return `{ verdict: "no_api_connection" }` with a message like "No API connection found for this marketplace"
-4. Returns a standardized response shape (same as current: `verdict`, `api_totals`, `stored_settlement`, `discrepancies`, etc.)
+- **csv_upload / manual**: Filters by date range only (1-day buffer). CSV-uploaded settlements have no Mirakl-native reference, so document number matching is impossible.
+- **mirakl_api**: Extracts the actual payout reference from `raw_payload` or settlement ID pattern (`mirakl-{marketplace}-{ref}`) and matches by that reference.
 
-The existing `verify-mirakl-settlement` function's Mirakl-specific logic moves into a helper within this new function. The old function can be kept as a thin redirect for backwards compatibility.
+### Standardized Response Shape
 
-### Step 2 — Fix the Mirakl transaction filter (the immediate bug)
-
-Inside the Mirakl verification path:
-- If `settlement.source === 'csv_upload'` or `settlement.source === 'manual'`: filter transactions by **date range only** (period_start to period_end with 1-day buffer). Do NOT attempt document number matching — CSV-uploaded settlements have no Mirakl-native reference.
-- If `settlement.source === 'mirakl_api'`: extract the payout reference from the settlement's `raw_payload` or `settlement_id` pattern and match against `payment_reference` / `accounting_document_number`.
-- Log the filter path taken and sample transaction references for diagnostics.
-
-### Step 3 — Add eBay verification path
-
-Query eBay Sell Finances API for payouts within the settlement's date range. Map eBay transaction types to the standard comparison fields (sales, fees, refunds, bank_deposit). Return in the same standardized format.
-
-### Step 4 — Add Amazon verification path  
-
-Query Amazon SP-API settlement reports for the matching period. Map Amazon transaction types to standard fields. Return in standardized format.
-
-### Step 5 — Update the UI to be marketplace-agnostic
-
-In `SettlementDetailDrawer.tsx`:
-- Rename `handleVerifyMirakl` → `handleVerifyApi`
-- Change the button label from "Verify via Mirakl API" to "Verify via API"
-- Show the button for **any** settlement where the marketplace has an active API connection (check `mirakl_tokens`, `ebay_tokens`, `amazon_tokens`), not just Bunnings/Catch/MyDeal
-- Call the new `verify-settlement` function instead of `verify-mirakl-settlement`
-- Handle the `no_api_connection` verdict with a clear message
-
-In `SettlementCorrectionPanel.tsx`:
-- Update to call `verify-settlement` instead of `verify-mirakl-settlement`
-
-### Step 6 — Update the plan file
-
-Update `.lovable/plan.md` to reflect the universal verification architecture.
-
----
-
-### Files to create/modify
-- **Create**: `supabase/functions/verify-settlement/index.ts` — universal router with Mirakl, eBay, Amazon paths
-- **Edit**: `supabase/functions/verify-mirakl-settlement/index.ts` — thin redirect to new function (or deprecate)
-- **Edit**: `src/components/shared/SettlementDetailDrawer.tsx` — marketplace-agnostic verify button + handler
-- **Edit**: `src/components/shared/SettlementCorrectionPanel.tsx` — use new universal function
-
-### Standardized response shape (all marketplaces)
-```text
+All marketplace paths return the same response shape:
+```
 {
   settlement_id, marketplace, source,
   verdict: "match" | "discrepancy" | "no_data" | "api_error" | "no_api_connection",
-  filter_method: "date_range_only" | "payout_reference" | "document_number",
+  filter_method: "date_range_only" | "payout_reference" | "none",
   transaction_count,
   api_totals: { sales, shipping, fees, refunds, payment, sales_tax },
   stored_settlement: { ... },
@@ -82,3 +34,12 @@ Update `.lovable/plan.md` to reflect the universal verification architecture.
 }
 ```
 
+### UI
+
+The "Verify via API" button now appears for ALL settlements (admin only), not just Mirakl marketplaces. The function automatically detects the marketplace and routes to the correct verification path. If no API connection exists, it returns a clear message.
+
+### Files
+- `supabase/functions/verify-settlement/index.ts` — universal router
+- `supabase/functions/verify-mirakl-settlement/index.ts` — legacy, still functional independently
+- `src/components/shared/SettlementDetailDrawer.tsx` — marketplace-agnostic UI
+- `src/components/shared/SettlementCorrectionPanel.tsx` — uses universal function
