@@ -1,81 +1,95 @@
 
 
-## Plan: Canonical Data Integrity Scanner Panel on Dashboard Home
+## Honest Audit: Why These Bugs Keep Happening — And What It Takes to Get to 100%
 
-### Problem
+### The Pattern
 
-There is no single place for a bookkeeper to verify that all system data is accurate before working. Scans (validation sweep, bank matching, Xero sync, profit recalculation, eBay re-fetch) are scattered across different pages, buttons, and fire-and-forget calls. The bookkeeper has no visibility into when each was last run or whether data is stale.
+Looking back across the last 20+ messages, the same failure mode repeats:
 
-### Solution
+1. A bug is found (e.g., "table says OK but drawer says gap")
+2. A fix is applied to **one or two files** (e.g., GenericMarketplaceDashboard, AutoImportedTab)
+3. **Other files with the exact same bug are left untouched**
+4. Next session, the user finds the same bug in a different view
 
-Add a **"Data Integrity Scanner"** card to the Dashboard Home view (below SystemStatusStrip, above ActionCentre). It shows a list of canonical scan operations, each with:
-- Last run timestamp
-- Status indicator (green = fresh < 1hr, amber = stale > 1hr, red = never run)
-- Individual "Run" button
-- A "Run All" button that chains them in sequence
+This is **command-driven coding** — fixing only what's explicitly pointed at — rather than **system-wide enforcement**.
 
-### The 5 Critical Scans
+### Concrete proof from the codebase right now
 
-| # | Scan | What it does | Edge function / action | Stores last-run in |
-|---|------|-------------|----------------------|-------------------|
-| 1 | **Validation Sweep** | Recomputes all settlement statuses, reconciliation gaps, missing periods | `run-validation-sweep` | `app_settings.last_validation_sweep` |
-| 2 | **Bank Deposit Matching** | Matches Xero bank transactions to settlements | `match-bank-deposits` | `app_settings.last_bank_match` |
-| 3 | **Xero Invoice Sync** | Refreshes invoice statuses from Xero | `sync-xero-status` (via `runXeroSync()`) | `app_settings.last_xero_sync` |
-| 4 | **API Settlement Fetch** | Re-fetches latest settlements from eBay/Amazon/Mirakl APIs | `scheduled-sync` (via `runMarketplaceSync()`) | `app_settings.last_marketplace_sync` |
-| 5 | **Profit Recalculation** | Rebuilds settlement_profit from authoritative data | `recalculate-profit` | `app_settings.last_profit_recalc` |
+**The canonical helper `canonical-recon-status.ts` was created but only 2 of 6+ files actually import it:**
 
-### Implementation
+| File | Uses canonical helper? | Still trusts legacy strings? |
+|------|----------------------|----------------------------|
+| `GenericMarketplaceDashboard.tsx` | YES | Fallback to legacy on line 287 |
+| `AutoImportedTab.tsx` | YES | Still checks legacy strings as secondary (line 96) |
+| `AccountingDashboard.tsx` (3,455 lines) | **NO** | Line 793: `s.reconciliation_status === 'matched'` |
+| `RecentSettlements.tsx` (1,101 lines) | **NO** | Doesn't check recon gap at all |
+| `ActionCentre.tsx` | **NO** | Trusts `overall_status` from DB only |
+| `ValidationSweep.tsx` | **NO** | Trusts `overall_status` from DB only |
 
-**1. New canonical action: `src/actions/dataIntegrity.ts`**
+The DB trigger fix means ActionCentre and ValidationSweep are *indirectly* protected — but AccountingDashboard and RecentSettlements have **zero gap awareness**.
 
-Exports:
-- `runDataIntegrityScan(scanKey)` — runs a single scan, updates `app_settings` with timestamp on success
-- `runAllDataIntegrityScans()` — runs all 5 in order, returning per-scan results
-- `getLastScanTimestamps()` — reads all 5 `app_settings` keys in one query
-- `SCAN_DEFINITIONS` — array of `{ key, label, description, edgeFunction }` for the 5 scans
+### The 5 Categories of Remaining Gaps
 
-Each scan function calls the existing canonical actions (`runXeroSync`, `runMarketplaceSync`, `triggerValidationSweep`, etc.) and writes a `last_<scan>` timestamp to `app_settings` on success.
+**Category 1: Reconciliation truth not enforced everywhere**
+- `AccountingDashboard.tsx` line 793 still derives `reconciliationMatch` from legacy string
+- `RecentSettlements.tsx` has no gap display or blocking at all
+- The "Ready to Push" count on the dashboard could still show stale counts if the sweep hasn't re-run since the trigger fix
 
-**2. New component: `src/components/dashboard/DataIntegrityScanner.tsx`**
+**Category 2: Data queries missing `reconciliation_difference` field**
+- Several components query `settlements` but don't SELECT `reconciliation_difference`, so the canonical helper receives `undefined` and returns `'unknown'` (which is treated as safe-to-push)
+- This silently bypasses the gap gate
 
-UI card with:
-- Header: "Data Integrity" with a shield icon
-- 5 rows, one per scan, showing: name, description, last-run timestamp (relative, e.g. "12 min ago"), status dot, individual "Run" button
-- "Run All Scans" button at bottom that sequentially triggers each scan with a progress indicator
-- While a scan is running, its row shows a spinner and the button is disabled
-- After completion, timestamps refresh automatically
+**Category 3: Parser/ingestion bugs still producing wrong numbers**
+- eBay fee double-counting (plan approved, not yet deployed to edge function)
+- Kogan PDF merge not propagating ad fees / returns
+- MyDeal parser producing `sales_principal = 0` for all settlements
+- Everyday Market sign handling
+- These are the *root cause* of the gaps — the gating just prevents bad data from reaching Xero
 
-**3. Wire into Dashboard Home**
+**Category 4: Validation sweep doesn't populate `reconciliation_difference` for all rows**
+- Only rows with a matching settlement get a computed gap
+- Synthetic "missing period" rows have `reconciliation_difference = NULL`
+- This means the canonical helper returns `'unknown'` → safe to push
 
-File: `src/pages/Dashboard.tsx`
+**Category 5: No automated regression testing**
+- No test that says "query every ready_to_push row and assert abs(gap) <= 1"
+- No test that verifies all push-path components import canonical-recon-status
+- No test that verifies the recon formula is identical across client, server, and DB trigger
 
-Add `<DataIntegrityScanner />` between SystemStatusStrip and the Kogan missingPdf alert (around line 1059), only visible when `xeroConnected || userMarketplaces.length > 0`.
+### What It Takes to Get to 100% Trustworthy
 
-**4. Export from canonical barrel**
+**Phase 1: Complete the canonical enforcement (remaining items from the approved plan)**
 
-File: `src/actions/index.ts`
+1. **AccountingDashboard.tsx** — Replace line 793 `reconciliationMatch: s.reconciliation_status === 'matched'` with canonical gap check. This is a 3,455-line file that is the primary working view for the bookkeeper.
 
-Add exports for the new `dataIntegrity` module.
+2. **RecentSettlements.tsx** — Add gap display in the status column. Currently shows "Ready to Push" with no indication of gap status. Must query `reconciliation_difference` and use `isGapBlocking()`.
 
-### Timestamp Storage
+3. **All settlement queries site-wide** — Audit every `.select()` on `settlements` table to ensure `reconciliation_difference` is included when gap logic is needed downstream.
 
-Uses existing `app_settings` table (key/value per user). Keys:
-- `last_validation_sweep`
-- `last_bank_match`
-- `last_xero_sync`
-- `last_marketplace_sync`
-- `last_profit_recalc`
+**Phase 2: Fix the data at source (parser bugs)**
 
-No database migration needed — `app_settings` already supports arbitrary keys with RLS per user.
+4. **eBay edge function** — Reconstruct gross from net+fees (approved plan, not yet implemented)
+5. **Kogan PDF merge** — Propagate ad fees, seller fees, returns into settlement fields
+6. **MyDeal parser** — Capture sales_principal from CSV (currently always 0)
+7. **Everyday Market** — Fix sign handling for tax/adjustments
 
-### Files Modified
+**Phase 3: Defensive testing**
 
-| File | Changes |
-|------|---------|
-| `src/actions/dataIntegrity.ts` | **New** — canonical scan orchestrator with 5 scan types |
-| `src/actions/index.ts` | Export new data integrity actions |
-| `src/components/dashboard/DataIntegrityScanner.tsx` | **New** — scanner card UI with per-scan rows, timestamps, run buttons |
-| `src/pages/Dashboard.tsx` | Import and render DataIntegrityScanner on home view |
+8. **SQL audit query as a runnable health check** — `SELECT * FROM marketplace_validation WHERE overall_status = 'ready_to_push' AND ABS(COALESCE(reconciliation_difference, 0)) > 1` must return 0 rows, checkable from the Data Integrity Scanner.
+
+9. **Grep-based guardrail test** — Like the existing `canonical-actions.test.ts`, add a test that greps for `reconciliation_status === 'matched'` or `=== 'reconciled'` outside of `canonical-recon-status.ts` and fails if found. This prevents future regressions.
+
+### Implementation Order (for this session)
+
+| Step | What | Files |
+|------|------|-------|
+| 1 | Fix AccountingDashboard recon truth | `AccountingDashboard.tsx` |
+| 2 | Fix RecentSettlements gap display | `RecentSettlements.tsx` |
+| 3 | Add grep guardrail test | `src/actions/__tests__/recon-status-parity.test.ts` |
+| 4 | Fix eBay fee double-counting | `supabase/functions/fetch-ebay-settlements/index.ts` |
+| 5 | Verify with SQL audit | Runtime check |
 
 ### No database changes needed
+
+The DB trigger is already correct. The remaining work is all client-side code consistency and parser fixes.
 
