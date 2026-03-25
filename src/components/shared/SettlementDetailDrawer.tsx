@@ -468,6 +468,9 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
             {/* Parser bug warning banner */}
             <ParserBugWarningBanner settlement={settlement} />
 
+            {/* API/CSV mismatch banner */}
+            <ApiCsvMismatchBanner settlement={settlement} />
+
             {/* Admin correction panel for pushed settlements with wrong bank_deposit */}
             <SettlementCorrectionPanel
               settlement={settlement}
