@@ -515,7 +515,7 @@ export async function executeTool(
         console.log(`[analyzeReconciliationGap] Invoked for settlement_id=${sid}, user_id=${userId}`);
         const [settRes, valRes, xeroMatchRes, bankTxRes, linesRes, feeObsRes, outstandingRes] = await Promise.all([
           serviceClient.from("settlements")
-            .select("settlement_id, marketplace, source, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, bank_deposit, net_amount, gst_on_income, gst_on_expenses, metadata")
+            .select("settlement_id, marketplace, source, period_end, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, bank_deposit, net_amount, gst_on_income, gst_on_expenses, metadata")
             .eq("user_id", userId)
             .eq("settlement_id", sid)
             .maybeSingle(),
@@ -667,6 +667,16 @@ export async function executeTool(
           gapType = "artifact";
           recommendedAction = "rounding_safe_to_push";
           recommendedActionReason = `Gap of ${validationGap.toFixed(2)} is within rounding tolerance. Safe to push to Xero.`;
+        } else if (
+          !xeroMatch &&
+          valRes.data?.overall_status === "ready_to_push" &&
+          !bankMatchResult.concerns
+        ) {
+          // Priority 3: Validation says ready, no external posting, no bank concerns
+          diagnosis = "Settlement is validated and ready to push. Gap is within acceptable range.";
+          gapType = "acceptable";
+          recommendedAction = "push_to_xero";
+          recommendedActionReason = `Validation status is ready_to_push with a gap of $${absGap.toFixed(2)}. No external posting detected and no bank match concerns. Safe to push.`;
         } else if (source === "api" && marketplace.includes("ebay")) {
           const feeTotal = Math.abs(s.seller_fees || 0);
           if (feeTotal > 0 && Math.abs(absGap - feeTotal) < 1.00) {
@@ -723,6 +733,23 @@ export async function executeTool(
             gapType = "uncertain";
             recommendedAction = "investigate_gap";
             recommendedActionReason = "Shopify gap may reflect missing GST breakdown or uncaptured payment adjustments.";
+          }
+        }
+
+        // Priority 9: Await payout — settlement has data but no bank deposit, recent period
+        if (
+          recommendedAction === "investigate_gap" &&
+          (bankDeposit === 0 || bankDeposit === null) &&
+          (s.sales_principal || s.seller_fees) &&
+          (valRes.data?.overall_status === "settlement_needed" || valRes.data?.reconciliation_status === "warning")
+        ) {
+          const periodEndDate = s.period_end ? new Date(s.period_end) : null;
+          const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+          if (periodEndDate && periodEndDate >= thirtyDaysAgo) {
+            diagnosis = "Settlement has transaction data but no bank deposit recorded yet. The marketplace may not have paid out.";
+            gapType = "pending";
+            recommendedAction = "await_payout";
+            recommendedActionReason = "Bank deposit is zero or missing. The marketplace payout may still be processing. Check back after the expected payment date.";
           }
         }
 
