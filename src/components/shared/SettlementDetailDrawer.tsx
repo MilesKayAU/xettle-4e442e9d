@@ -27,6 +27,7 @@ import { checkXeroReadinessForMarketplace } from '@/actions/xeroReadiness';
 import { diagnoseGapReason } from '@/utils/diagnose-gap-reason';
 import ParserBugWarningBanner from './ParserBugWarningBanner';
 import SettlementCorrectionPanel from './SettlementCorrectionPanel';
+import ApiCsvMismatchBanner from './ApiCsvMismatchBanner';
 
 interface SettlementDetailDrawerProps {
   settlementId: string | null; // settlement_id (text), not DB uuid
