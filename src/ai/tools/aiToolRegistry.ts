@@ -23,7 +23,7 @@ export interface AiToolDef {
 // ─── Drift Detection ─────────────────────────────────────────────────────────
 
 /** Must match EXPECTED_TOOL_COUNT in supabase/functions/_shared/ai_tool_registry.ts */
-export const EXPECTED_TOOL_COUNT = 6;
+export const EXPECTED_TOOL_COUNT = 7;
 
 // ─── Static registry (synced from server canonical) ──────────────────────────
 
