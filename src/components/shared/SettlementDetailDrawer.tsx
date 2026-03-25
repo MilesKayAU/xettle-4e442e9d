@@ -23,6 +23,7 @@ import InvoiceRefreshButton from '@/components/shared/InvoiceRefreshButton';
 import XeroInvoiceCompareDrawer from '@/components/shared/XeroInvoiceCompareDrawer';
 import CoaBlockerCta from '@/components/shared/CoaBlockerCta';
 import { checkXeroReadinessForMarketplace } from '@/actions/xeroReadiness';
+import { diagnoseGapReason } from '@/utils/diagnose-gap-reason';
 
 interface SettlementDetailDrawerProps {
   settlementId: string | null; // settlement_id (text), not DB uuid
