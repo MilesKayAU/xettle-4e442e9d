@@ -828,7 +828,7 @@ export default function ValidationSweep({
                             </TooltipProvider>
                           )}
                           {!isReconciliationOnly(row.settlement_source, row.marketplace_code, row.settlement_id) && (
-                            <RowAction
+                             <RowAction
                               row={row}
                               pushing={pushing === row.id}
                               syncing={syncingRow === row.id}
@@ -836,6 +836,7 @@ export default function ValidationSweep({
                               onUpload={() => setUploadDialogRow({ marketplace_code: row.marketplace_code, period_label: row.period_label, period_start: row.period_start, period_end: row.period_end })}
                               onPush={() => handlePush(row)}
                               onSync={() => handleSyncRow(row)}
+                              onReview={() => { setDrawerSettlementId(row.settlement_id); setDrawerOpen(true); }}
                             />
                           )}
                         </div>
