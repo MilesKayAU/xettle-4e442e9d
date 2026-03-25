@@ -92,7 +92,7 @@ function calculateReconGap(s: any): number {
 
 // diagnoseGapReason imported from @/utils/diagnose-gap-reason
 
-export default function SettlementDetailDrawer({ settlementId, open, onClose }: SettlementDetailDrawerProps) {
+export default function SettlementDetailDrawer({ settlementId, open, onClose, autoVerify }: SettlementDetailDrawerProps) {
   const [settlement, setSettlement] = useState<any>(null);
   const [snapshot, setSnapshot] = useState<SnapshotDetails | null>(null);
   const [events, setEvents] = useState<AuditEvent[]>([]);
