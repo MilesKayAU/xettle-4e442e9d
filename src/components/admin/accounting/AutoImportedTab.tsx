@@ -91,9 +91,9 @@ function deriveAuditStatus(
   if (hasXero && !hasBank) return 'in_xero';
   if (hasFuzzyXero) return 'review';
   if (!hasXero && hasBank) return 'bank_only';
-  // Use canonical gap check instead of trusting legacy reconciliation_status
+  // Canonical gap check — gap is the sole determinant of push readiness
   const gap = (s as any).reconciliation_difference;
-  if (s.status === 'ready_to_push' || (isReconSafeForPush(gap) && (s.reconciliation_status === 'matched' || s.reconciliation_status === 'reconciled'))) return 'ready_to_push';
+  if (s.status === 'ready_to_push' || isReconSafeForPush(gap)) return 'ready_to_push';
   return 'unknown';
 }
 
