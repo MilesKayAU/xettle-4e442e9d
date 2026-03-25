@@ -760,6 +760,30 @@ function buildValidationChecks(
     checks.push({ label: 'Line items do NOT sum to settlement net', status: 'red', detail: `Difference: ${formatAUD(diff)} — review required` });
   }
 
+  // 1b. Reconciliation gap gate — blocks push if gap > $1.00
+  {
+    const computedNet =
+      (s.sales_principal || 0) + (s.sales_shipping || 0)
+      - Math.abs(s.seller_fees || 0) - Math.abs(s.fba_fees || 0)
+      - Math.abs(s.storage_fees || 0) - Math.abs(s.advertising_costs || 0)
+      - Math.abs(s.other_fees || 0)
+      + (s.refunds || 0) + (s.reimbursements || 0);
+    const reconGap = Math.abs(bankDeposit - computedNet);
+    if (bankDeposit === 0 && computedNet === 0) {
+      // No financial data — skip recon check
+    } else if (reconGap > 1.00) {
+      checks.push({
+        label: 'Reconciliation gap exceeds tolerance',
+        status: 'red',
+        detail: `Gap: ${formatAUD(reconGap)} — edit figures to resolve before pushing to Xero`,
+      });
+    } else if (reconGap > 0.05) {
+      checks.push({ label: 'Reconciliation within rounding tolerance', status: 'green', detail: `Gap: ${formatAUD(reconGap)}` });
+    } else {
+      checks.push({ label: 'Settlement reconciles ✓', status: 'green' });
+    }
+  }
+
   // 2. Account codes validated against Chart of Accounts
   if (coaMap && coaMap.size > 0) {
     const invalidCodes: string[] = [];

@@ -545,7 +545,7 @@ serve(async (req) => {
     if (action === 'create' && body.settlementId) {
       const { data: gateCheck } = await supabase
         .from('settlements')
-        .select('source, marketplace, settlement_id')
+        .select('source, marketplace, settlement_id, bank_deposit, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements')
         .eq('settlement_id', body.settlementId)
         .eq('user_id', userId)
         .maybeSingle();
@@ -558,6 +558,28 @@ serve(async (req) => {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
+      }
+
+      // ─── RECONCILIATION GAP GATE (defense-in-depth) ─────────────────
+      if (gateCheck) {
+        const computedNet =
+          (gateCheck.sales_principal || 0) + (gateCheck.sales_shipping || 0)
+          - Math.abs(gateCheck.seller_fees || 0) - Math.abs(gateCheck.fba_fees || 0)
+          - Math.abs(gateCheck.storage_fees || 0) - Math.abs(gateCheck.advertising_costs || 0)
+          - Math.abs(gateCheck.other_fees || 0)
+          + (gateCheck.refunds || 0) + (gateCheck.reimbursements || 0);
+        const reconGap = Math.abs((gateCheck.bank_deposit || 0) - computedNet);
+        if (reconGap > 1.00) {
+          console.warn(`Reconciliation gap gate blocked push: settlementId=${body.settlementId}, gap=${reconGap.toFixed(2)}`);
+          return new Response(JSON.stringify({
+            success: false,
+            error: `Reconciliation gap of $${reconGap.toFixed(2)} exceeds $1.00 tolerance. Edit figures to resolve before pushing.`,
+            errorCode: 'RECON_GAP',
+          }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
       }
     }
 
