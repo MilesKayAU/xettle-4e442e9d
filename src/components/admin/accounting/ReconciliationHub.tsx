@@ -12,6 +12,7 @@ import { formatDistanceToNow, differenceInDays, subMonths, subDays } from 'date-
 import { toast } from 'sonner';
 import { buildPostingLineItems, toLineItemPreviews, createAccountCodeResolver, type LineItemPreview } from '@/utils/xero-posting-line-items';
 import { MARKETPLACE_CONTACTS } from '@/constants/marketplace-contacts';
+import { getDisplayGap } from '@/utils/getDisplayGap';
 
 const HistoricalAudit = lazy(() => import('./HistoricalAudit'));
 
