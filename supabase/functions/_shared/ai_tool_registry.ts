@@ -200,6 +200,7 @@ export async function executeTool(
   toolInput: Record<string, any>,
   userId: string,
   serviceClient: any,
+  viewerClient?: any,
 ): Promise<string> {
   try {
     switch (toolName) {
@@ -512,43 +513,78 @@ export async function executeTool(
 
       case "analyzeReconciliationGap": {
         const sid = toolInput.settlementId;
-        console.log(`[analyzeReconciliationGap] Invoked for settlement_id=${sid}, user_id=${userId}`);
+        console.log(`[analyzeReconciliationGap] Invoked for settlement_id=${sid}, viewer_user_id=${userId}`);
 
-        // ── Settlement lookup with fallbacks ──
-        let matchMethod = "exact";
-        let settRes = await serviceClient.from("settlements")
-          .select("settlement_id, marketplace, source, period_end, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, bank_deposit, net_amount, gst_on_income, gst_on_expenses, metadata")
-          .eq("user_id", userId)
-          .eq("settlement_id", sid)
-          .maybeSingle();
+        // First resolve the visible validation row using the caller's scoped client.
+        // This avoids false "not found" errors when an admin/bookkeeper can see a row
+        // in the dashboard that belongs to another workspace user.
+        let resolvedOwnerId = userId;
+        let validationLookupMethod = "viewer_validation_exact";
+        let validationRow = viewerClient
+          ? await viewerClient.from("marketplace_validation")
+              .select("settlement_id, user_id, marketplace_code, period_start, period_end, overall_status, reconciliation_status, reconciliation_difference, reconciliation_confidence, reconciliation_confidence_reason")
+              .eq("settlement_id", sid)
+              .maybeSingle()
+          : { data: null };
 
-        if (!settRes.data) {
-          // Fallback 1: case-insensitive match
-          matchMethod = "ilike";
-          settRes = await serviceClient.from("settlements")
-            .select("settlement_id, marketplace, source, period_end, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, bank_deposit, net_amount, gst_on_income, gst_on_expenses, metadata")
-            .eq("user_id", userId)
+        if (!validationRow?.data && viewerClient) {
+          validationLookupMethod = "viewer_validation_ilike";
+          validationRow = await viewerClient.from("marketplace_validation")
+            .select("settlement_id, user_id, marketplace_code, period_start, period_end, overall_status, reconciliation_status, reconciliation_difference, reconciliation_confidence, reconciliation_confidence_reason")
             .ilike("settlement_id", sid)
             .maybeSingle();
         }
 
+        if (!validationRow?.data && viewerClient) {
+          validationLookupMethod = "viewer_validation_partial";
+          validationRow = await viewerClient.from("marketplace_validation")
+            .select("settlement_id, user_id, marketplace_code, period_start, period_end, overall_status, reconciliation_status, reconciliation_difference, reconciliation_confidence, reconciliation_confidence_reason")
+            .ilike("settlement_id", `%${sid}%`)
+            .limit(1)
+            .maybeSingle();
+        }
+
+        if (validationRow?.data?.user_id) {
+          resolvedOwnerId = validationRow.data.user_id;
+        }
+
+        // ── Settlement lookup with fallbacks against the resolved owner ──
+        let matchMethod = validationRow?.data ? `${validationLookupMethod}_settlement_exact` : "exact";
+        let settRes = await serviceClient.from("settlements")
+          .select("settlement_id, marketplace, source, period_end, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, bank_deposit, net_amount, gst_on_income, gst_on_expenses, metadata")
+          .eq("user_id", resolvedOwnerId)
+          .eq("settlement_id", validationRow?.data?.settlement_id || sid)
+          .maybeSingle();
+
         if (!settRes.data) {
-          // Fallback 2: partial match
-          matchMethod = "partial";
+          matchMethod = validationRow?.data ? `${validationLookupMethod}_settlement_ilike` : "ilike";
           settRes = await serviceClient.from("settlements")
             .select("settlement_id, marketplace, source, period_end, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, bank_deposit, net_amount, gst_on_income, gst_on_expenses, metadata")
-            .eq("user_id", userId)
-            .ilike("settlement_id", `%${sid}%`)
+            .eq("user_id", resolvedOwnerId)
+            .ilike("settlement_id", validationRow?.data?.settlement_id || sid)
+            .maybeSingle();
+        }
+
+        if (!settRes.data) {
+          matchMethod = validationRow?.data ? `${validationLookupMethod}_settlement_partial` : "partial";
+          settRes = await serviceClient.from("settlements")
+            .select("settlement_id, marketplace, source, period_end, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, bank_deposit, net_amount, gst_on_income, gst_on_expenses, metadata")
+            .eq("user_id", resolvedOwnerId)
+            .ilike("settlement_id", `%${validationRow?.data?.settlement_id || sid}%`)
             .limit(1)
             .maybeSingle();
         }
 
         // Log invocation to system_events
         await serviceClient.from("system_events").insert({
-          user_id: userId,
+          user_id: resolvedOwnerId,
           event_type: "ai_gap_analysis_invoked",
           severity: "info",
+          settlement_id: validationRow?.data?.settlement_id || sid,
+          marketplace_code: validationRow?.data?.marketplace_code,
           details: {
+            viewer_user_id: userId,
+            resolved_owner_id: resolvedOwnerId,
             settlement_id: sid,
             invoked_at: new Date().toISOString(),
             id_match_method: matchMethod,
@@ -559,46 +595,45 @@ export async function executeTool(
         const s = settRes.data;
         if (!s) {
           console.warn(`[analyzeReconciliationGap] Settlement not found after all fallbacks: ${sid}`);
-          return JSON.stringify({ error: "Settlement not found", settlement_id: sid, id_match_method: matchMethod, fallbacks_tried: ["exact", "ilike", "partial"] });
+          return JSON.stringify({ error: "Settlement not found", settlement_id: sid, id_match_method: matchMethod, resolved_owner_id: resolvedOwnerId, fallbacks_tried: ["viewer_validation_exact", "viewer_validation_ilike", "viewer_validation_partial", "settlement_exact", "settlement_ilike", "settlement_partial"] });
         }
         console.log(`[analyzeReconciliationGap] Found settlement via ${matchMethod}: ${s.marketplace}, bank_deposit=${s.bank_deposit}`);
 
-        const resolvedSid = s.settlement_id; // Use the actual stored ID for remaining queries
+        const resolvedSid = s.settlement_id;
 
         const [valRes, xeroMatchRes, bankTxRes, linesRes, feeObsRes, outstandingRes, mappingRes] = await Promise.all([
           serviceClient.from("marketplace_validation")
             .select("reconciliation_difference, overall_status, reconciliation_status, reconciliation_confidence, reconciliation_confidence_reason")
-            .eq("user_id", userId)
+            .eq("user_id", resolvedOwnerId)
             .eq("settlement_id", resolvedSid)
             .maybeSingle(),
           serviceClient.from("xero_accounting_matches")
             .select("xero_invoice_id, xero_invoice_number, xero_status, xero_type, match_method, matched_amount, matched_contact, matched_date")
-            .eq("user_id", userId)
+            .eq("user_id", resolvedOwnerId)
             .eq("settlement_id", resolvedSid)
             .maybeSingle(),
           serviceClient.from("bank_transactions")
             .select("amount, date, description, contact_name, xero_status, reference")
-            .eq("user_id", userId)
+            .eq("user_id", resolvedOwnerId)
             .order("date", { ascending: false })
             .limit(200),
           serviceClient.from("settlement_lines")
             .select("amount, amount_type, amount_description, transaction_type, accounting_category, order_id")
-            .eq("user_id", userId)
+            .eq("user_id", resolvedOwnerId)
             .eq("settlement_id", resolvedSid)
             .order("amount", { ascending: true })
             .limit(50),
           serviceClient.from("marketplace_fee_observations")
             .select("fee_type, observed_rate, observed_amount, base_amount, fee_category")
-            .eq("user_id", userId)
+            .eq("user_id", resolvedOwnerId)
             .eq("settlement_id", resolvedSid),
           serviceClient.from("outstanding_invoices_cache")
             .select("xero_invoice_id, invoice_number, total, amount_due, status, contact_name, date, due_date")
-            .eq("user_id", userId)
+            .eq("user_id", resolvedOwnerId)
             .limit(50),
-          // Check account mappings from app_settings (the actual mapping store)
           serviceClient.from("app_settings")
             .select("value")
-            .eq("user_id", userId)
+            .eq("user_id", resolvedOwnerId)
             .eq("key", "accounting_xero_account_codes")
             .maybeSingle(),
         ]);
