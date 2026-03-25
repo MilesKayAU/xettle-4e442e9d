@@ -417,7 +417,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
         actionableOnly
           ? supabase
               .from('marketplace_validation')
-              .select('id, overall_status, settlement_id, marketplace_code, period_start, period_end, settlement_net, updated_at')
+              .select('id, overall_status, settlement_id, marketplace_code, period_start, period_end, settlement_net, reconciliation_difference, updated_at')
               .in('overall_status', ['settlement_needed', 'missing', 'ready_to_push'])
           : Promise.resolve({ data: null, error: null } as any),
         actionableOnly
