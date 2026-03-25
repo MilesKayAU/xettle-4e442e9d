@@ -1143,22 +1143,23 @@ serve(async (req) => {
       .is('xero_journal_id', null).in('status', ['ingested', 'ready_to_push']);
     const unmatchedCount = stillUnmatched?.length || 0;
 
-    // Log
-    await supabase.from('system_events').insert({
-      user_id: userId, event_type: 'xero_audit_complete', severity: 'info',
-      details: {
-        mode: 'cache_first_incremental',
-        cache_verified: cacheVerified,
-        cache_status_changed: cacheStatusChanged,
-        new_reference_matches: updated,
-        fuzzy_matched: fuzzyMatched,
-        auto_resolved: autoResolved,
-        invoices_scanned: dedupedInvoices.length,
-        uncached_settlements: uncachedSettlements.length,
-        unmatched: unmatchedCount,
-        cursor_saved: nowIso,
-      },
-    });
+    // Log both xero_audit_complete (detailed) and xero_sync_complete (scanner telemetry)
+    const eventDetails = {
+      mode: 'cache_first_incremental',
+      cache_verified: cacheVerified,
+      cache_status_changed: cacheStatusChanged,
+      new_reference_matches: updated,
+      fuzzy_matched: fuzzyMatched,
+      auto_resolved: autoResolved,
+      invoices_scanned: dedupedInvoices.length,
+      uncached_settlements: uncachedSettlements.length,
+      unmatched: unmatchedCount,
+      cursor_saved: nowIso,
+    };
+    await supabase.from('system_events').insert([
+      { user_id: userId, event_type: 'xero_audit_complete', severity: 'info', details: eventDetails },
+      { user_id: userId, event_type: 'xero_sync_complete', severity: 'info', details: eventDetails },
+    ]);
 
     console.log(`[sync-xero-status] ═══ Complete: ${cacheVerified} cached, ${updated} new refs, ${fuzzyMatched} fuzzy, ${unmatchedCount} unmatched ═══`);
 

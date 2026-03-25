@@ -24,9 +24,10 @@ function relativeTime(iso: string | null): string {
   return `${days}d ago`;
 }
 
-type FreshnessStatus = 'fresh' | 'stale' | 'never';
+type FreshnessStatus = 'fresh' | 'stale' | 'failed' | 'never';
 
-function getFreshness(iso: string | null): FreshnessStatus {
+function getFreshness(iso: string | null, hasFailed?: boolean): FreshnessStatus {
+  if (hasFailed) return 'failed';
   if (!iso) return 'never';
   const diff = Date.now() - new Date(iso).getTime();
   return diff < 3_600_000 ? 'fresh' : 'stale';
@@ -35,6 +36,7 @@ function getFreshness(iso: string | null): FreshnessStatus {
 const statusConfig: Record<FreshnessStatus, { dot: string }> = {
   fresh: { dot: 'bg-emerald-500' },
   stale: { dot: 'bg-amber-500' },
+  failed: { dot: 'bg-destructive' },
   never: { dot: 'bg-destructive' },
 };
 
@@ -43,15 +45,17 @@ function ScanRow({
   timestamp,
   isRunning,
   isAnyRunning,
+  hasFailed,
   onRun,
 }: {
   def: ScanDefinition;
   timestamp: string | null;
   isRunning: boolean;
   isAnyRunning: boolean;
+  hasFailed?: boolean;
   onRun: () => void;
 }) {
-  const freshness = getFreshness(timestamp);
+  const freshness = getFreshness(timestamp, hasFailed);
   const cfg = statusConfig[freshness];
 
   return (
@@ -65,7 +69,7 @@ function ScanRow({
       </div>
       <div className="flex items-center gap-2 shrink-0 ml-3">
         <span className="text-xs text-muted-foreground whitespace-nowrap">
-          {isRunning ? 'Running…' : relativeTime(timestamp)}
+          {isRunning ? 'Running…' : hasFailed ? 'Failed' : relativeTime(timestamp)}
         </span>
         <Button
           size="sm"
@@ -87,6 +91,7 @@ function ScanRow({
 
 export default function DataIntegrityScanner() {
   const [timestamps, setTimestamps] = useState<Record<string, string | null>>({});
+  const [failedScans, setFailedScans] = useState<Record<string, boolean>>({});
   const [runningScan, setRunningScan] = useState<string | null>(null);
   const [runningAll, setRunningAll] = useState(false);
   const [allProgress, setAllProgress] = useState(-1);
@@ -95,18 +100,23 @@ export default function DataIntegrityScanner() {
   const loadTimestamps = useCallback(async () => {
     const ts = await getLastScanTimestamps();
     setTimestamps(ts);
+    // Clear failed states when we reload timestamps (fresh data)
+    setFailedScans({});
   }, []);
 
   useEffect(() => { loadTimestamps(); }, [loadTimestamps]);
 
   const handleRunSingle = async (key: string, label: string) => {
     setRunningScan(key);
+    setFailedScans(prev => ({ ...prev, [key]: false }));
     const result = await runDataIntegrityScan(key);
     setRunningScan(null);
     if (result.success) {
       toast.success(`${label} complete`);
+      setFailedScans(prev => ({ ...prev, [key]: false }));
     } else {
       toast.error(result.error || 'Scan failed');
+      setFailedScans(prev => ({ ...prev, [key]: true }));
     }
     await loadTimestamps();
   };
@@ -130,7 +140,7 @@ export default function DataIntegrityScanner() {
 
   // Count how many manual scans are stale/never
   const staleCount = MANUAL_SCANS.filter((d) => {
-    const f = getFreshness(timestamps[d.key] ?? null);
+    const f = getFreshness(timestamps[d.key] ?? null, failedScans[d.key]);
     return f !== 'fresh';
   }).length;
 
@@ -179,6 +189,7 @@ export default function DataIntegrityScanner() {
               timestamp={timestamps[def.key] ?? null}
               isRunning={isRunning}
               isAnyRunning={isAnyRunning}
+              hasFailed={failedScans[def.key]}
               onRun={() => handleRunSingle(def.key, def.label)}
             />
           );
@@ -204,6 +215,7 @@ export default function DataIntegrityScanner() {
                 timestamp={timestamps[def.key] ?? null}
                 isRunning={isRunning}
                 isAnyRunning={isAnyRunning}
+                hasFailed={failedScans[def.key]}
                 onRun={() => handleRunSingle(def.key, def.label)}
               />
               {def.cronNote && (

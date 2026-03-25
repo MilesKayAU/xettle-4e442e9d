@@ -603,17 +603,22 @@ Deno.serve(async (req) => {
     }
 
     // Batch insert all per-integration events for this user
-    if (perIntegrationEvents.length > 0) {
-      await adminClient.from('system_events').insert(
-        perIntegrationEvents.map(evt => ({
-          user_id: userId,
-          event_type: evt.event_type,
-          marketplace_code: evt.marketplace_code,
-          severity: evt.severity,
-          details: { source: 'scheduled_sync', duration_ms: durationMs },
-        }))
-      );
-    }
+    // Also always write umbrella scheduled_sync_complete so the scanner can track it
+    perIntegrationEvents.push({
+      event_type: 'scheduled_sync_complete',
+      marketplace_code: null,
+      severity: overallStatus === 'error' ? 'error' : 'info',
+    });
+
+    await adminClient.from('system_events').insert(
+      perIntegrationEvents.map(evt => ({
+        user_id: userId,
+        event_type: evt.event_type,
+        marketplace_code: evt.marketplace_code,
+        severity: evt.severity,
+        details: { source: 'scheduled_sync', duration_ms: durationMs },
+      }))
+    );
   }
 
   if (allUserIds.size === 0) {
