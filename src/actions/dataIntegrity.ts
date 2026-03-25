@@ -56,7 +56,7 @@ export const SCAN_DEFINITIONS: ScanDefinition[] = [
   {
     key: 'last_marketplace_sync',
     label: 'API Settlement Fetch',
-    description: 'Fetches latest data from eBay, Amazon, Mirakl',
+    description: 'Fetches latest data from eBay, Amazon, Shopify, Mirakl',
     edgeFunction: null,
     mode: 'auto',
     cronNote: 'Runs every 6 hours + daily at 2 AM AEST',
