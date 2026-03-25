@@ -762,6 +762,37 @@ export default function ValidationSweep({
                       <td className="px-3 py-2 text-center"><SettlementCell row={row} /></td>
                       <td className="px-3 py-2 text-right font-mono">{row.settlement_net ? formatAUD(row.settlement_net) : '—'}</td>
                       <td className="px-3 py-2 text-center">
+                        {row.settlement_uploaded ? (
+                          (() => {
+                            const gap = row.reconciliation_difference;
+                            const absGap = Math.abs(gap || 0);
+                            if (!gap && gap !== 0) return <span className="text-xs text-muted-foreground">—</span>;
+                            if (absGap <= 0.05) return (
+                              <span className="inline-flex items-center gap-0.5">
+                                <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                                <span className="text-[10px] text-emerald-600 dark:text-emerald-400">OK</span>
+                              </span>
+                            );
+                            if (absGap <= 1.00) return (
+                              <TooltipProvider><Tooltip><TooltipTrigger asChild>
+                                <span className="inline-flex items-center gap-0.5 cursor-help">
+                                  <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                                  <span className="text-[10px] text-muted-foreground">{formatAUD(gap)}</span>
+                                </span>
+                              </TooltipTrigger><TooltipContent className="text-xs">Within $1 rounding tolerance</TooltipContent></Tooltip></TooltipProvider>
+                            );
+                            return (
+                              <TooltipProvider><Tooltip><TooltipTrigger asChild>
+                                <span className="inline-flex items-center gap-0.5 cursor-help">
+                                  <AlertTriangle className="h-3 w-3 text-red-500" />
+                                  <span className="text-[10px] font-medium text-red-600 dark:text-red-400">{formatAUD(gap)}</span>
+                                </span>
+                              </TooltipTrigger><TooltipContent className="text-xs max-w-[200px]">Reconciliation gap exceeds $1 tolerance — review figures before pushing</TooltipContent></Tooltip></TooltipProvider>
+                            );
+                          })()
+                        ) : <span className="text-xs text-muted-foreground">—</span>}
+                      </td>
+                      <td className="px-3 py-2 text-center">
                         {row.xero_pushed ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mx-auto" /> : <XCircle className="h-3.5 w-3.5 text-muted-foreground mx-auto" />}
                       </td>
                       <td className="px-3 py-2 text-center">
