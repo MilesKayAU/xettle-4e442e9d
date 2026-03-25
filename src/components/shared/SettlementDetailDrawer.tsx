@@ -33,6 +33,7 @@ interface SettlementDetailDrawerProps {
   settlementId: string | null; // settlement_id (text), not DB uuid
   open: boolean;
   onClose: () => void;
+  autoVerify?: boolean;
 }
 
 interface NormalizedLineItem {
@@ -91,7 +92,7 @@ function calculateReconGap(s: any): number {
 
 // diagnoseGapReason imported from @/utils/diagnose-gap-reason
 
-export default function SettlementDetailDrawer({ settlementId, open, onClose }: SettlementDetailDrawerProps) {
+export default function SettlementDetailDrawer({ settlementId, open, onClose, autoVerify }: SettlementDetailDrawerProps) {
   const [settlement, setSettlement] = useState<any>(null);
   const [snapshot, setSnapshot] = useState<SnapshotDetails | null>(null);
   const [events, setEvents] = useState<AuditEvent[]>([]);
@@ -219,6 +220,13 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
       } catch { setIsAdmin(false); }
     })();
   }, []);
+
+  // Auto-verify on mount when autoVerify prop is set
+  useEffect(() => {
+    if (autoVerify && open && settlement?.settlement_id && isAdmin && !apiVerification && !apiVerifying) {
+      handleVerifyApi();
+    }
+  }, [autoVerify, open, settlement?.settlement_id, isAdmin]);
 
   // Universal API verification handler
   const handleVerifyApi = useCallback(async () => {
@@ -798,33 +806,7 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
               </div>
             )}
 
-            {/* GST summary */}
-            {(settlement.gst_on_income || settlement.gst_on_expenses) && (
-              <>
-                <Separator />
-                <div>
-                  <h4 className="text-xs font-semibold text-foreground mb-2">GST Summary</h4>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">GST on income</span>
-                      <span className="font-mono text-foreground">+{formatAUD(settlement.gst_on_income || 0)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">GST on expenses</span>
-                      <span className="font-mono text-foreground">{formatAUD(settlement.gst_on_expenses || 0)}</span>
-                    </div>
-                    <div className="flex justify-between col-span-2 pt-1 border-t border-border">
-                      <span className="text-muted-foreground font-medium">Net GST liability</span>
-                      <span className="font-mono font-medium text-foreground">
-                        {formatAUD((settlement.gst_on_income || 0) + (settlement.gst_on_expenses || 0))}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* API Verification — Admin only, any marketplace with potential API connection */}
+            {/* API Verification — Admin only, moved above GST for visibility */}
             {isAdmin && settlement.marketplace && (
               <>
                 <Separator />
@@ -873,7 +855,6 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
                         )}
                       </CollapsibleTrigger>
                       <CollapsibleContent className="mt-2 space-y-3">
-                        {/* Verdict banner */}
                         {apiVerification.verdict === 'match' && (
                           <div className="flex items-center gap-2 p-2 rounded-md bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-xs">
                             <CheckCircle2 className="h-4 w-4 text-emerald-600" />
@@ -905,7 +886,6 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
                           </div>
                         )}
 
-                        {/* Transaction summary table */}
                         {apiVerification.api_transactions?.length > 0 && (
                           <div>
                             <h5 className="text-[11px] font-medium text-muted-foreground mb-1">
@@ -938,7 +918,6 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
                           </div>
                         )}
 
-                        {/* Discrepancies table */}
                         {apiVerification.discrepancies?.length > 0 && (
                           <div>
                             <h5 className="text-[11px] font-medium text-red-600 dark:text-red-400 mb-1">Discrepancies</h5>
@@ -969,7 +948,6 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
                           </div>
                         )}
 
-                        {/* Missing transaction types */}
                         {apiVerification.missing_transaction_types?.length > 0 && (
                           <div>
                             <h5 className="text-[11px] font-medium text-amber-600 dark:text-amber-400 mb-1">
@@ -985,20 +963,57 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
                           </div>
                         )}
 
-                        {/* Re-verify button */}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 text-[10px] gap-1"
-                          onClick={handleVerifyApi}
-                          disabled={apiVerifying}
-                        >
-                          <Search className="h-3 w-3" />
-                          {apiVerifying ? 'Re-verifying…' : 'Re-verify'}
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-[10px] gap-1"
+                            onClick={handleVerifyApi}
+                            disabled={apiVerifying}
+                          >
+                            <Search className="h-3 w-3" />
+                            {apiVerifying ? 'Re-verifying…' : 'Re-verify'}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-[10px] gap-1 text-amber-600 dark:text-amber-400"
+                            onClick={handleRefetchFromApi}
+                            disabled={apiRefetching}
+                          >
+                            <Zap className="h-3 w-3" />
+                            {apiRefetching ? 'Re-fetching…' : 'Re-fetch & correct'}
+                          </Button>
+                        </div>
                       </CollapsibleContent>
                     </Collapsible>
                   )}
+                </div>
+              </>
+            )}
+
+            {/* GST summary */}
+            {(settlement.gst_on_income || settlement.gst_on_expenses) && (
+              <>
+                <Separator />
+                <div>
+                  <h4 className="text-xs font-semibold text-foreground mb-2">GST Summary</h4>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">GST on income</span>
+                      <span className="font-mono text-foreground">+{formatAUD(settlement.gst_on_income || 0)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">GST on expenses</span>
+                      <span className="font-mono text-foreground">{formatAUD(settlement.gst_on_expenses || 0)}</span>
+                    </div>
+                    <div className="flex justify-between col-span-2 pt-1 border-t border-border">
+                      <span className="text-muted-foreground font-medium">Net GST liability</span>
+                      <span className="font-mono font-medium text-foreground">
+                        {formatAUD((settlement.gst_on_income || 0) + (settlement.gst_on_expenses || 0))}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </>
             )}
