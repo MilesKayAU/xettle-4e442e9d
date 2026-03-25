@@ -472,29 +472,57 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
               )}
             </div>
 
-            {/* Reconciliation Gap Card */}
-            {settlement.reconciliation_status && settlement.reconciliation_status !== 'reconciled' && settlement.reconciliation_status !== 'matched' && (() => {
+            {/* Reconciliation Gap Card — always shown when gap > $0.05 */}
+            {(() => {
               const gap = calculateReconGap(settlement);
+              if (Math.abs(gap) <= 0.05) return null;
               const sales = (settlement.sales_principal || 0) + (settlement.sales_shipping || 0);
               const fees = Math.abs(settlement.seller_fees || 0) + Math.abs(settlement.fba_fees || 0) + Math.abs(settlement.storage_fees || 0) + Math.abs(settlement.advertising_costs || 0) + Math.abs(settlement.other_fees || 0);
               const expectedNet = sales - fees + (settlement.refunds || 0) + (settlement.reimbursements || 0);
+              const isBlocking = Math.abs(gap) > 1.00;
+              const diagnosis = diagnoseGapReason(settlement, gap);
               return (
-                <div className="rounded-lg border-2 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3 space-y-2">
+                <div className={cn(
+                  "rounded-lg border-2 p-3 space-y-2",
+                  isBlocking
+                    ? "border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20"
+                    : "border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20"
+                )}>
                   <div className="flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                    <span className="text-sm font-semibold text-amber-800 dark:text-amber-200">Reconciliation Gap: {formatAUD(Math.abs(gap))}</span>
+                    <AlertTriangle className={cn("h-4 w-4", isBlocking ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400")} />
+                    <span className={cn("text-sm font-semibold", isBlocking ? "text-red-800 dark:text-red-200" : "text-amber-800 dark:text-amber-200")}>
+                      Reconciliation Gap: {formatAUD(Math.abs(gap))}
+                      {isBlocking && " — Xero push blocked"}
+                    </span>
                   </div>
                   <div className="grid grid-cols-2 gap-1 text-xs">
-                    <span className="text-muted-foreground">Expected net (Sales − Fees + Refunds)</span>
+                    <span className="text-muted-foreground">Sales (principal + shipping)</span>
+                    <span className="font-mono text-right text-foreground">{formatAUD(sales)}</span>
+                    <span className="text-muted-foreground">Total fees</span>
+                    <span className="font-mono text-right text-foreground">−{formatAUD(fees)}</span>
+                    <span className="text-muted-foreground">Refunds</span>
+                    <span className="font-mono text-right text-foreground">{formatAUD(settlement.refunds || 0)}</span>
+                    <span className="text-muted-foreground">Reimbursements</span>
+                    <span className="font-mono text-right text-foreground">{formatAUD(settlement.reimbursements || 0)}</span>
+                    <Separator className="col-span-2 my-1" />
+                    <span className="text-muted-foreground">Expected net</span>
                     <span className="font-mono text-right text-foreground">{formatAUD(expectedNet)}</span>
                     <span className="text-muted-foreground">Actual bank deposit</span>
                     <span className="font-mono text-right text-foreground">{formatAUD(settlement.bank_deposit || 0)}</span>
                     <span className="text-muted-foreground font-medium">Difference</span>
-                    <span className="font-mono text-right font-medium text-amber-700 dark:text-amber-300">{gap >= 0 ? '+' : ''}{formatAUD(gap)}</span>
+                    <span className={cn("font-mono text-right font-medium", isBlocking ? "text-red-700 dark:text-red-300" : "text-amber-700 dark:text-amber-300")}>
+                      {gap >= 0 ? '+' : ''}{formatAUD(gap)}
+                    </span>
                   </div>
+                  {diagnosis && (
+                    <div className="rounded-md bg-background/50 border border-border p-2 mt-1">
+                      <p className="text-[11px] font-medium text-foreground mb-0.5">💡 Likely cause:</p>
+                      <p className="text-[11px] text-muted-foreground">{diagnosis}</p>
+                    </div>
+                  )}
                   {isEditable && !editing && (
-                    <p className="text-[11px] text-amber-700 dark:text-amber-300">
-                      The file's figures don't add up — click <strong>Edit Figures</strong> below to correct.
+                    <p className="text-[11px] text-muted-foreground">
+                      Click <strong>Edit Figures</strong> below to correct the amounts and resolve the gap.
                     </p>
                   )}
                 </div>
