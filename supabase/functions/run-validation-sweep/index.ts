@@ -385,9 +385,9 @@ async function sweepUser(adminSupabase: any, userId: string) {
 
   // Boundary note: validation sweep checks ALL settlements regardless of boundary.
   // Boundary only determines what gets pushed to Xero.
-  const { data: settlements } = await adminSupabase
+    const { data: settlements } = await adminSupabase
     .from('settlements')
-    .select('settlement_id, marketplace, period_start, period_end, bank_deposit, status, reconciliation_status, xero_journal_id, xero_status, bank_verified, bank_verified_amount, created_at, source')
+    .select('settlement_id, marketplace, period_start, period_end, bank_deposit, status, reconciliation_status, xero_journal_id, xero_status, bank_verified, bank_verified_amount, created_at, source, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements')
     .eq('user_id', userId)
 
   const { data: reconChecks } = await adminSupabase
