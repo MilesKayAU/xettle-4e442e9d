@@ -138,6 +138,21 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
       "settings",
     ],
   },
+
+  // ── Gap Analysis Tool ──────────────────────────────────────────────────────
+  {
+    name: "analyzeReconciliationGap",
+    description:
+      "[Read-only] Analyze a settlement's reconciliation gap. Returns financial breakdown, gap amount, rule-based diagnosis, and whether the gap is likely real or a data artifact. This is a lookup-only tool that does not modify any data.",
+    parameters: {
+      type: "object",
+      properties: {
+        settlementId: { type: "string", description: "The settlement ID to analyze the gap for" },
+      },
+      required: ["settlementId"],
+    },
+    availableOn: ["dashboard", "settlements", "settlement_detail"],
+  },
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
