@@ -17,6 +17,7 @@ import {
   ArrowUpDown, ArrowUp, ArrowDown, CalendarDays, Pause, Play, ChevronDown, ChevronUp, Square, CheckSquare, Eye,
 } from 'lucide-react';
 import SettlementDetailDrawer from '@/components/shared/SettlementDetailDrawer';
+import InlineUploadDialog from '@/components/admin/accounting/InlineUploadDialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
