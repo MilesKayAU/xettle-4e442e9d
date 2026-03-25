@@ -60,7 +60,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   },
   {
     name: "analyzeReconciliationGap",
-    description: "[Read-only] Analyze a settlement's reconciliation gap: financial breakdown, diagnosis, and whether the gap is real or an artifact.",
+    description: "[Read-only] Comprehensive forensic analysis of a settlement's reconciliation gap. Cross-references Xero invoice status, bank deposits, line items, fee observations, and outstanding invoices. Returns structured recommended_action enum for UI action buttons.",
     availableOn: ["dashboard", "settlements", "settlement_detail"],
   },
 ];
