@@ -1112,6 +1112,14 @@ export default function Dashboard() {
               />
               </div>
 
+              {/* Gap Triage — focused worklist of reconciliation gaps */}
+              <GapTriageTable
+                onEditSettlement={(sid) => {
+                  setDrawerSettlementId(sid);
+                  setDrawerOpen(true);
+                }}
+              />
+
               {/* Settlements table — only actionable rows */}
               <div id="settlements-table-section">
                 <RecentSettlements
