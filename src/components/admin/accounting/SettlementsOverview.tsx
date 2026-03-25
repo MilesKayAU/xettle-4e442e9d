@@ -471,7 +471,8 @@ export default function SettlementsOverview({
       <SettlementDetailDrawer
         settlementId={drawerSettlementId}
         open={drawerOpen}
-        onClose={() => { setDrawerOpen(false); setDrawerSettlementId(null); }}
+        onClose={() => { setDrawerOpen(false); setDrawerSettlementId(null); setDrawerAutoVerify(false); }}
+        autoVerify={drawerAutoVerify}
       />
     </Card>
   );
