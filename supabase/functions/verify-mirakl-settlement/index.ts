@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyRequest } from "../_shared/auth-guard.ts";
 import { getMiraklAuthHeader } from "../_shared/mirakl-token.ts";
-import { MIRAKL_MARKETPLACE_ENDPOINTS } from "../_shared/mirakl-api-policy.ts";
+// MIRAKL_MARKETPLACE_ENDPOINTS removed — using inline URL to match fetch-mirakl-settlements pattern
 
 /**
  * verify-mirakl-settlement — Read-only diagnostic that fetches raw Mirakl
