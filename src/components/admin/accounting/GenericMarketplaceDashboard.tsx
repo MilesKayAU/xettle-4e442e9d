@@ -262,6 +262,18 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         .eq('key', 'accounting_boundary_date')
         .maybeSingle();
       if (boundaryRow?.value) setAccountingBoundary(boundaryRow.value);
+
+      // Fetch validation statuses for this marketplace
+      const { data: valRows } = await supabase
+        .from('marketplace_validation')
+        .select('settlement_id, overall_status')
+        .eq('marketplace_code', code);
+      const valMap: Record<string, string> = {};
+      for (const v of (valRows || []) as any[]) {
+        if (v.settlement_id) valMap[v.settlement_id] = v.overall_status;
+      }
+      setValidationStatusMap(valMap);
+
       // Fetch reconciliation type from fingerprints
       const { data: fpRows } = await supabase
         .from('marketplace_file_fingerprints')
