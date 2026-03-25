@@ -25,6 +25,8 @@ import XeroInvoiceCompareDrawer from '@/components/shared/XeroInvoiceCompareDraw
 import CoaBlockerCta from '@/components/shared/CoaBlockerCta';
 import { checkXeroReadinessForMarketplace } from '@/actions/xeroReadiness';
 import { diagnoseGapReason } from '@/utils/diagnose-gap-reason';
+import ParserBugWarningBanner from './ParserBugWarningBanner';
+import SettlementCorrectionPanel from './SettlementCorrectionPanel';
 
 interface SettlementDetailDrawerProps {
   settlementId: string | null; // settlement_id (text), not DB uuid
@@ -461,6 +463,16 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
                 </div>
               </div>
             )}
+
+            {/* Parser bug warning banner */}
+            <ParserBugWarningBanner settlement={settlement} />
+
+            {/* Admin correction panel for pushed settlements with wrong bank_deposit */}
+            <SettlementCorrectionPanel
+              settlement={settlement}
+              isAdmin={isAdmin}
+              onSettlementUpdated={(updated) => setSettlement(updated)}
+            />
 
             {/* Header metadata */}
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
@@ -1044,6 +1056,7 @@ function formatEventType(type: string): string {
     xero_api_call: 'Xero API call',
     external_link_removed: 'External link removed (cleanup)',
     external_xero_detected: 'External Xero invoice detected',
+    settlement_corrected: '⚠ Settlement corrected (parser bug fix)',
   };
   return labels[type] || type.replace(/_/g, ' ');
 }
