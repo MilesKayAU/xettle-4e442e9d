@@ -117,68 +117,23 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
     }
   };
 
-  const handleFetchNow = async () => {
-    if (!syncCutoffDate) {
-      toast.error('Sync cutoff date required', {
-        description: 'Set a "Don\'t sync before" date in Settings first.',
-      });
-      if (onRequestSettings) onRequestSettings();
-      return;
-    }
+  const handleTestConnection = async () => {
     setFetching(true);
-    setFetchProgress({ current: 0, total: 0, status: 'Running Xero audit first (Xero-First)...' });
-    localStorage.setItem('xettle_fetch_started', Date.now().toString());
-    onFetchStateChange?.(true, 'Running Xero audit before Amazon fetch...');
-
+    onFetchStateChange?.(true, 'Testing Amazon connection...');
     try {
-      // Step 1: Xero-First — run audit to seed xero_accounting_matches cache
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        await supabase.functions.invoke('sync-xero-status', { body: { userId: user.id } });
-      }
-
-      // Step 2: Read boundary from app_settings (set by sync-xero-status)
-      let syncFrom: string | undefined;
-      if (user) {
-        const { data: settingsRow } = await supabase
-          .from('app_settings')
-          .select('value')
-          .eq('user_id', user.id)
-          .eq('key', 'xero_oldest_outstanding_date')
-          .maybeSingle();
-        if (settingsRow?.value) {
-          syncFrom = settingsRow.value;
-        }
-      }
-
-      // Step 3: Bounded Amazon fetch
-      setFetchProgress({ current: 0, total: 0, status: 'Fetching settlement reports from Amazon...' });
-      onFetchStateChange?.(true, 'Fetching settlement reports from Amazon...');
-
-      const { data, error } = await supabase.functions.invoke('fetch-amazon-settlements', {
-        headers: { 'x-action': 'smart-sync' },
-        body: syncFrom ? { sync_from: syncFrom } : undefined,
+      const { data, error } = await supabase.functions.invoke('amazon-auth', {
+        headers: { 'x-action': 'status' },
       });
-
-      if (error || data?.error) {
-        toast.error(`Sync failed: ${error?.message || data?.error}`);
+      if (error) throw error;
+      if (data?.connected) {
+        toast.success('Amazon connection is working ✓');
       } else {
-        const { imported = 0, skipped = 0, errors = 0, details = [] } = data || {};
-        const parts = [];
-        if (imported > 0) parts.push(`${imported} imported`);
-        if (skipped > 0) parts.push(`${skipped} duplicates skipped`);
-        if (errors > 0) parts.push(`${errors} errors (will retry next sync)`);
-        toast.success(parts.length > 0 ? `Done! ${parts.join(', ')}.` : 'All reports already synced.');
-        if (imported > 0) onSettlementsAutoFetched?.();
-        setLastSync(new Date().toISOString());
-        // Sync details available in edge function logs
+        toast.error('Amazon connection test failed — token may be expired');
       }
     } catch (err: any) {
-      toast.error(`Sync failed: ${err.message}`);
+      toast.error(`Connection test failed: ${err.message}`);
     } finally {
       setFetching(false);
-      setFetchProgress(null);
-      localStorage.removeItem('xettle_fetch_started');
       onFetchStateChange?.(false, null);
     }
   };
