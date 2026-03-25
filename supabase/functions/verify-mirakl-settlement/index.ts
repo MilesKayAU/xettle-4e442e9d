@@ -86,24 +86,46 @@ Deno.serve(async (req) => {
       : undefined;
 
     // ─── Step 3: Fetch from Mirakl API ───────────────────────────
-    const authResult = await getMiraklAuthHeader(adminClient, miraklRow);
+    let authResult;
+    try {
+      authResult = await getMiraklAuthHeader(adminClient, miraklRow);
+    } catch (authErr: any) {
+      console.error("[verify-mirakl] Auth failed:", authErr.message);
+      return new Response(
+        JSON.stringify({
+          verdict: "api_error",
+          settlement_id,
+          error: "Mirakl connection expired or invalid — please reconnect in Settings",
+          error_code: "AUTH_FAILED",
+          detail: authErr.message,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     const baseUrl = miraklRow.base_url.replace(/\/$/, "");
-    const endpoint = MIRAKL_MARKETPLACE_ENDPOINTS.TRANSACTION_LOGS;
 
+    // Use the same endpoint pattern as fetch-mirakl-settlements (which works)
     const params = new URLSearchParams();
+    if (dateFrom) params.set("start_date", dateFrom);
+    if (dateTo) params.set("end_date", dateTo);
     if (docNumber) params.set("accounting_document_number", docNumber);
-    if (dateFrom) params.set("date_created_from", dateFrom);
-    if (dateTo) params.set("date_created_to", dateTo);
-    params.set("max", "1000");
+    params.set("paginate", "false");
 
-    const apiUrl = `${baseUrl}${endpoint}?${params.toString()}`;
+    // Include shop parameter if set (same as fetch-mirakl-settlements)
+    if (miraklRow.seller_company_id && miraklRow.seller_company_id !== "default") {
+      params.set("shop", miraklRow.seller_company_id);
+    }
+
+    const apiUrl = `${baseUrl}/api/sellerpayment/transactions_logs?${params.toString()}`;
     console.log(`[verify-mirakl] Fetching: ${apiUrl}`);
+    console.log(`[verify-mirakl] Auth header: ${authResult.headerName}: ${authResult.headerValue.slice(0, 20)}...`);
 
     const apiRes = await fetch(apiUrl, {
       method: "GET",
       headers: {
         [authResult.headerName]: authResult.headerValue,
-        "Accept": "application/json",
+        Accept: "application/json",
       },
     });
 
