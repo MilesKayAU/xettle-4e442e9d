@@ -137,7 +137,7 @@ function categorize(row: SettlementRow): StatusCategory {
   return 'other';
 }
 
-function StatusBadge({ status, xeroStatus, syncOrigin, marketplace }: { status: string; xeroStatus: string | null; syncOrigin?: string; marketplace?: string | null }) {
+function StatusBadge({ status, xeroStatus, syncOrigin, marketplace, reconGap }: { status: string; xeroStatus: string | null; syncOrigin?: string; marketplace?: string | null; reconGap?: number | null }) {
   if (status === 'settlement_needed' || status === 'missing') {
     return (
       <Badge variant="outline" className="text-xs text-muted-foreground">
