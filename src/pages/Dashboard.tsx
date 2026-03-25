@@ -32,6 +32,8 @@ import WelcomeGuide from '@/components/dashboard/WelcomeGuide';
 import RecentUploads from '@/components/dashboard/RecentUploads';
 import GapTriageTable from '@/components/dashboard/GapTriageTable';
 import SettlementDetailDrawer from '@/components/shared/SettlementDetailDrawer';
+import SyncCommandBar from '@/components/dashboard/SyncCommandBar';
+import PushSafetyPreview from '@/components/admin/accounting/PushSafetyPreview';
 
 import ReconciliationHealthPanel from '@/components/dashboard/ReconciliationHealthPanel';
 import DataIntegrityScanner from '@/components/dashboard/DataIntegrityScanner';
