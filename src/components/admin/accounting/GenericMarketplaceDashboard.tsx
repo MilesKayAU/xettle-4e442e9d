@@ -205,6 +205,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [marketplaceFilter, setMarketplaceFilter] = useState<string>('all');
   const [includeGateways, setIncludeGateways] = useState(false);
   const [accountingBoundary, setAccountingBoundary] = useState<string | null>(null);
+  const [validationStatusMap, setValidationStatusMap] = useState<Record<string, string>>({});
 
   // Auto-audit Xero status once settlements are loaded
   const [hasAutoAudited, setHasAutoAudited] = useState(false);
