@@ -140,6 +140,8 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
 
     setEditing(false);
     setEditFields(null);
+    setApiVerification(null);
+    setApiVerifyOpen(false);
 
     (async () => {
       const [settRes, eventsRes, candidateRes] = await Promise.all([
