@@ -708,11 +708,14 @@ async function sweepUser(adminSupabase: any, userId: string) {
           const gap = Math.round((bankDeposit - computedNet) * 100) / 100
           record.reconciliation_difference = gap
 
-          if (settlement.reconciliation_status === 'reconciled') {
+          // Gap is the canonical truth — legacy reconciliation_status is advisory only.
+          // NEVER override with 'matched' if the computed gap exceeds tolerance.
+          if (Math.abs(gap) <= 1.00) {
             record.reconciliation_status = 'matched'
-            record.orders_found = true
-          } else if (Math.abs(gap) <= 1.00) {
-            record.reconciliation_status = 'matched'
+            // Preserve orders_found if legacy status was reconciled
+            if (settlement.reconciliation_status === 'reconciled') {
+              record.orders_found = true
+            }
           } else {
             record.reconciliation_status = 'warning'
           }
