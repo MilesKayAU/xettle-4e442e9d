@@ -427,17 +427,8 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
 
       const rows = (settlementsRes.data || []) as SettlementRow[];
 
-      // Bulk-promote stuck 'ingested' settlements that aren't pre-boundary
-      const stuckIngested = rows.filter(r => r.status === 'ingested' && !r.is_pre_boundary);
-      if (stuckIngested.length > 0) {
-        const stuckIds = stuckIngested.map(r => r.id);
-        await supabase.from('settlements')
-          .update({ status: 'ready_to_push' } as any)
-          .in('id', stuckIds);
-        logger.debug(`[RecentSettlements] Promoted ${stuckIds.length} stuck ingested → ready_to_push`);
-        fetchAll();
-        return;
-      }
+      // NOTE: We no longer promote ingested→ready_to_push from the dashboard.
+      // Status transitions are handled exclusively by the validation sweep backend.
 
       const settlementMap = new Map(rows.map(row => [row.settlement_id, row]));
       const apiCodes = new Set<string>(
