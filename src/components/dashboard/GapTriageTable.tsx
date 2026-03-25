@@ -4,7 +4,7 @@
  * Provides inline diagnosis, edit access, and AI scan per row.
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { getDisplayGap } from '@/utils/getDisplayGap';
 import { diagnoseGapReason } from '@/utils/diagnose-gap-reason';
@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { AlertTriangle, ChevronDown, ChevronUp, Pencil, Sparkles, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp, Pencil, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 
@@ -45,9 +45,11 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
   const [expanded, setExpanded] = useState(true);
   const [aiScanning, setAiScanning] = useState<string | null>(null);
   const [aiResults, setAiResults] = useState<Record<string, string>>({});
+  const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rowsSignatureRef = useRef('');
 
-  const fetchGaps = useCallback(async () => {
-    setLoading(true);
+  const fetchGaps = useCallback(async ({ background = false }: { background?: boolean } = {}) => {
+    if (!background) setLoading(true);
     try {
       // Get gap_detected validation rows
       const { data: validationRows } = await supabase
@@ -57,8 +59,10 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
         .order('reconciliation_difference', { ascending: true });
 
       if (!validationRows || validationRows.length === 0) {
-        setRows([]);
-        setLoading(false);
+        if (rowsSignatureRef.current !== '[]') {
+          rowsSignatureRef.current = '[]';
+          setRows([]);
+        }
         return;
       }
 
@@ -78,28 +82,54 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
 
       // Sort by absolute gap descending
       merged.sort((a, b) => Math.abs(b.reconciliation_difference || 0) - Math.abs(a.reconciliation_difference || 0));
-      setRows(merged);
+
+      const nextSignature = JSON.stringify(
+        merged.map((row) => [
+          row.settlement_id,
+          row.marketplace_code,
+          row.period_label,
+          row.reconciliation_difference ?? null,
+          row.overall_status,
+          row.bank_deposit ?? null,
+          row.net_amount ?? null,
+        ]),
+      );
+
+      if (rowsSignatureRef.current !== nextSignature) {
+        rowsSignatureRef.current = nextSignature;
+        setRows(merged);
+      }
     } catch (err) {
       console.error('GapTriageTable fetch error:', err);
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }, []);
 
-  useEffect(() => { fetchGaps(); }, [fetchGaps]);
+  useEffect(() => { void fetchGaps(); }, [fetchGaps]);
 
   // Realtime subscription for updates
   useEffect(() => {
+    const scheduleRefresh = () => {
+      if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
+      refreshDebounceRef.current = setTimeout(() => {
+        void fetchGaps({ background: true });
+      }, 1200);
+    };
+
     const channel = supabase
       .channel('gap-triage-validation')
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'marketplace_validation',
-      }, () => { fetchGaps(); })
+      }, () => { scheduleRefresh(); })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
+      supabase.removeChannel(channel);
+    };
   }, [fetchGaps]);
 
   const handleAiScan = useCallback(async (settlementId: string) => {
@@ -166,7 +196,7 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
     }
   }, []);
 
-  if (loading) return null;
+  if (loading && rows.length === 0) return null;
   if (rows.length === 0) return null;
 
   const visibleRows = expanded ? rows : rows.slice(0, 5);
