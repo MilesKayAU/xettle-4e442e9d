@@ -843,8 +843,19 @@ export async function executeTool(
         let recommendedAction: string = "investigate_gap";
         let recommendedActionReason = "";
 
-        // Check if already recorded externally first
-        if (xeroMatch && (xeroMatch.xero_status === "PAID" || xeroMatch.xero_status === "AUTHORISED") && postedBy === "external") {
+        // Priority 0 — Debit period: bank deposit is negative
+        if (bankDeposit !== null && bankDeposit < 0 && expectedNet > 0) {
+          diagnosis = `Bank deposit is negative ($${bankDeposit.toFixed(2)}), meaning the marketplace debited your account this period. Fees and refunds exceeded sales. This should be recorded as a bill (ACCPAY) in Xero.`;
+          gapType = "debit_period";
+          recommendedAction = "record_as_bill";
+          recommendedActionReason = `Bank deposit is -$${Math.abs(bankDeposit).toFixed(2)} against computed net of $${expectedNet.toFixed(2)}. This is a debit period where marketplace deductions exceeded sales. Record as an ACCPAY bill, not an ACCREC invoice.`;
+        } else if (bankDeposit !== null && bankDeposit < 0 && expectedNet <= 0) {
+          diagnosis = `Both bank deposit ($${bankDeposit.toFixed(2)}) and computed net ($${expectedNet.toFixed(2)}) are negative. Pure fee debit period with no net sales.`;
+          gapType = "debit_period";
+          recommendedAction = "record_as_bill";
+          recommendedActionReason = `Pure fee debit period. Record as ACCPAY bill in Xero.`;
+        // Check if already recorded externally
+        } else if (xeroMatch && (xeroMatch.xero_status === "PAID" || xeroMatch.xero_status === "AUTHORISED") && postedBy === "external") {
           diagnosis = `Already posted to Xero by external tool as ${xeroMatch.xero_invoice_number || xeroMatch.xero_invoice_id} (${xeroMatch.xero_status}).`;
           gapType = "already_handled";
           recommendedAction = "mark_already_recorded";
