@@ -705,6 +705,7 @@ export default function ValidationSweep({
                   <th className="px-3 py-2 text-right font-medium cursor-pointer" onClick={() => handleSort('settlement_net')}>
                     <span className="inline-flex items-center justify-end">Net<SortIcon col="settlement_net" /></span>
                   </th>
+                  <th className="px-3 py-2 text-center font-medium">Recon</th>
                   <th className="px-3 py-2 text-center font-medium">Xero</th>
                   <th className="px-3 py-2 text-center font-medium">Bank</th>
                   <th className="px-3 py-2 text-center font-medium cursor-pointer" onClick={() => handleSort('overall_status')}>
