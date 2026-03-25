@@ -765,14 +765,8 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
               </>
             )}
 
-            {/* API Verification — Admin only, Mirakl/Bunnings settlements */}
+            {/* API Verification — Admin only, any marketplace with potential API connection */}
             {isAdmin && settlement.marketplace && (
-              settlement.marketplace.toLowerCase().includes('bunnings') ||
-              settlement.marketplace.toLowerCase().includes('catch') ||
-              settlement.marketplace.toLowerCase().includes('mydeal') ||
-              settlement.marketplace.toLowerCase().includes('kogan') ||
-              settlement.source === 'mirakl_api'
-            ) && (
               <>
                 <Separator />
                 <div className="space-y-2">
@@ -781,11 +775,11 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
                       variant="outline"
                       size="sm"
                       className="h-7 text-xs gap-1.5"
-                      onClick={handleVerifyMirakl}
+                      onClick={handleVerifyApi}
                       disabled={apiVerifying}
                     >
                       <Search className="h-3.5 w-3.5" />
-                      {apiVerifying ? 'Verifying via API…' : 'Verify via Mirakl API'}
+                      {apiVerifying ? 'Verifying via API…' : 'Verify via API'}
                     </Button>
                   )}
 
