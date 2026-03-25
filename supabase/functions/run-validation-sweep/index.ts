@@ -676,14 +676,33 @@ async function sweepUser(adminSupabase: any, userId: string) {
           }
         }
 
-        // Step 3: Reconciliation — check reconciliation_checks first, then fall back to settlement's own status
+        // Step 3: Reconciliation — compute gap from settlement financial fields
         if (recon) {
           record.reconciliation_status = recon.status || 'pending'
           record.reconciliation_difference = recon.difference || 0
-        } else if (settlement?.reconciliation_status === 'reconciled') {
-          record.reconciliation_status = 'matched'
-          record.reconciliation_difference = 0
-          record.orders_found = true
+        } else if (settlement) {
+          // Compute reconciliation gap from actual financial fields
+          const bankDeposit = parseFloat(settlement.bank_deposit) || 0
+          const computedNet = (parseFloat(settlement.sales_principal) || 0)
+            + (parseFloat(settlement.sales_shipping) || 0)
+            - Math.abs(parseFloat(settlement.seller_fees) || 0)
+            - Math.abs(parseFloat(settlement.fba_fees) || 0)
+            - Math.abs(parseFloat(settlement.storage_fees) || 0)
+            - Math.abs(parseFloat(settlement.advertising_costs) || 0)
+            - Math.abs(parseFloat(settlement.other_fees) || 0)
+            + (parseFloat(settlement.refunds) || 0)
+            + (parseFloat(settlement.reimbursements) || 0)
+          const gap = Math.round((bankDeposit - computedNet) * 100) / 100
+          record.reconciliation_difference = gap
+
+          if (settlement.reconciliation_status === 'reconciled') {
+            record.reconciliation_status = 'matched'
+            record.orders_found = true
+          } else if (Math.abs(gap) <= 1.00) {
+            record.reconciliation_status = 'matched'
+          } else {
+            record.reconciliation_status = 'warning'
+          }
         }
 
         // Step 4: Xero
