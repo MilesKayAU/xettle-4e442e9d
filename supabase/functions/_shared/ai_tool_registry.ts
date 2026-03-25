@@ -667,6 +667,16 @@ export async function executeTool(
           gapType = "artifact";
           recommendedAction = "rounding_safe_to_push";
           recommendedActionReason = `Gap of ${validationGap.toFixed(2)} is within rounding tolerance. Safe to push to Xero.`;
+        } else if (
+          !xeroMatch &&
+          valRes.data?.overall_status === "ready_to_push" &&
+          !bankMatchResult.concerns
+        ) {
+          // Priority 3: Validation says ready, no external posting, no bank concerns
+          diagnosis = "Settlement is validated and ready to push. Gap is within acceptable range.";
+          gapType = "acceptable";
+          recommendedAction = "push_to_xero";
+          recommendedActionReason = `Validation status is ready_to_push with a gap of $${absGap.toFixed(2)}. No external posting detected and no bank match concerns. Safe to push.`;
         } else if (source === "api" && marketplace.includes("ebay")) {
           const feeTotal = Math.abs(s.seller_fees || 0);
           if (feeTotal > 0 && Math.abs(absGap - feeTotal) < 1.00) {
