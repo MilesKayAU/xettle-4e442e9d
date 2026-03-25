@@ -566,7 +566,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
   // ─── Derive audit counts ──────────────────────────────────
   const auditCounts = settlements.reduce(
     (acc, s) => {
-      const status = deriveAuditStatus(s, xeroMatches[s.settlement_id]);
+      const status = deriveAuditStatus(s, xeroMatches[s.settlement_id], validationStatusMap[s.settlement_id]);
       acc[status] = (acc[status] || 0) + 1;
       return acc;
     },
@@ -574,7 +574,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
   );
 
   const readyToPush = settlements.filter(s => {
-    const status = deriveAuditStatus(s, xeroMatches[s.settlement_id]);
+    const status = deriveAuditStatus(s, xeroMatches[s.settlement_id], validationStatusMap[s.settlement_id]);
     return status === 'ready_to_push' || status === 'unknown';
   });
   const readyToPushTotal = readyToPush.reduce((sum, s) => sum + (s.bank_deposit || 0), 0);
