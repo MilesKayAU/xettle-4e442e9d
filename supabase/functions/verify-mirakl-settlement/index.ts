@@ -1,0 +1,252 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { verifyRequest } from "../_shared/auth-guard.ts";
+import { getMiraklAuthHeader } from "../_shared/mirakl-token.ts";
+import { MIRAKL_MARKETPLACE_ENDPOINTS } from "../_shared/mirakl-api-policy.ts";
+
+/**
+ * verify-mirakl-settlement — Read-only diagnostic that fetches raw Mirakl
+ * transaction logs and compares them against a stored Xettle settlement.
+ *
+ * POST body: { settlement_id: string }
+ * Requires admin role.
+ */
+
+interface TxSummary {
+  transaction_type: string;
+  count: number;
+  total_amount: number;
+}
+
+Deno.serve(async (req) => {
+  const origin = req.headers.get("Origin") ?? "";
+  const corsHeaders = getCorsHeaders(origin);
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+  try {
+    const { userId } = await verifyRequest(req, { requireAdmin: true });
+    const body = await req.json();
+    const { settlement_id } = body;
+
+    if (!settlement_id) {
+      return new Response(
+        JSON.stringify({ error: "Missing settlement_id" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // ─── Step 0: Load settlement from DB ─────────────────────────
+    const { data: settlement, error: settErr } = await adminClient
+      .from("settlements")
+      .select("*")
+      .eq("settlement_id", settlement_id)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (settErr || !settlement) {
+      return new Response(
+        JSON.stringify({ error: "Settlement not found", detail: settErr?.message }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // ─── Step 1: Find Mirakl connection for this user ────────────
+    const { data: miraklRows } = await adminClient
+      .from("mirakl_tokens")
+      .select("*")
+      .eq("user_id", userId);
+
+    if (!miraklRows || miraklRows.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "No Mirakl connection found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // Pick the first connection (or match by marketplace label if possible)
+    const miraklRow = miraklRows[0];
+
+    // ─── Step 2: Extract doc number from settlement_id ───────────
+    // BUN-2301-2026-03-14 → accounting_document_number = 2301
+    const parts = settlement_id.split("-");
+    const docNumber = parts.length >= 2 ? parts[1] : null;
+
+    // Build date range from settlement period (with 1-day buffer)
+    const dateFrom = settlement.period_start
+      ? new Date(new Date(settlement.period_start).getTime() - 86400000).toISOString()
+      : undefined;
+    const dateTo = settlement.period_end
+      ? new Date(new Date(settlement.period_end).getTime() + 86400000).toISOString()
+      : undefined;
+
+    // ─── Step 3: Fetch from Mirakl API ───────────────────────────
+    const authResult = await getMiraklAuthHeader(adminClient, miraklRow);
+    const baseUrl = miraklRow.base_url.replace(/\/$/, "");
+    const endpoint = MIRAKL_MARKETPLACE_ENDPOINTS.TRANSACTION_LOGS;
+
+    const params = new URLSearchParams();
+    if (docNumber) params.set("accounting_document_number", docNumber);
+    if (dateFrom) params.set("date_created_from", dateFrom);
+    if (dateTo) params.set("date_created_to", dateTo);
+    params.set("max", "1000");
+
+    const apiUrl = `${baseUrl}${endpoint}?${params.toString()}`;
+    console.log(`[verify-mirakl] Fetching: ${apiUrl}`);
+
+    const apiRes = await fetch(apiUrl, {
+      method: "GET",
+      headers: {
+        [authResult.headerName]: authResult.headerValue,
+        "Accept": "application/json",
+      },
+    });
+
+    if (!apiRes.ok) {
+      const errorText = await apiRes.text().catch(() => "");
+      return new Response(
+        JSON.stringify({
+          verdict: "api_error",
+          settlement_id,
+          error: `Mirakl API returned ${apiRes.status}`,
+          detail: errorText.slice(0, 500),
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const apiData = await apiRes.json();
+
+    // Mirakl returns { transaction_logs: [...] } or { data: [...] }
+    const transactions: any[] = apiData.transaction_logs || apiData.data || apiData.lines || [];
+
+    // ─── Step 4: Summarize by transaction_type ───────────────────
+    const typeSummary: Record<string, TxSummary> = {};
+    for (const tx of transactions) {
+      const txType = tx.type || tx.transaction_type || "UNKNOWN";
+      const amount = parseFloat(tx.amount || tx.amount_credited || "0") -
+                     parseFloat(tx.amount_debited || "0");
+      if (!typeSummary[txType]) {
+        typeSummary[txType] = { transaction_type: txType, count: 0, total_amount: 0 };
+      }
+      typeSummary[txType].count++;
+      typeSummary[txType].total_amount = Math.round((typeSummary[txType].total_amount + amount) * 100) / 100;
+    }
+
+    const apiTransactions = Object.values(typeSummary);
+
+    // ─── Step 5: Map API totals to settlement fields ─────────────
+    const getTotal = (types: string[]): number =>
+      apiTransactions
+        .filter(t => types.includes(t.transaction_type))
+        .reduce((sum, t) => sum + t.total_amount, 0);
+
+    const apiSales = getTotal(["ORDER_AMOUNT"]);
+    const apiShipping = getTotal(["ORDER_SHIPPING_AMOUNT"]);
+    const apiFees = getTotal(["COMMISSION_FEE", "COMMISSION_VAT"]);
+    const apiRefunds = getTotal([
+      "REFUND_ORDER_AMOUNT", "REFUND_ORDER_AMOUNT_TAX",
+      "REFUND_ORDER_SHIPPING_AMOUNT", "REFUND_ORDER_SHIPPING_AMOUNT_TAX",
+      "REFUND_COMMISSION_FEE", "REFUND_COMMISSION_VAT",
+    ]);
+    const apiPayment = getTotal(["PAYMENT"]);
+    const apiSalesTax = getTotal(["ORDER_AMOUNT_TAX", "ORDER_SHIPPING_AMOUNT_TAX"]);
+
+    // Stored settlement values
+    const stored = {
+      sales: (settlement.sales_principal || 0) + (settlement.sales_shipping || 0),
+      sales_principal: settlement.sales_principal || 0,
+      sales_shipping: settlement.sales_shipping || 0,
+      fees: settlement.seller_fees || 0,
+      refunds: settlement.refunds || 0,
+      bank_deposit: settlement.bank_deposit || 0,
+      reimbursements: settlement.reimbursements || 0,
+      other_fees: settlement.other_fees || 0,
+      gst_on_income: settlement.gst_on_income || 0,
+    };
+
+    // ─── Step 6: Build discrepancies ─────────────────────────────
+    const discrepancies: Array<{
+      field: string;
+      stored_value: number;
+      api_value: number;
+      difference: number;
+    }> = [];
+
+    const compare = (field: string, storedVal: number, apiVal: number) => {
+      const diff = Math.round((apiVal - storedVal) * 100) / 100;
+      if (Math.abs(diff) > 0.01) {
+        discrepancies.push({ field, stored_value: storedVal, api_value: apiVal, difference: diff });
+      }
+    };
+
+    compare("sales_principal", stored.sales_principal, apiSales);
+    compare("sales_shipping", stored.sales_shipping, apiShipping);
+    compare("seller_fees", stored.fees, apiFees);
+    compare("refunds", stored.refunds, apiRefunds);
+    compare("bank_deposit", stored.bank_deposit, apiPayment);
+    compare("gst_on_income", stored.gst_on_income, apiSalesTax);
+
+    // ─── Step 7: Find missing transaction types ──────────────────
+    const knownTypes = new Set([
+      "ORDER_AMOUNT", "ORDER_AMOUNT_TAX",
+      "ORDER_SHIPPING_AMOUNT", "ORDER_SHIPPING_AMOUNT_TAX",
+      "COMMISSION_FEE", "COMMISSION_VAT",
+      "REFUND_ORDER_AMOUNT", "REFUND_ORDER_AMOUNT_TAX",
+      "REFUND_ORDER_SHIPPING_AMOUNT", "REFUND_ORDER_SHIPPING_AMOUNT_TAX",
+      "REFUND_COMMISSION_FEE", "REFUND_COMMISSION_VAT",
+      "PAYMENT",
+    ]);
+
+    const missingTransactionTypes = apiTransactions
+      .filter(t => !knownTypes.has(t.transaction_type) && Math.abs(t.total_amount) > 0.01)
+      .map(t => ({
+        transaction_type: t.transaction_type,
+        count: t.count,
+        total_amount: t.total_amount,
+      }));
+
+    // ─── Step 8: Verdict ─────────────────────────────────────────
+    let verdict: "match" | "discrepancy" | "api_error" | "no_data" = "match";
+    if (transactions.length === 0) {
+      verdict = "no_data";
+    } else if (discrepancies.length > 0 || missingTransactionTypes.length > 0) {
+      verdict = "discrepancy";
+    }
+
+    return new Response(
+      JSON.stringify({
+        settlement_id,
+        verdict,
+        transaction_count: transactions.length,
+        api_transactions: apiTransactions,
+        api_totals: {
+          sales: apiSales,
+          shipping: apiShipping,
+          fees: apiFees,
+          refunds: apiRefunds,
+          payment: apiPayment,
+          sales_tax: apiSalesTax,
+        },
+        stored_settlement: stored,
+        discrepancies,
+        missing_transaction_types: missingTransactionTypes,
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  } catch (err: any) {
+    console.error("[verify-mirakl] Error:", err);
+    return new Response(
+      JSON.stringify({ error: err.message, verdict: "api_error" }),
+      {
+        status: err.message?.includes("Forbidden") ? 403 : 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
+  }
+});

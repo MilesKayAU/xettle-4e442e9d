@@ -6,6 +6,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAiPageContext } from '@/ai/context/useAiPageContext';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from '@/components/ui/sheet';
@@ -14,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertTriangle, CheckCircle2, Clock, Download, ExternalLink, GitCompare, Info, Pencil, Save, X, Zap } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, Clock, Download, ExternalLink, GitCompare, Info, Pencil, Save, Search, X, Zap } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatAUD, MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import { cn } from '@/lib/utils';
@@ -102,6 +103,10 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
   const [editing, setEditing] = useState(false);
   const [editFields, setEditFields] = useState<EditableFields | null>(null);
   const [saving, setSaving] = useState(false);
+  const [apiVerification, setApiVerification] = useState<any>(null);
+  const [apiVerifying, setApiVerifying] = useState(false);
+  const [apiVerifyOpen, setApiVerifyOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useAiPageContext(() => ({
     routeId: 'settlement_detail',
@@ -135,6 +140,8 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
 
     setEditing(false);
     setEditFields(null);
+    setApiVerification(null);
+    setApiVerifyOpen(false);
 
     (async () => {
       const [settRes, eventsRes, candidateRes] = await Promise.all([
@@ -198,6 +205,38 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
       }
     })();
   }, [settlement?.marketplace, settlement?.status, readinessKey]);
+
+  // Check admin status
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase.rpc('has_role', { _role: 'admin' });
+        setIsAdmin(!!data);
+      } catch { setIsAdmin(false); }
+    })();
+  }, []);
+
+  // Mirakl API verification handler
+  const handleVerifyMirakl = useCallback(async () => {
+    if (!settlement?.settlement_id) return;
+    setApiVerifying(true);
+    setApiVerification(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await supabase.functions.invoke('verify-mirakl-settlement', {
+        body: { settlement_id: settlement.settlement_id },
+      });
+      if (res.error) throw new Error(res.error.message);
+      setApiVerification(res.data);
+      setApiVerifyOpen(true);
+    } catch (err: any) {
+      toast.error(`API verification failed: ${err.message}`);
+      setApiVerification({ verdict: 'api_error', error: err.message });
+      setApiVerifyOpen(true);
+    } finally {
+      setApiVerifying(false);
+    }
+  }, [settlement?.settlement_id]);
 
   const handleDismissCandidate = useCallback(async () => {
     if (!externalCandidate?.id) return;
@@ -703,6 +742,173 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
                       </span>
                     </div>
                   </div>
+                </div>
+              </>
+            )}
+
+            {/* API Verification — Admin only, Mirakl/Bunnings settlements */}
+            {isAdmin && settlement.marketplace && (
+              settlement.marketplace.toLowerCase().includes('bunnings') ||
+              settlement.marketplace.toLowerCase().includes('catch') ||
+              settlement.marketplace.toLowerCase().includes('mydeal') ||
+              settlement.marketplace.toLowerCase().includes('kogan') ||
+              settlement.source === 'mirakl_api'
+            ) && (
+              <>
+                <Separator />
+                <div className="space-y-2">
+                  {!apiVerification && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1.5"
+                      onClick={handleVerifyMirakl}
+                      disabled={apiVerifying}
+                    >
+                      <Search className="h-3.5 w-3.5" />
+                      {apiVerifying ? 'Verifying via API…' : 'Verify via Mirakl API'}
+                    </Button>
+                  )}
+
+                  {apiVerification && (
+                    <Collapsible open={apiVerifyOpen} onOpenChange={setApiVerifyOpen}>
+                      <CollapsibleTrigger className="flex items-center gap-2 w-full text-xs font-semibold text-foreground hover:underline">
+                        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", apiVerifyOpen && "rotate-180")} />
+                        API Verification
+                        {apiVerification.verdict === 'match' && (
+                          <Badge variant="default" className="text-[9px] ml-1 bg-emerald-600">Match</Badge>
+                        )}
+                        {apiVerification.verdict === 'discrepancy' && (
+                          <Badge variant="destructive" className="text-[9px] ml-1">Discrepancy</Badge>
+                        )}
+                        {apiVerification.verdict === 'no_data' && (
+                          <Badge variant="secondary" className="text-[9px] ml-1">No Data</Badge>
+                        )}
+                        {apiVerification.verdict === 'api_error' && (
+                          <Badge variant="destructive" className="text-[9px] ml-1">API Error</Badge>
+                        )}
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="mt-2 space-y-3">
+                        {/* Verdict banner */}
+                        {apiVerification.verdict === 'match' && (
+                          <div className="flex items-center gap-2 p-2 rounded-md bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-xs">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                            <span className="text-emerald-800 dark:text-emerald-200 font-medium">Settlement matches API data</span>
+                          </div>
+                        )}
+                        {apiVerification.verdict === 'discrepancy' && (
+                          <div className="flex items-center gap-2 p-2 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-xs">
+                            <AlertTriangle className="h-4 w-4 text-red-600" />
+                            <span className="text-red-800 dark:text-red-200 font-medium">Discrepancy found — see details below</span>
+                          </div>
+                        )}
+                        {apiVerification.verdict === 'no_data' && (
+                          <div className="flex items-center gap-2 p-2 rounded-md bg-muted border border-border text-xs">
+                            <Info className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-muted-foreground">No transactions found in Mirakl API for this period/document</span>
+                          </div>
+                        )}
+                        {apiVerification.verdict === 'api_error' && (
+                          <div className="flex items-center gap-2 p-2 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-xs">
+                            <AlertTriangle className="h-4 w-4 text-red-600" />
+                            <span className="text-red-800 dark:text-red-200">{apiVerification.error || 'API error'}</span>
+                          </div>
+                        )}
+
+                        {/* Transaction summary table */}
+                        {apiVerification.api_transactions?.length > 0 && (
+                          <div>
+                            <h5 className="text-[11px] font-medium text-muted-foreground mb-1">
+                              API Transactions ({apiVerification.transaction_count} total)
+                            </h5>
+                            <div className="border border-border rounded-md overflow-hidden">
+                              <table className="w-full text-[11px]">
+                                <thead className="bg-muted/50">
+                                  <tr>
+                                    <th className="text-left py-1 px-2 font-medium text-muted-foreground">Type</th>
+                                    <th className="text-right py-1 px-2 font-medium text-muted-foreground">Count</th>
+                                    <th className="text-right py-1 px-2 font-medium text-muted-foreground">Total</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-border/50">
+                                  {apiVerification.api_transactions.map((tx: any, i: number) => (
+                                    <tr key={i} className="hover:bg-muted/20">
+                                      <td className="py-1 px-2 font-mono text-foreground">{tx.transaction_type}</td>
+                                      <td className="py-1 px-2 text-right text-muted-foreground">{tx.count}</td>
+                                      <td className={cn("py-1 px-2 text-right font-mono",
+                                        tx.total_amount >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
+                                      )}>
+                                        {formatAUD(tx.total_amount)}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Discrepancies table */}
+                        {apiVerification.discrepancies?.length > 0 && (
+                          <div>
+                            <h5 className="text-[11px] font-medium text-red-600 dark:text-red-400 mb-1">Discrepancies</h5>
+                            <div className="border border-red-200 dark:border-red-800 rounded-md overflow-hidden">
+                              <table className="w-full text-[11px]">
+                                <thead className="bg-red-50 dark:bg-red-900/20">
+                                  <tr>
+                                    <th className="text-left py-1 px-2 font-medium text-red-700 dark:text-red-300">Field</th>
+                                    <th className="text-right py-1 px-2 font-medium text-red-700 dark:text-red-300">Stored</th>
+                                    <th className="text-right py-1 px-2 font-medium text-red-700 dark:text-red-300">API</th>
+                                    <th className="text-right py-1 px-2 font-medium text-red-700 dark:text-red-300">Diff</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-red-100 dark:divide-red-900/50">
+                                  {apiVerification.discrepancies.map((d: any, i: number) => (
+                                    <tr key={i}>
+                                      <td className="py-1 px-2 font-mono text-foreground">{d.field}</td>
+                                      <td className="py-1 px-2 text-right font-mono text-muted-foreground">{formatAUD(d.stored_value)}</td>
+                                      <td className="py-1 px-2 text-right font-mono text-foreground">{formatAUD(d.api_value)}</td>
+                                      <td className="py-1 px-2 text-right font-mono text-red-600 dark:text-red-400 font-medium">
+                                        {d.difference >= 0 ? '+' : ''}{formatAUD(d.difference)}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Missing transaction types */}
+                        {apiVerification.missing_transaction_types?.length > 0 && (
+                          <div>
+                            <h5 className="text-[11px] font-medium text-amber-600 dark:text-amber-400 mb-1">
+                              Unmapped Transaction Types (in API, not in stored data)
+                            </h5>
+                            <div className="flex flex-wrap gap-1">
+                              {apiVerification.missing_transaction_types.map((mt: any, i: number) => (
+                                <Badge key={i} variant="outline" className="text-[9px] font-mono">
+                                  {mt.transaction_type}: {formatAUD(mt.total_amount)} ({mt.count}x)
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Re-verify button */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[10px] gap-1"
+                          onClick={handleVerifyMirakl}
+                          disabled={apiVerifying}
+                        >
+                          <Search className="h-3 w-3" />
+                          {apiVerifying ? 'Re-verifying…' : 'Re-verify'}
+                        </Button>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  )}
                 </div>
               </>
             )}
