@@ -1056,6 +1056,7 @@ function formatEventType(type: string): string {
     xero_api_call: 'Xero API call',
     external_link_removed: 'External link removed (cleanup)',
     external_xero_detected: 'External Xero invoice detected',
+    settlement_corrected: '⚠ Settlement corrected (parser bug fix)',
   };
   return labels[type] || type.replace(/_/g, ' ');
 }
