@@ -138,7 +138,7 @@ export default function DataIntegrityScanner() {
 
   // Count how many manual scans are stale/never
   const staleCount = MANUAL_SCANS.filter((d) => {
-    const f = getFreshness(timestamps[d.key] ?? null);
+    const f = getFreshness(timestamps[d.key] ?? null, failedScans[d.key]);
     return f !== 'fresh';
   }).length;
 
