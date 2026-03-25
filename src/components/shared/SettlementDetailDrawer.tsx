@@ -108,6 +108,7 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
   const [saving, setSaving] = useState(false);
   const [apiVerification, setApiVerification] = useState<any>(null);
   const [apiVerifying, setApiVerifying] = useState(false);
+  const [apiRefetching, setApiRefetching] = useState(false);
   const [apiVerifyOpen, setApiVerifyOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
