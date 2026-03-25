@@ -736,22 +736,16 @@ export async function executeTool(
           }
         }
 
-        // Priority 9: Await payout — settlement exists with data but no bank deposit yet
-        const periodEnd = s.metadata?.period_end ? new Date(s.metadata.period_end) : null;
-        const settlementPeriodEnd = new Date(topLines.length > 0 ? (linesRes.data?.[0]?.settlement_id ? s.metadata?.period_end || "" : "") : "");
-        // Use period_end from the settlement query directly
+        // Priority 9: Await payout — settlement has data but no bank deposit, recent period
         if (
           recommendedAction === "investigate_gap" &&
           (bankDeposit === 0 || bankDeposit === null) &&
           (s.sales_principal || s.seller_fees) &&
           (valRes.data?.overall_status === "settlement_needed" || valRes.data?.reconciliation_status === "warning")
         ) {
-          // Check if period end is within last 30 days
-          const now = new Date();
-          const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-          // We need period_end from settlements — grab from the settlement_id pattern or validation
-          const valPeriodEnd = valRes.data ? true : false; // settlement exists, so it has a period
-          if (valPeriodEnd) {
+          const periodEndDate = s.period_end ? new Date(s.period_end) : null;
+          const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+          if (periodEndDate && periodEndDate >= thirtyDaysAgo) {
             diagnosis = "Settlement has transaction data but no bank deposit recorded yet. The marketplace may not have paid out.";
             gapType = "pending";
             recommendedAction = "await_payout";
