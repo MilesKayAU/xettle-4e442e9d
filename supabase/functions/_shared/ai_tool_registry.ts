@@ -200,6 +200,7 @@ export async function executeTool(
   toolInput: Record<string, any>,
   userId: string,
   serviceClient: any,
+  viewerClient?: any,
 ): Promise<string> {
   try {
     switch (toolName) {

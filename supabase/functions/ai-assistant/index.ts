@@ -278,6 +278,7 @@ serve(async (req) => {
           args,
           userId,
           serviceClient,
+          supabase,
         );
 
         gatewayMessages.push({
