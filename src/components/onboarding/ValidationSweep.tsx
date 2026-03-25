@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { logger } from '@/utils/logger';
+import { getDisplayGap } from '@/utils/getDisplayGap';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
@@ -764,7 +765,7 @@ export default function ValidationSweep({
                       <td className="px-3 py-2 text-center">
                         {row.settlement_uploaded ? (
                           (() => {
-                            const gap = row.reconciliation_difference;
+                            const gap = getDisplayGap({ reconciliation_difference: row.reconciliation_difference }, null);
                             const absGap = Math.abs(gap || 0);
                             if (!gap && gap !== 0) return <span className="text-xs text-muted-foreground">—</span>;
                             if (absGap <= 0.05) return (
