@@ -103,8 +103,13 @@ function formatDateRange(start: string, end: string): string {
 
 type StatusCategory = 'ready' | 'posted' | 'attention' | 'hidden' | 'completed' | 'other';
 
-/** Compute reconciliation gap from settlement fields */
+/** Compute reconciliation gap — uses canonical validation gap when available */
 function computeSettlementGap(row: SettlementRow): number | null {
+  // Prefer canonical validation gap
+  if (row.reconciliation_difference !== undefined && row.reconciliation_difference !== null) {
+    return row.reconciliation_difference;
+  }
+  // Fallback: compute from settlement fields for display only
   if (row.bank_deposit == null) return null;
   const computed = (row.sales_principal || 0) + (row.seller_fees || 0) + (row.fba_fees || 0) +
     (row.storage_fees || 0) + (row.refunds || 0) + (row.other_fees || 0) + (row.advertising_costs || 0);
