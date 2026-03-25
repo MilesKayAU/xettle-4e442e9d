@@ -1,86 +1,69 @@
 
 
-# Reconciliation Gap Triage Table — Homepage Dashboard
+# AI Scan Diagnosis Report — Bunnings Settlement BUN-2301-2026-03-14
 
-## What This Adds
+## What the AI actually said
 
-A dedicated "Gaps to Resolve" section on the homepage between the ActionCentre and RecentSettlements, giving bookkeepers a focused worklist of settlements with reconciliation gaps. Each row shows the gap amount, likely cause, and provides inline tools to fix, edit, and save — plus an AI diagnosis button that analyzes whether the gap is real or a data artifact.
+The AI scan returned a weak, generic response:
+- "detailed gap breakdown is currently unavailable"
+- Mentioned bank deposit of -$50.00
+- Flagged 5 missing account mappings (Sales, Seller Fees, Refunds, Other Fees, Shipping)
+- Recommended fixing account mappings first
 
-## Current State
+The pre-AI rule-based text in the table row shows: "Bank deposit is lower than computed net — there may be deductions not captured in the settlement fields." This comes from `diagnoseGapReason()`, NOT from the upgraded tool.
 
-- **ActionCentre** computes `gapDetected` rows (line 274) but never renders them — they're a dead variable
-- **SettlementDetailDrawer** has `diagnoseGapReason()` (rule-based) and Edit Figures mode, but these require clicking into each settlement individually
-- **AI tool registry** has no gap-specific tool — the assistant can't analyze individual gap causes
-- The homepage has no dedicated gap resolution UX; bookkeepers must navigate to the Settlements tab to find and fix gaps
+## What went wrong with the AI scan
 
-## Plan
+The upgraded tool code (lines 513-768 in `ai_tool_registry.ts`) is **structurally correct** — 7 parallel queries via `Promise.all()`, proper Bunnings rules, bank matching with ±$1 tolerance. The code itself is sound.
 
-### 1. Create GapTriageTable component
+However, the AI model's response ("detailed gap breakdown is currently unavailable") strongly suggests one of two things happened:
 
-New file: `src/components/dashboard/GapTriageTable.tsx`
+1. **The tool returned `{ error: "Settlement not found" }`** — The query at line 519 uses `.eq("settlement_id", sid)` against the `settlements` table. If the settlement_id format passed from the UI (`BUN-2301-2026-03-14`) doesn't exactly match what's stored in `settlements.settlement_id`, the query returns null and the tool short-circuits at line 558.
 
-- Query `marketplace_validation` where `overall_status = 'gap_detected'`, joined to `settlements` for financial fields
-- Display as a compact table with columns: Marketplace, Period, Gap Amount, Likely Cause, Actions
-- Use `getDisplayGap()` for gap amounts (validation-first, settlement fallback)
-- Extract `diagnoseGapReason()` from SettlementDetailDrawer into a shared utility (`src/utils/diagnose-gap-reason.ts`) so both the drawer and this table can use it
-- Each row gets:
-  - Gap amount with color coding (amber for warn, red for blocking)
-  - Rule-based diagnosis text (from `diagnoseGapReason`)
-  - "Edit" button → opens SettlementDetailDrawer in edit mode
-  - "AI Scan" button → calls new AI tool to analyze the gap
-- Collapsible if > 5 rows, sorted by absolute gap descending
-- Shows "No gaps — all clear" if empty (collapsed/hidden state)
+2. **The AI model chose not to call the tool** — The prompt says "Use the analyzeReconciliationGap tool" but the model may have attempted its own analysis instead of invoking the tool, which means none of the 7 queries ran.
 
-### 2. Extract diagnoseGapReason to shared utility
+## What the code SHOULD have returned for Bunnings with a $550.73 gap
 
-New file: `src/utils/diagnose-gap-reason.ts`
+Based on lines 691-703, the Bunnings rule would fire:
+- `absGap` = 550.73 (> $5 threshold)
+- `recommended_action` = `"investigate_gap"`
+- `recommended_action_reason` = "Bunnings gap exceeds $5. Check PDF extraction quality."
+- `diagnosis` = "Bunnings PDF extraction can produce rounding errors." (or negative deposit variant)
 
-- Move the `diagnoseGapReason()` function from SettlementDetailDrawer (lines 90-141) to this shared file
-- Update SettlementDetailDrawer to import from the new location
-- GapTriageTable imports from the same location
+Plus the 5 new data sections: xero_status, bank_match, top_line_items, fee_analysis, outstanding_invoices.
 
-### 3. Add AI gap analysis tool
+## The $550.73 gap itself — is it real?
 
-Update `supabase/functions/_shared/ai_tool_registry.ts`:
-- Add `analyzeReconciliationGap` tool that takes a `settlement_id` and returns:
-  - The financial breakdown (sales, fees, refunds, bank deposit, expected net)
-  - The gap amount and direction
-  - The rule-based diagnosis
-  - Whether the gap is likely real (data missing) or an artifact (rounding, API bug)
-- Available on routes: `dashboard`, `settlements`
+With bank_deposit = -$50.00 and a gap of -$550.73, that means `expected_net ≈ $500.73`. A -$50 bank deposit on a Bunnings settlement strongly suggests:
+- This is a **fee-only period** (no sales, just monthly platform fees / commission adjustments)
+- OR the bank deposit field was incorrectly captured from the PDF
 
-Update `supabase/functions/ai-assistant/index.ts`:
-- Implement the tool execution: query settlements + marketplace_validation for the given settlement_id, run diagnosis logic server-side, return structured analysis
+The gap is likely **real data** — either the PDF parser missed revenue lines, or this genuinely was a debit period where Bunnings charged fees exceeding sales.
 
-### 4. Wire into Dashboard.tsx
+## The missing account mappings
 
-- Import GapTriageTable
-- Place it between the ActionCentre section and the RecentSettlements section (between lines 1112 and 1114)
-- Pass `onOpenDrawer` callback to open SettlementDetailDrawer when "Edit" is clicked
+All 5 categories missing (Sales, Seller Fees, Refunds, Other Fees, Shipping) means Bunnings has **never been mapped** in the Account Mapper. This is a separate blocker from the gap — even if the gap resolves, pushing is blocked until mappings are configured.
 
-### 5. AI Scan UX in GapTriageTable
+## Recommended fixes
 
-- "AI Scan" button per row sends a message to the AI assistant via `useAiAssistant` hook
-- The message is pre-formatted: "Analyze the reconciliation gap for settlement [ID]. Is this gap real or a data artifact? What's the likely fix?"
-- Response appears inline below the row in a collapsible panel
-- Alternatively, a "Scan All Gaps" button at the table header sends a batch analysis request
+### Fix 1: Verify tool invocation (debug why AI said "unavailable")
+Check edge function logs for the `ai-assistant` call to confirm whether `analyzeReconciliationGap` was actually invoked and what it returned. The settlement_id format may not match.
 
-## Technical Details
+### Fix 2: Strengthen the AI prompt to force tool use
+The current prompt in `handleAiScan` (line 152) says "Use the analyzeReconciliationGap tool" but the model can ignore this. Add a system message or use function_call forcing if the AI model supports it.
 
-- All gap data reads from `marketplace_validation` (source of truth) via `getDisplayGap()`
-- No new database tables or migrations required
-- The AI tool is read-only per existing policy
-- Edit/save flow reuses existing SettlementDetailDrawer infrastructure
-- After saving edits, the validation sweep auto-runs and the table refreshes via realtime subscription on `marketplace_validation`
+### Fix 3: Investigate the Bunnings settlement data
+The -$50 bank deposit with $500+ computed net is a significant discrepancy. Check the original Bunnings PDF to verify whether revenue lines were captured correctly by the parser.
 
-## Files to Create/Modify
+## Files involved
 
-| File | Action |
-|------|--------|
-| `src/utils/diagnose-gap-reason.ts` | Create — extract shared diagnosis logic |
-| `src/components/dashboard/GapTriageTable.tsx` | Create — main triage table component |
-| `src/components/shared/SettlementDetailDrawer.tsx` | Modify — import from shared utility |
-| `supabase/functions/_shared/ai_tool_registry.ts` | Modify — add analyzeReconciliationGap tool |
-| `supabase/functions/ai-assistant/index.ts` | Modify — implement tool execution |
-| `src/pages/Dashboard.tsx` | Modify — add GapTriageTable to home view |
+| File | Role |
+|------|------|
+| `supabase/functions/_shared/ai_tool_registry.ts` (lines 513-768) | Tool execution — code is correct |
+| `src/components/dashboard/GapTriageTable.tsx` (lines 135-197) | AI scan trigger — prompt may need strengthening |
+| `src/utils/diagnose-gap-reason.ts` | Rule-based fallback text shown in table row (working correctly) |
+
+## Summary
+
+The system coding is correct. The 7-query forensic tool, the Bunnings-specific rules, and the decision tree are all properly implemented. The issue is that **the AI model either didn't call the tool or the settlement wasn't found by ID**. The next step is to check the edge function logs to confirm which scenario occurred, then fix accordingly.
 
