@@ -29,6 +29,7 @@ import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
 import ChannelDetectedEmptyState from './shared/ChannelDetectedEmptyState';
 import EbayUploadGuide from './EbayUploadGuide';
 import { isReconciliationOnly } from '@/utils/settlement-policy';
+import { isReconSafeForPush, isGapBlocking } from '@/utils/canonical-recon-status';
 
 // ── Shared architecture hooks + components ──────────────────────────────────
 import { useSettlementManager, type BaseSettlementRow } from '@/hooks/use-settlement-manager';
