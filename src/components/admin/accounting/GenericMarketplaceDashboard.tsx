@@ -648,8 +648,9 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                      const isReconOnly = isReconciliationOnly((s as any).source, s.marketplace, s.settlement_id);
                      const reconGap = computeGap(s);
                      const reconOk = isReconSafeForPush(reconGap);
-                     const isSyncable = !isReconOnly && reconOk && (s.status === 'ingested' || s.status === 'ready_to_push');
-                     const isReconBlocked = !isReconOnly && !reconOk && (s.status === 'ingested' || s.status === 'ready_to_push');
+                     const valStatus = validationStatusMap[s.settlement_id];
+                     const isSyncable = !isReconOnly && reconOk && valStatus === 'ready_to_push';
+                     const isReconBlocked = !isReconOnly && !reconOk && (s.status === 'ingested' || valStatus === 'ready_to_push');
                     const isPushFailed = s.status === 'push_failed';
                     const isSynced = ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(s.status || '');
                     const isPreBoundary = !!(s as any).is_pre_boundary;
