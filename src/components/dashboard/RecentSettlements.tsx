@@ -522,7 +522,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
       const [valRes, connRes] = await Promise.all([
         supabase
           .from('marketplace_validation')
-          .select('overall_status, settlement_net, marketplace_code, settlement_id')
+          .select('overall_status, settlement_net, marketplace_code, settlement_id, reconciliation_difference')
           .in('overall_status', ['ready_to_push', 'pushed_to_xero', 'settlement_needed', 'missing', 'gap_detected']),
         supabase
           .from('marketplace_connections')

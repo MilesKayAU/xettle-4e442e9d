@@ -273,7 +273,7 @@ export default function ReconciliationHub() {
           type: 'validation',
           urgencyTier: tier,
           title,
-          subtitle: `${v.period_start} → ${v.period_end}${v.reconciliation_difference ? ` · Δ ${formatAUD(v.reconciliation_difference)}` : ''}`,
+          subtitle: `${v.period_start} → ${v.period_end}${v.reconciliation_difference ? ` · Δ ${formatAUD(getDisplayGap({ reconciliation_difference: v.reconciliation_difference })!)}` : ''}`,
           marketplace: v.marketplace_code,
           amount: v.settlement_net || undefined,
           date: v.period_start,
