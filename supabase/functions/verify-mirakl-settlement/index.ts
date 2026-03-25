@@ -72,18 +72,32 @@ Deno.serve(async (req) => {
     // Pick the first connection (or match by marketplace label if possible)
     const miraklRow = miraklRows[0];
 
-    // ─── Step 2: Extract doc number from settlement_id ───────────
-    // BUN-2301-2026-03-14 → accounting_document_number = 2301
-    const parts = settlement_id.split("-");
-    const docNumber = parts.length >= 2 ? parts[1] : null;
+    // ─── Step 2: Extract diagnostic identifiers from settlement ───────────
+    const settlementIdText = String(settlement_id || "");
+    const docNumberMatch = settlementIdText.match(/^[A-Z]+-(\d+)-/i);
+    const docNumber = docNumberMatch?.[1] || null;
+
+    const rawPayload = settlement.raw_payload && typeof settlement.raw_payload === "object"
+      ? settlement.raw_payload
+      : null;
+
+    const paymentVoucher =
+      rawPayload?.payment_voucher ||
+      rawPayload?.payment_reference ||
+      rawPayload?.accounting_document_number ||
+      docNumber ||
+      null;
 
     // Build date range from settlement period (with 1-day buffer)
     const dateFrom = settlement.period_start
-      ? new Date(new Date(settlement.period_start).getTime() - 86400000).toISOString()
-      : undefined;
+      ? new Date(`${settlement.period_start}T00:00:00.000Z`)
+      : null;
+    if (dateFrom) dateFrom.setUTCDate(dateFrom.getUTCDate() - 1);
+
     const dateTo = settlement.period_end
-      ? new Date(new Date(settlement.period_end).getTime() + 86400000).toISOString()
-      : undefined;
+      ? new Date(`${settlement.period_end}T23:59:59.999Z`)
+      : null;
+    if (dateTo) dateTo.setUTCDate(dateTo.getUTCDate() + 1);
 
     // ─── Step 3: Fetch from Mirakl API ───────────────────────────
     let authResult;
@@ -105,38 +119,72 @@ Deno.serve(async (req) => {
 
     const baseUrl = miraklRow.base_url.replace(/\/$/, "");
 
-    // Use the same endpoint pattern as fetch-mirakl-settlements (which works)
     const params = new URLSearchParams();
-    if (dateFrom) params.set("start_date", dateFrom);
-    if (dateTo) params.set("end_date", dateTo);
-    if (docNumber) params.set("accounting_document_number", docNumber);
+    if (dateFrom) params.set("start_date", dateFrom.toISOString());
     params.set("paginate", "false");
-
-    // Include shop parameter if set (same as fetch-mirakl-settlements)
     if (miraklRow.seller_company_id && miraklRow.seller_company_id !== "default") {
       params.set("shop", miraklRow.seller_company_id);
     }
 
     const apiUrl = `${baseUrl}/api/sellerpayment/transactions_logs?${params.toString()}`;
-    console.log(`[verify-mirakl] Fetching: ${apiUrl}`);
+    console.log(`[verify-mirakl] Fetching base dataset: ${apiUrl}`);
+    console.log(`[verify-mirakl] Filters => docNumber=${docNumber ?? "none"}, paymentVoucher=${paymentVoucher ?? "none"}, endDate=${dateTo?.toISOString() ?? "none"}`);
     console.log(`[verify-mirakl] Auth header: ${authResult.headerName}: ${authResult.headerValue.slice(0, 20)}...`);
 
-    const apiRes = await fetch(apiUrl, {
-      method: "GET",
-      headers: {
-        [authResult.headerName]: authResult.headerValue,
-        Accept: "application/json",
-      },
-    });
+    const authCandidates = [
+      { headerName: authResult.headerName, headerValue: authResult.headerValue, label: "primary" },
+    ];
+
+    if ((miraklRow.auth_mode === "api_key" || miraklRow.auth_mode === "both") && miraklRow.api_key) {
+      const fallbackCandidates = [
+        { headerName: "Authorization", headerValue: miraklRow.api_key, label: "authorization" },
+        { headerName: "Authorization", headerValue: `Bearer ${miraklRow.api_key}`, label: "authorization_bearer" },
+        { headerName: "X-API-KEY", headerValue: miraklRow.api_key, label: "x_api_key" },
+      ];
+
+      for (const candidate of fallbackCandidates) {
+        if (!authCandidates.some(existing => existing.headerName === candidate.headerName && existing.headerValue === candidate.headerValue)) {
+          authCandidates.push(candidate);
+        }
+      }
+    }
+
+    let apiRes: Response | null = null;
+    let authAttemptLabel = "primary";
+    let last401Body = "";
+
+    for (const candidate of authCandidates) {
+      authAttemptLabel = candidate.label;
+      console.log(`[verify-mirakl] Trying auth variant: ${candidate.label} (${candidate.headerName})`);
+      apiRes = await fetch(apiUrl, {
+        method: "GET",
+        headers: {
+          [candidate.headerName]: candidate.headerValue,
+          Accept: "application/json",
+        },
+      });
+
+      if (apiRes.status !== 401) {
+        break;
+      }
+
+      last401Body = await apiRes.text().catch(() => "");
+      console.warn(`[verify-mirakl] Auth variant failed with 401: ${candidate.label}`);
+    }
+
+    if (!apiRes) {
+      throw new Error("Mirakl API request was not executed");
+    }
 
     if (!apiRes.ok) {
-      const errorText = await apiRes.text().catch(() => "");
+      const errorText = apiRes.status === 401 ? last401Body : await apiRes.text().catch(() => "");
       return new Response(
         JSON.stringify({
           verdict: "api_error",
           settlement_id,
           error: `Mirakl API returned ${apiRes.status}`,
           detail: errorText.slice(0, 500),
+          auth_attempt: authAttemptLabel,
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
@@ -144,8 +192,23 @@ Deno.serve(async (req) => {
 
     const apiData = await apiRes.json();
 
-    // Mirakl returns { transaction_logs: [...] } or { data: [...] }
-    const transactions: any[] = apiData.transaction_logs || apiData.data || apiData.lines || [];
+    const rawTransactions: any[] = apiData.transactions || apiData.transaction_logs || apiData.data || apiData.lines || [];
+    const transactions = rawTransactions.filter((tx: any) => {
+      const txDateRaw = tx.date_created || tx.date || tx.creation_date || tx.accounting_document_creation_date || null;
+      const txDate = txDateRaw ? new Date(txDateRaw) : null;
+      const inRange = !txDate || (!dateFrom || txDate >= dateFrom) && (!dateTo || txDate <= dateTo);
+
+      const txDocNumber = String(
+        tx.accounting_document_number || tx.payment_voucher || tx.payment_reference || tx.payout_id || ""
+      ).trim();
+
+      const matchesDoc = !docNumber || txDocNumber === docNumber;
+      const matchesVoucher = !paymentVoucher || txDocNumber === String(paymentVoucher).trim();
+
+      return inRange && (matchesDoc || matchesVoucher);
+    });
+
+    console.log(`[verify-mirakl] Raw transactions: ${rawTransactions.length}, filtered: ${transactions.length}`);
 
     // ─── Step 4: Summarize by transaction_type ───────────────────
     const typeSummary: Record<string, TxSummary> = {};
