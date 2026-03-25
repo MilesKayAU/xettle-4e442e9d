@@ -91,7 +91,9 @@ function deriveAuditStatus(
   if (hasXero && !hasBank) return 'in_xero';
   if (hasFuzzyXero) return 'review';
   if (!hasXero && hasBank) return 'bank_only';
-  if (s.status === 'ready_to_push' || s.reconciliation_status === 'matched') return 'ready_to_push';
+  // Use canonical gap check instead of trusting legacy reconciliation_status
+  const gap = (s as any).reconciliation_difference;
+  if (s.status === 'ready_to_push' || (isReconSafeForPush(gap) && (s.reconciliation_status === 'matched' || s.reconciliation_status === 'reconciled'))) return 'ready_to_push';
   return 'unknown';
 }
 
