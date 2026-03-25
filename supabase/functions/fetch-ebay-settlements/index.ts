@@ -9,6 +9,75 @@ const MAX_LOOKBACK_DAYS = 180
 
 function round2(n: number): number { return Math.round(n * 100) / 100 }
 
+// ─── API/CSV Mismatch Detection ────────────────────────────────────────
+// When API data disagrees with a CSV-uploaded settlement, auto-correct
+// if unpushed or flag for manual correction if already pushed to Xero.
+
+async function detectAndCorrectCsvMismatch(
+  adminClient: any,
+  userId: string,
+  marketplace: string,
+  periodStart: string,
+  periodEnd: string,
+  apiBankDeposit: number,
+  apiSettlementId: string,
+) {
+  const { data: csvSettlements } = await adminClient
+    .from('settlements')
+    .select('id, settlement_id, bank_deposit, source, status')
+    .eq('user_id', userId)
+    .eq('marketplace', marketplace)
+    .in('source', ['csv_upload', 'manual'])
+    .neq('status', 'duplicate_suppressed')
+    .lte('period_start', periodEnd)
+    .gte('period_end', periodStart)
+
+  if (!csvSettlements || csvSettlements.length === 0) return
+
+  for (const csv of csvSettlements) {
+    const discrepancy = Math.abs(apiBankDeposit - (csv.bank_deposit || 0))
+    if (discrepancy <= 1.0) continue
+
+    const isPushed = ['pushed_to_xero', 'already_recorded'].includes(csv.status)
+
+    await adminClient.from('system_events').insert({
+      user_id: userId,
+      event_type: 'api_csv_bank_deposit_mismatch',
+      severity: isPushed ? 'warning' : 'info',
+      marketplace_code: marketplace,
+      settlement_id: csv.settlement_id,
+      details: {
+        settlement_id: csv.settlement_id,
+        api_settlement_id: apiSettlementId,
+        marketplace,
+        stored_bank_deposit: csv.bank_deposit,
+        api_bank_deposit: apiBankDeposit,
+        discrepancy: round2(discrepancy),
+        settlement_status: csv.status,
+        source: csv.source,
+        auto_corrected: !isPushed,
+        correction_reason: isPushed
+          ? 'already_pushed_to_xero_needs_manual_correction'
+          : 'api_is_source_of_truth',
+      },
+    })
+
+    if (!isPushed) {
+      await adminClient
+        .from('settlements')
+        .update({
+          bank_deposit: apiBankDeposit,
+          sync_origin: 'api_corrected',
+        })
+        .eq('id', csv.id)
+
+      logger.debug(`[fetch-ebay-settlements] ✅ Auto-corrected ${csv.settlement_id} bank_deposit: ${csv.bank_deposit} → ${apiBankDeposit}`)
+    } else {
+      logger.debug(`[fetch-ebay-settlements] ⚠️ Mismatch flagged for ${csv.settlement_id} (pushed): stored=${csv.bank_deposit}, api=${apiBankDeposit}`)
+    }
+  }
+}
+
 // ─── Token Refresh ─────────────────────────────────────────────────────
 
 async function getEbayAccessToken(
