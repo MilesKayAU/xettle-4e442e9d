@@ -205,6 +205,14 @@ function StatusBadge({ status, xeroStatus, syncOrigin, marketplace, reconGap }: 
     );
   }
   if (status === 'ready_to_push') {
+    if (isGapBlocking(reconGap)) {
+      return (
+        <Badge variant="outline" className="text-red-700 bg-red-50 border-red-200 dark:text-red-400 dark:bg-red-900/30 dark:border-red-800 text-xs">
+          <ShieldAlert className="h-3 w-3 mr-1" />
+          Gap ${reconGap != null ? `$${Math.abs(reconGap).toFixed(2)}` : ''}
+        </Badge>
+      );
+    }
     return (
       <Badge variant="outline" className="text-sky-700 bg-sky-50 border-sky-200 dark:text-sky-400 dark:bg-sky-900/30 dark:border-sky-800 text-xs">
         <Send className="h-3 w-3 mr-1" />
