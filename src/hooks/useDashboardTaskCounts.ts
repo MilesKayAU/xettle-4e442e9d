@@ -287,25 +287,20 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
     }
   }
 
-  // ─── Settlement stage counts ───────────────────────────────────────────
+  // ─── Settlement stage counts (from marketplace_validation — canonical truth) ─
 
   let needsReview = 0;
   let readyToPost = 0;
   let awaitingReconciliation = 0;
 
-  for (const s of settlements) {
-    const status = s.status;
-    const xeroStatus = s.xero_status;
-
-    if (status === 'ingested' || status === 'saved') {
+  const validationRows = validationCountsRes.data || [];
+  for (const v of validationRows) {
+    const os = (v as any).overall_status;
+    if (os === 'settlement_needed' || os === 'missing' || os === 'gap_detected') {
       needsReview++;
-    } else if (status === 'ready_to_push' && !xeroStatus) {
+    } else if (os === 'ready_to_push') {
       readyToPost++;
-    } else if (
-      xeroStatus === 'draft_in_xero' ||
-      xeroStatus === 'authorised_in_xero' ||
-      xeroStatus === 'submitted_in_xero'
-    ) {
+    } else if (os === 'pushed_to_xero') {
       awaitingReconciliation++;
     }
   }
