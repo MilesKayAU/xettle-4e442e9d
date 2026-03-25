@@ -131,7 +131,7 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
         return;
       }
 
-      // Parse SSE stream
+      // Collect full response without streaming state updates to avoid scroll thrashing
       const reader = resp.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
