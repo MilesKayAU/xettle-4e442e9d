@@ -121,22 +121,60 @@ Deno.serve(async (req) => {
     console.log(`[verify-mirakl] Fetching: ${apiUrl}`);
     console.log(`[verify-mirakl] Auth header: ${authResult.headerName}: ${authResult.headerValue.slice(0, 20)}...`);
 
-    const apiRes = await fetch(apiUrl, {
-      method: "GET",
-      headers: {
-        [authResult.headerName]: authResult.headerValue,
-        Accept: "application/json",
-      },
-    });
+    const authCandidates = [
+      { headerName: authResult.headerName, headerValue: authResult.headerValue, label: "primary" },
+    ];
+
+    if ((miraklRow.auth_mode === "api_key" || miraklRow.auth_mode === "both") && miraklRow.api_key) {
+      const fallbackCandidates = [
+        { headerName: "Authorization", headerValue: miraklRow.api_key, label: "authorization" },
+        { headerName: "Authorization", headerValue: `Bearer ${miraklRow.api_key}`, label: "authorization_bearer" },
+        { headerName: "X-API-KEY", headerValue: miraklRow.api_key, label: "x_api_key" },
+      ];
+
+      for (const candidate of fallbackCandidates) {
+        if (!authCandidates.some(existing => existing.headerName === candidate.headerName && existing.headerValue === candidate.headerValue)) {
+          authCandidates.push(candidate);
+        }
+      }
+    }
+
+    let apiRes: Response | null = null;
+    let authAttemptLabel = "primary";
+    let last401Body = "";
+
+    for (const candidate of authCandidates) {
+      authAttemptLabel = candidate.label;
+      console.log(`[verify-mirakl] Trying auth variant: ${candidate.label} (${candidate.headerName})`);
+      apiRes = await fetch(apiUrl, {
+        method: "GET",
+        headers: {
+          [candidate.headerName]: candidate.headerValue,
+          Accept: "application/json",
+        },
+      });
+
+      if (apiRes.status !== 401) {
+        break;
+      }
+
+      last401Body = await apiRes.text().catch(() => "");
+      console.warn(`[verify-mirakl] Auth variant failed with 401: ${candidate.label}`);
+    }
+
+    if (!apiRes) {
+      throw new Error("Mirakl API request was not executed");
+    }
 
     if (!apiRes.ok) {
-      const errorText = await apiRes.text().catch(() => "");
+      const errorText = apiRes.status === 401 ? last401Body : await apiRes.text().catch(() => "");
       return new Response(
         JSON.stringify({
           verdict: "api_error",
           settlement_id,
           error: `Mirakl API returned ${apiRes.status}`,
           detail: errorText.slice(0, 500),
+          auth_attempt: authAttemptLabel,
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
