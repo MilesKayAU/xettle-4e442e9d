@@ -1,6 +1,6 @@
 /**
  * Canonical Data Integrity Scanner — orchestrates critical system scans
- * and tracks last-run timestamps in app_settings.
+ * and tracks completion via backend system_events (not client-side app_settings).
  *
  * Two categories:
  *   MANUAL  — bookkeeper should trigger on login for fresh data
@@ -16,6 +16,8 @@ export interface ScanDefinition {
   label: string;
   description: string;
   edgeFunction: string | null;
+  /** system_events event_type to look up last completion */
+  completionEventType: string;
   /** 'manual' = bookkeeper should trigger; 'auto' = cron handles it */
   mode: 'manual' | 'auto';
   /** Cron schedule description for auto scans */
@@ -33,6 +35,7 @@ export const SCAN_DEFINITIONS: ScanDefinition[] = [
     label: 'Recalculate Gaps',
     description: 'Recomputes all settlement statuses and reconciliation gaps',
     edgeFunction: 'run-validation-sweep',
+    completionEventType: 'validation_sweep_complete',
     mode: 'manual',
     cronNote: 'Also runs daily at 6 AM AEST',
   },
@@ -41,6 +44,7 @@ export const SCAN_DEFINITIONS: ScanDefinition[] = [
     label: 'Match Bank Deposits',
     description: 'Matches Xero bank transactions to settlements',
     edgeFunction: 'match-bank-deposits',
+    completionEventType: 'bank_match_complete',
     mode: 'manual',
     cronNote: 'Also runs every 6 hours',
   },
@@ -50,6 +54,7 @@ export const SCAN_DEFINITIONS: ScanDefinition[] = [
     label: 'Xero Invoice Sync',
     description: 'Refreshes invoice statuses from Xero',
     edgeFunction: null,
+    completionEventType: 'xero_sync_complete',
     mode: 'auto',
     cronNote: 'Runs every 6 hours',
   },
@@ -58,6 +63,7 @@ export const SCAN_DEFINITIONS: ScanDefinition[] = [
     label: 'API Settlement Fetch',
     description: 'Fetches latest data from eBay, Amazon, Shopify, Mirakl',
     edgeFunction: null,
+    completionEventType: 'scheduled_sync_complete',
     mode: 'auto',
     cronNote: 'Runs every 6 hours + daily at 2 AM AEST',
   },
@@ -66,6 +72,7 @@ export const SCAN_DEFINITIONS: ScanDefinition[] = [
     label: 'Profit Recalculation',
     description: 'Rebuilds profit figures from authoritative data',
     edgeFunction: 'recalculate-profit',
+    completionEventType: 'profit_recalc_complete',
     mode: 'auto',
     cronNote: 'Runs after each Xero push',
   },
@@ -78,30 +85,6 @@ export interface ScanResult {
   key: string;
   success: boolean;
   error?: string;
-}
-
-async function updateTimestamp(key: string): Promise<void> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return;
-
-  const now = new Date().toISOString();
-  const { data: existing } = await supabase
-    .from('app_settings')
-    .select('id')
-    .eq('user_id', session.user.id)
-    .eq('key', key)
-    .maybeSingle();
-
-  if (existing) {
-    await supabase
-      .from('app_settings')
-      .update({ value: now, updated_at: now })
-      .eq('id', existing.id);
-  } else {
-    await supabase
-      .from('app_settings')
-      .insert({ user_id: session.user.id, key, value: now });
-  }
 }
 
 export async function runDataIntegrityScan(scanKey: string): Promise<ScanResult> {
@@ -129,7 +112,6 @@ export async function runDataIntegrityScan(scanKey: string): Promise<ScanResult>
       }
     }
 
-    await updateTimestamp(scanKey);
     return { key: scanKey, success: true };
   } catch (err: any) {
     return { key: scanKey, success: false, error: err?.message || 'Unexpected error' };
@@ -165,21 +147,37 @@ export async function runAllDataIntegrityScans(
   return results;
 }
 
+/**
+ * Reads last successful completion timestamps from system_events (backend truth),
+ * NOT from client-side app_settings.
+ */
 export async function getLastScanTimestamps(): Promise<Record<string, string | null>> {
-  const keys = SCAN_DEFINITIONS.map((d) => d.key);
   const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return Object.fromEntries(keys.map((k) => [k, null]));
+  const map: Record<string, string | null> = {};
+  for (const def of SCAN_DEFINITIONS) {
+    map[def.key] = null;
+  }
+
+  if (!session) return map;
+
+  // Query system_events for the latest occurrence of each completion event type
+  const eventTypes = SCAN_DEFINITIONS.map((d) => d.completionEventType);
 
   const { data } = await supabase
-    .from('app_settings')
-    .select('key, value')
+    .from('system_events')
+    .select('event_type, created_at')
     .eq('user_id', session.user.id)
-    .in('key', keys);
+    .in('event_type', eventTypes)
+    .order('created_at', { ascending: false })
+    .limit(100);
 
-  const map: Record<string, string | null> = {};
-  for (const k of keys) {
-    const row = data?.find((r) => r.key === k);
-    map[k] = row?.value ?? null;
+  if (data) {
+    // For each event type, find the most recent occurrence
+    for (const def of SCAN_DEFINITIONS) {
+      const event = data.find((e) => e.event_type === def.completionEventType);
+      map[def.key] = event?.created_at ?? null;
+    }
   }
+
   return map;
 }

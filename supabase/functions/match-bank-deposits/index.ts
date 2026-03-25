@@ -582,6 +582,14 @@ Deno.serve(async (req) => {
     const matched = results.filter(r => r.matched).length
     const fuzzy = results.filter(r => !r.matched && r.possible_match).length
 
+    // Log completion event for scanner telemetry
+    await adminSupabase.from('system_events').insert({
+      user_id: userId,
+      event_type: 'bank_match_complete',
+      details: { matched, fuzzy, unmatched: results.length - matched - fuzzy },
+      severity: 'info',
+    })
+
     return new Response(JSON.stringify({
       success: true,
       matched,

@@ -791,11 +791,11 @@ export default function AccountingDashboard() {
         gstOnExpenses: s.gst_on_expenses || 0,
         bankDeposit: s.bank_deposit || 0,
         reconciliationMatch: (() => {
-          // Canonical gap check — never trust legacy reconciliation_status strings
-          const gap = s.reconciliation_difference ?? ((s.bank_deposit || 0) - grossTotal);
+          // Canonical gap check — compute from settlement component fields
+          const gap = (s.bank_deposit || 0) - grossTotal;
           return Math.abs(gap) <= 1.00;
         })(),
-        reconciliationDiff: round2(s.reconciliation_difference ?? ((s.bank_deposit || 0) - grossTotal)),
+        reconciliationDiff: round2((s.bank_deposit || 0) - grossTotal),
         debugBreakdown: [],
         reconciliationChecks: [],
         auSales: round2((s.sales_principal || 0) + (s.sales_shipping || 0)),
