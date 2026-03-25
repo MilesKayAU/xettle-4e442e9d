@@ -1,14 +1,15 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Shield, Loader2, CheckCircle2, AlertTriangle, XCircle, Play } from 'lucide-react';
+import { Shield, Loader2, CheckCircle2, AlertTriangle, XCircle, Play, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 import {
-  SCAN_DEFINITIONS,
+  MANUAL_SCANS,
+  AUTO_SCANS,
   runDataIntegrityScan,
-  runAllDataIntegrityScans,
+  runManualScans,
   getLastScanTimestamps,
-  type ScanResult,
+  type ScanDefinition,
 } from '@/actions/dataIntegrity';
 
 function relativeTime(iso: string | null): string {
@@ -31,17 +32,65 @@ function getFreshness(iso: string | null): FreshnessStatus {
   return diff < 3_600_000 ? 'fresh' : 'stale';
 }
 
-const statusConfig: Record<FreshnessStatus, { dot: string; Icon: typeof CheckCircle2 }> = {
-  fresh: { dot: 'bg-emerald-500', Icon: CheckCircle2 },
-  stale: { dot: 'bg-amber-500', Icon: AlertTriangle },
-  never: { dot: 'bg-destructive', Icon: XCircle },
+const statusConfig: Record<FreshnessStatus, { dot: string }> = {
+  fresh: { dot: 'bg-emerald-500' },
+  stale: { dot: 'bg-amber-500' },
+  never: { dot: 'bg-destructive' },
 };
+
+function ScanRow({
+  def,
+  timestamp,
+  isRunning,
+  isAnyRunning,
+  onRun,
+}: {
+  def: ScanDefinition;
+  timestamp: string | null;
+  isRunning: boolean;
+  isAnyRunning: boolean;
+  onRun: () => void;
+}) {
+  const freshness = getFreshness(timestamp);
+  const cfg = statusConfig[freshness];
+
+  return (
+    <div className="flex items-center justify-between rounded-md border border-border/50 px-3 py-2">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <span className={`h-2 w-2 rounded-full shrink-0 ${isRunning ? 'bg-primary animate-pulse' : cfg.dot}`} />
+        <div className="min-w-0">
+          <p className="text-sm font-medium leading-tight truncate">{def.label}</p>
+          <p className="text-xs text-muted-foreground truncate">{def.description}</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 shrink-0 ml-3">
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
+          {isRunning ? 'Running…' : relativeTime(timestamp)}
+        </span>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 w-7 p-0"
+          disabled={isAnyRunning}
+          onClick={onRun}
+        >
+          {isRunning ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Play className="h-3.5 w-3.5" />
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export default function DataIntegrityScanner() {
   const [timestamps, setTimestamps] = useState<Record<string, string | null>>({});
   const [runningScan, setRunningScan] = useState<string | null>(null);
   const [runningAll, setRunningAll] = useState(false);
   const [allProgress, setAllProgress] = useState(-1);
+  const [showAuto, setShowAuto] = useState(false);
 
   const loadTimestamps = useCallback(async () => {
     const ts = await getLastScanTimestamps();
@@ -50,27 +99,27 @@ export default function DataIntegrityScanner() {
 
   useEffect(() => { loadTimestamps(); }, [loadTimestamps]);
 
-  const handleRunSingle = async (key: string) => {
+  const handleRunSingle = async (key: string, label: string) => {
     setRunningScan(key);
     const result = await runDataIntegrityScan(key);
     setRunningScan(null);
     if (result.success) {
-      toast.success(`${SCAN_DEFINITIONS.find((d) => d.key === key)?.label} complete`);
+      toast.success(`${label} complete`);
     } else {
       toast.error(result.error || 'Scan failed');
     }
     await loadTimestamps();
   };
 
-  const handleRunAll = async () => {
+  const handleRunManual = async () => {
     setRunningAll(true);
     setAllProgress(0);
-    const results = await runAllDataIntegrityScans((_, idx) => setAllProgress(idx));
+    const results = await runManualScans((_, idx) => setAllProgress(idx));
     setRunningAll(false);
     setAllProgress(-1);
     const failed = results.filter((r) => !r.success);
     if (failed.length === 0) {
-      toast.success('All integrity scans complete');
+      toast.success('All data integrity checks complete');
     } else {
       toast.error(`${failed.length} of ${results.length} scans failed`);
     }
@@ -79,6 +128,12 @@ export default function DataIntegrityScanner() {
 
   const isAnyRunning = runningScan !== null || runningAll;
 
+  // Count how many manual scans are stale/never
+  const staleCount = MANUAL_SCANS.filter((d) => {
+    const f = getFreshness(timestamps[d.key] ?? null);
+    return f !== 'fresh';
+  }).length;
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -86,65 +141,74 @@ export default function DataIntegrityScanner() {
           <div className="flex items-center gap-2">
             <Shield className="h-4 w-4 text-primary" />
             <CardTitle className="text-base">Data Integrity</CardTitle>
+            {staleCount > 0 && !isAnyRunning && (
+              <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                {staleCount} stale
+              </span>
+            )}
           </div>
           <Button
             size="sm"
             variant="outline"
             className="gap-1.5 text-xs"
             disabled={isAnyRunning}
-            onClick={handleRunAll}
+            onClick={handleRunManual}
           >
             {runningAll ? (
               <>
                 <Loader2 className="h-3 w-3 animate-spin" />
-                {allProgress + 1}/{SCAN_DEFINITIONS.length}
+                {allProgress + 1}/{MANUAL_SCANS.length}
               </>
             ) : (
               <>
                 <Play className="h-3 w-3" />
-                Run All Scans
+                Refresh Data
               </>
             )}
           </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-1 pt-0">
-        {SCAN_DEFINITIONS.map((def) => {
-          const ts = timestamps[def.key] ?? null;
-          const freshness = getFreshness(ts);
-          const cfg = statusConfig[freshness];
-          const isRunning = runningScan === def.key || (runningAll && allProgress >= 0 && SCAN_DEFINITIONS[allProgress]?.key === def.key);
-
+        {/* Manual scans — prominent */}
+        {MANUAL_SCANS.map((def) => {
+          const isRunning = runningScan === def.key || (runningAll && allProgress >= 0 && MANUAL_SCANS[allProgress]?.key === def.key);
           return (
-            <div
+            <ScanRow
               key={def.key}
-              className="flex items-center justify-between rounded-md border border-border/50 px-3 py-2"
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <span className={`h-2 w-2 rounded-full shrink-0 ${isRunning ? 'bg-primary animate-pulse' : cfg.dot}`} />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium leading-tight truncate">{def.label}</p>
-                  <p className="text-xs text-muted-foreground truncate">{def.description}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0 ml-3">
-                <span className="text-xs text-muted-foreground whitespace-nowrap">
-                  {isRunning ? 'Running…' : relativeTime(ts)}
-                </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 w-7 p-0"
-                  disabled={isAnyRunning}
-                  onClick={() => handleRunSingle(def.key)}
-                >
-                  {isRunning ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Play className="h-3.5 w-3.5" />
-                  )}
-                </Button>
-              </div>
+              def={def}
+              timestamp={timestamps[def.key] ?? null}
+              isRunning={isRunning}
+              isAnyRunning={isAnyRunning}
+              onRun={() => handleRunSingle(def.key, def.label)}
+            />
+          );
+        })}
+
+        {/* Auto scans — collapsed by default */}
+        <button
+          type="button"
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors pt-1 w-full"
+          onClick={() => setShowAuto(!showAuto)}
+        >
+          <Clock className="h-3 w-3" />
+          <span>Automated syncs</span>
+          {showAuto ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        </button>
+
+        {showAuto && AUTO_SCANS.map((def) => {
+          const isRunning = runningScan === def.key;
+          return (
+            <div key={def.key} className="opacity-75">
+              <ScanRow
+                def={def}
+                timestamp={timestamps[def.key] ?? null}
+                isRunning={isRunning}
+                isAnyRunning={isAnyRunning}
+                onRun={() => handleRunSingle(def.key, def.label)}
+              />
+              {def.cronNote && (
+                <p className="text-[10px] text-muted-foreground pl-5 -mt-0.5">{def.cronNote}</p>
+              )}
             </div>
           );
         })}
