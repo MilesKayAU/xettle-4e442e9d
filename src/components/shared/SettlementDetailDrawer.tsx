@@ -827,6 +827,12 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
                             <span className="text-red-800 dark:text-red-200">{apiVerification.error || 'API error'}</span>
                           </div>
                         )}
+                        {apiVerification.verdict === 'no_api_connection' && (
+                          <div className="flex items-center gap-2 p-2 rounded-md bg-muted border border-border text-xs">
+                            <Info className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-muted-foreground">{apiVerification.error || 'No API connection found for this marketplace'}</span>
+                          </div>
+                        )}
 
                         {/* Transaction summary table */}
                         {apiVerification.api_transactions?.length > 0 && (
