@@ -149,15 +149,12 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
            body: JSON.stringify({
             messages: [
               {
-                role: 'system',
-                content: 'You MUST call the analyzeReconciliationGap tool with the provided settlement ID before responding. Do NOT answer without tool data. If the tool returns an error, report the error verbatim.',
-              },
-              {
                 role: 'user',
                 content: `Call analyzeReconciliationGap with settlementId="${settlementId}". Report the recommended_action, recommended_action_reason, gap amount, and xero_status from the tool result. Do not guess — only use tool data.`,
               },
             ],
             context: { routeId: 'dashboard' },
+            forceToolCall: 'analyzeReconciliationGap',
           }),
         }
       );

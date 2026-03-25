@@ -77,14 +77,19 @@ function buildGatewayPayload(
   messages: Array<{ role: string; content: string; tool_call_id?: string; tool_calls?: any[] }>,
   stream: boolean,
   toolDefs: ReturnType<typeof toOpenAIToolDefs>,
+  toolChoice?: string,
 ) {
-  return {
+  const payload: Record<string, any> = {
     model: MODEL,
     messages: [{ role: "system", content: systemPrompt }, ...messages],
     tools: toolDefs,
     stream,
     ...(stream ? {} : { max_tokens: 1024 }),
   };
+  if (toolChoice) {
+    payload.tool_choice = { type: "function", function: { name: toolChoice } };
+  }
+  return payload;
 }
 
 async function callGateway(
