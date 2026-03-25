@@ -192,8 +192,23 @@ Deno.serve(async (req) => {
 
     const apiData = await apiRes.json();
 
-    // Mirakl returns { transaction_logs: [...] } or { data: [...] }
-    const transactions: any[] = apiData.transaction_logs || apiData.data || apiData.lines || [];
+    const rawTransactions: any[] = apiData.transactions || apiData.transaction_logs || apiData.data || apiData.lines || [];
+    const transactions = rawTransactions.filter((tx: any) => {
+      const txDateRaw = tx.date_created || tx.date || tx.creation_date || tx.accounting_document_creation_date || null;
+      const txDate = txDateRaw ? new Date(txDateRaw) : null;
+      const inRange = !txDate || (!dateFrom || txDate >= dateFrom) && (!dateTo || txDate <= dateTo);
+
+      const txDocNumber = String(
+        tx.accounting_document_number || tx.payment_voucher || tx.payment_reference || tx.payout_id || ""
+      ).trim();
+
+      const matchesDoc = !docNumber || txDocNumber === docNumber;
+      const matchesVoucher = !paymentVoucher || txDocNumber === String(paymentVoucher).trim();
+
+      return inRange && (matchesDoc || matchesVoucher);
+    });
+
+    console.log(`[verify-mirakl] Raw transactions: ${rawTransactions.length}, filtered: ${transactions.length}`);
 
     // ─── Step 4: Summarize by transaction_type ───────────────────
     const typeSummary: Record<string, TxSummary> = {};
