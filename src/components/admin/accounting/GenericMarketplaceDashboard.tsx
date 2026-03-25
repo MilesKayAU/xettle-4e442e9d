@@ -279,12 +279,21 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const marketplaceName = def?.name || marketplace.marketplace_name;
 
   // ── AI Page Context ──────────────────────────────────────────────────────────
+  /** Compute gap from settlement component fields (bank_deposit is NOT on settlements table) */
+  function computeGap(s: SettlementRow): number | null {
+    const net = s.bank_deposit;
+    if (net == null) return null;
+    const computed = (s.sales_principal || 0) + (s.seller_fees || 0) +
+      (s.refunds || 0) + (s.other_fees || 0) + (s.reimbursements || 0);
+    if (computed === 0 && net === 0) return 0;
+    return net - computed;
+  }
   const reconciledCount = useMemo(() => settlements.filter(s => {
-    const gap = (s as any).reconciliation_difference;
+    const gap = computeGap(s);
     return !isGapBlocking(gap);
   }).length, [settlements]);
   const flaggedCount = useMemo(() => settlements.filter(s => {
-    const gap = (s as any).reconciliation_difference;
+    const gap = computeGap(s);
     return isGapBlocking(gap);
   }).length, [settlements]);
   const pushedCount = useMemo(() => settlements.filter(s => ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(s.status || '')).length, [settlements]);
