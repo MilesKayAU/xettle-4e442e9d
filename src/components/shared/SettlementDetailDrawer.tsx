@@ -108,6 +108,7 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
   const [saving, setSaving] = useState(false);
   const [apiVerification, setApiVerification] = useState<any>(null);
   const [apiVerifying, setApiVerifying] = useState(false);
+  const [apiRefetching, setApiRefetching] = useState(false);
   const [apiVerifyOpen, setApiVerifyOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -243,6 +244,64 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
       setApiVerifying(false);
     }
   }, [settlement?.settlement_id]);
+
+  // Re-fetch from API — verifies AND auto-corrects if discrepancies found
+  const handleRefetchFromApi = useCallback(async () => {
+    if (!settlement?.settlement_id || !settlement?.id) return;
+    setApiRefetching(true);
+    setApiVerification(null);
+    try {
+      const res = await supabase.functions.invoke('verify-settlement', {
+        body: { settlement_id: settlement.settlement_id },
+      });
+      if (res.error) throw new Error(res.error.message);
+      const result = res.data;
+      setApiVerification(result);
+      setApiVerifyOpen(true);
+
+      if (result.verdict === 'discrepancy' && result.transaction_count > 0) {
+        const updates: Record<string, any> = {};
+        for (const d of result.discrepancies || []) {
+          if (d.field === 'sales_principal') updates.sales_principal = d.api_value;
+          if (d.field === 'sales_shipping') updates.sales_shipping = d.api_value;
+          if (d.field === 'seller_fees') updates.seller_fees = d.api_value;
+          if (d.field === 'refunds') updates.refunds = d.api_value;
+          if (d.field === 'bank_deposit') updates.bank_deposit = d.api_value;
+          if (d.field === 'gst_on_income') updates.gst_on_income = d.api_value;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          const { error: updateErr } = await supabase
+            .from('settlements')
+            .update(updates)
+            .eq('id', settlement.id);
+
+          if (updateErr) {
+            toast.error('API data fetched but failed to update settlement');
+          } else {
+            setSettlement((prev: any) => prev ? { ...prev, ...updates } : prev);
+            toast.success(`Settlement updated with API data (${Object.keys(updates).length} fields corrected)`);
+            await supabase.from('system_events').insert({
+              user_id: settlement.user_id,
+              event_type: 'settlement_api_refetch_corrected',
+              severity: 'info',
+              marketplace_code: settlement.marketplace,
+              settlement_id: settlement.settlement_id,
+              details: { corrections: updates, original_verdict: result.verdict },
+            });
+          }
+        }
+      } else if (result.verdict === 'match') {
+        toast.success('Settlement already matches API data — no changes needed');
+      } else if (result.verdict === 'no_data') {
+        toast.info('No API transactions found for this period');
+      }
+    } catch (err: any) {
+      toast.error(`Re-fetch failed: ${err.message}`);
+    } finally {
+      setApiRefetching(false);
+    }
+  }, [settlement]);
 
   const handleDismissCandidate = useCallback(async () => {
     if (!externalCandidate?.id) return;
@@ -771,16 +830,28 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
                 <Separator />
                 <div className="space-y-2">
                   {!apiVerification && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs gap-1.5"
-                      onClick={handleVerifyApi}
-                      disabled={apiVerifying}
-                    >
-                      <Search className="h-3.5 w-3.5" />
-                      {apiVerifying ? 'Verifying via API…' : 'Verify via API'}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1.5"
+                        onClick={handleVerifyApi}
+                        disabled={apiVerifying || apiRefetching}
+                      >
+                        <Search className="h-3.5 w-3.5" />
+                        {apiVerifying ? 'Verifying via API…' : 'Verify via API'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1.5 text-amber-600 border-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:hover:bg-amber-900/20"
+                        onClick={handleRefetchFromApi}
+                        disabled={apiVerifying || apiRefetching}
+                      >
+                        <Zap className="h-3.5 w-3.5" />
+                        {apiRefetching ? 'Re-fetching…' : 'Re-fetch from API'}
+                      </Button>
+                    </div>
                   )}
 
                   {apiVerification && (
