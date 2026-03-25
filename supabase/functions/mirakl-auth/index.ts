@@ -334,6 +334,36 @@ Deno.serve(async (req) => {
         },
       });
 
+      // ── Auto-resync: re-verify settlements that previously failed ──
+      try {
+        const { data: failedSettlements } = await adminClient
+          .from("settlements")
+          .select("settlement_id")
+          .eq("user_id", userId)
+          .eq("marketplace", effectiveMarketplaceCode)
+          .in("reconciliation_status", ["api_error", "recon_warning"])
+          .limit(20);
+
+        if (failedSettlements && failedSettlements.length > 0) {
+          console.log(`[mirakl-auth] Triggering re-verification for ${failedSettlements.length} previously failed settlements`);
+          // Fire-and-forget background re-verification
+          const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+          const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+          for (const s of failedSettlements) {
+            fetch(`${supabaseUrl}/functions/v1/verify-settlement`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${req.headers.get("Authorization")?.replace("Bearer ", "") || anonKey}`,
+              },
+              body: JSON.stringify({ settlement_id: s.settlement_id }),
+            }).catch(err => console.warn(`[mirakl-auth] Background re-verify failed for ${s.settlement_id}:`, err.message));
+          }
+        }
+      } catch (resyncErr: any) {
+        console.warn("[mirakl-auth] Auto-resync check failed:", resyncErr.message);
+      }
+
       return new Response(
         JSON.stringify({
           success: true,
