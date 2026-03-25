@@ -80,6 +80,7 @@ type AuditStatus = 'complete' | 'in_xero' | 'bank_only' | 'review' | 'ready_to_p
 function deriveAuditStatus(
   s: AutoImportedSettlement,
   xeroMatch: XeroMatch | undefined,
+  validationStatus?: string | null,
 ): AuditStatus {
   if (s.status === 'already_recorded') return 'pre_boundary';
 
@@ -91,12 +92,8 @@ function deriveAuditStatus(
   if (hasXero && !hasBank) return 'in_xero';
   if (hasFuzzyXero) return 'review';
   if (!hasXero && hasBank) return 'bank_only';
-  // Canonical gap check — compute gap from settlement component fields
-  const net = s.bank_deposit || 0;
-  const computed = (s.sales_principal || 0) + (s.seller_fees || 0) + (s.fba_fees || 0) +
-    (s.storage_fees || 0) + (s.refunds || 0) + (s.reimbursements || 0);
-  const gap = (computed === 0 && net === 0) ? 0 : net - computed;
-  if (s.status === 'ready_to_push' || isReconSafeForPush(gap)) return 'ready_to_push';
+  // Pushability determined exclusively by marketplace_validation.overall_status
+  if (validationStatus === 'ready_to_push') return 'ready_to_push';
   return 'unknown';
 }
 
@@ -217,6 +214,7 @@ function BankIndicator({ settlement }: { settlement: AutoImportedSettlement }) {
 export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existingSettlementIds }: AutoImportedTabProps) {
   const [settlements, setSettlements] = useState<AutoImportedSettlement[]>([]);
   const [xeroMatches, setXeroMatches] = useState<Record<string, XeroMatch>>({});
+  const [validationStatusMap, setValidationStatusMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -242,14 +240,26 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
   const loadApiSettlements = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('settlements')
-        .select('*')
-        .eq('source', 'api')
-        .like('marketplace', 'amazon_%')
-        .order('period_end', { ascending: false });
-      if (error) throw error;
-      setSettlements((data || []) as unknown as AutoImportedSettlement[]);
+      const [settRes, valRes] = await Promise.all([
+        supabase
+          .from('settlements')
+          .select('*')
+          .eq('source', 'api')
+          .like('marketplace', 'amazon_%')
+          .order('period_end', { ascending: false }),
+        supabase
+          .from('marketplace_validation')
+          .select('settlement_id, overall_status')
+          .like('marketplace_code', 'amazon_%'),
+      ]);
+      if (settRes.error) throw settRes.error;
+      setSettlements((settRes.data || []) as unknown as AutoImportedSettlement[]);
+      // Build validation status lookup by settlement_id
+      const valMap: Record<string, string> = {};
+      for (const v of (valRes.data || []) as any[]) {
+        if (v.settlement_id) valMap[v.settlement_id] = v.overall_status;
+      }
+      setValidationStatusMap(valMap);
     } catch {
       // silent
     } finally {
@@ -556,7 +566,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
   // ─── Derive audit counts ──────────────────────────────────
   const auditCounts = settlements.reduce(
     (acc, s) => {
-      const status = deriveAuditStatus(s, xeroMatches[s.settlement_id]);
+      const status = deriveAuditStatus(s, xeroMatches[s.settlement_id], validationStatusMap[s.settlement_id]);
       acc[status] = (acc[status] || 0) + 1;
       return acc;
     },
@@ -564,7 +574,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
   );
 
   const readyToPush = settlements.filter(s => {
-    const status = deriveAuditStatus(s, xeroMatches[s.settlement_id]);
+    const status = deriveAuditStatus(s, xeroMatches[s.settlement_id], validationStatusMap[s.settlement_id]);
     return status === 'ready_to_push' || status === 'unknown';
   });
   const readyToPushTotal = readyToPush.reduce((sum, s) => sum + (s.bank_deposit || 0), 0);
@@ -748,7 +758,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
             <div className="space-y-1 mt-1">
               {paginatedAutoSettlements.map(s => {
                 const xeroMatch = xeroMatches[s.settlement_id];
-                const auditStatus = deriveAuditStatus(s, xeroMatch);
+                const auditStatus = deriveAuditStatus(s, xeroMatch, validationStatusMap[s.settlement_id]);
                 const config = STATUS_CONFIG[auditStatus];
                 const isPreBoundary = auditStatus === 'pre_boundary';
                 const canPush = auditStatus === 'ready_to_push' || auditStatus === 'unknown';

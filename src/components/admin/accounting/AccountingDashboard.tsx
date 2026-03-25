@@ -702,12 +702,22 @@ export default function AccountingDashboard() {
       if (lineErr) throw lineErr;
 
       // 3. Fetch settlement_unmapped
-      const { data: unmappedData, error: unmappedErr } = await supabase
-        .from('settlement_unmapped')
-        .select('*')
-        .eq('settlement_id', settlementTextId)
-        .eq('user_id', user.id);
+      const [unmappedRes, valRes] = await Promise.all([
+        supabase
+          .from('settlement_unmapped')
+          .select('*')
+          .eq('settlement_id', settlementTextId)
+          .eq('user_id', user.id),
+        supabase
+          .from('marketplace_validation')
+          .select('reconciliation_difference')
+          .eq('settlement_id', settlementTextId)
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      const { data: unmappedData, error: unmappedErr } = unmappedRes;
       if (unmappedErr) throw unmappedErr;
+      const validationReconDiff = (valRes.data as any)?.reconciliation_difference as number | null;
 
       // 4. Reconstruct ParsedSettlement
       const s = settData as any;
@@ -791,11 +801,15 @@ export default function AccountingDashboard() {
         gstOnExpenses: s.gst_on_expenses || 0,
         bankDeposit: s.bank_deposit || 0,
         reconciliationMatch: (() => {
-          // Canonical gap check — compute from settlement component fields
-          const gap = (s.bank_deposit || 0) - grossTotal;
+          // Prefer validation row gap when available; fall back to settlement fields
+          const gap = validationReconDiff != null
+            ? validationReconDiff
+            : (s.bank_deposit || 0) - grossTotal;
           return Math.abs(gap) <= 1.00;
         })(),
-        reconciliationDiff: round2((s.bank_deposit || 0) - grossTotal),
+        reconciliationDiff: validationReconDiff != null
+          ? round2(validationReconDiff)
+          : round2((s.bank_deposit || 0) - grossTotal),
         debugBreakdown: [],
         reconciliationChecks: [],
         auSales: round2((s.sales_principal || 0) + (s.sales_shipping || 0)),

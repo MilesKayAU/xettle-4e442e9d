@@ -55,6 +55,7 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
     alertsRes,
     xeroTokensRes,
     mfnLinesRes,
+    validationCountsRes,
   ] = await Promise.all([
     // Settlements with status breakdowns (non-hidden, non-pre-boundary)
     supabase
@@ -94,6 +95,11 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
       .select('settlement_id, fulfilment_channel')
       .in('fulfilment_channel', ['MFN', 'MFN_inferred'])
       .limit(100),
+
+    // Validation pipeline counts — the canonical source of truth for stage counts
+    supabase
+      .from('marketplace_validation')
+      .select('overall_status'),
   ]);
 
   const settlements = settlementsRes.data || [];
@@ -281,25 +287,20 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
     }
   }
 
-  // ─── Settlement stage counts ───────────────────────────────────────────
+  // ─── Settlement stage counts (from marketplace_validation — canonical truth) ─
 
   let needsReview = 0;
   let readyToPost = 0;
   let awaitingReconciliation = 0;
 
-  for (const s of settlements) {
-    const status = s.status;
-    const xeroStatus = s.xero_status;
-
-    if (status === 'ingested' || status === 'saved') {
+  const validationRows = validationCountsRes.data || [];
+  for (const v of validationRows) {
+    const os = (v as any).overall_status;
+    if (os === 'settlement_needed' || os === 'missing' || os === 'gap_detected') {
       needsReview++;
-    } else if (status === 'ready_to_push' && !xeroStatus) {
+    } else if (os === 'ready_to_push') {
       readyToPost++;
-    } else if (
-      xeroStatus === 'draft_in_xero' ||
-      xeroStatus === 'authorised_in_xero' ||
-      xeroStatus === 'submitted_in_xero'
-    ) {
+    } else if (os === 'pushed_to_xero') {
       awaitingReconciliation++;
     }
   }

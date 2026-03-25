@@ -205,6 +205,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [marketplaceFilter, setMarketplaceFilter] = useState<string>('all');
   const [includeGateways, setIncludeGateways] = useState(false);
   const [accountingBoundary, setAccountingBoundary] = useState<string | null>(null);
+  const [validationStatusMap, setValidationStatusMap] = useState<Record<string, string>>({});
 
   // Auto-audit Xero status once settlements are loaded
   const [hasAutoAudited, setHasAutoAudited] = useState(false);
@@ -261,6 +262,18 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         .eq('key', 'accounting_boundary_date')
         .maybeSingle();
       if (boundaryRow?.value) setAccountingBoundary(boundaryRow.value);
+
+      // Fetch validation statuses for this marketplace
+      const { data: valRows } = await supabase
+        .from('marketplace_validation')
+        .select('settlement_id, overall_status')
+        .eq('marketplace_code', code);
+      const valMap: Record<string, string> = {};
+      for (const v of (valRows || []) as any[]) {
+        if (v.settlement_id) valMap[v.settlement_id] = v.overall_status;
+      }
+      setValidationStatusMap(valMap);
+
       // Fetch reconciliation type from fingerprints
       const { data: fpRows } = await supabase
         .from('marketplace_file_fingerprints')
@@ -297,7 +310,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
     return isGapBlocking(gap);
   }).length, [settlements]);
   const pushedCount = useMemo(() => settlements.filter(s => ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(s.status || '')).length, [settlements]);
-  const unpushedCount = useMemo(() => settlements.filter(s => s.status === 'ingested' || s.status === 'ready_to_push').length, [settlements]);
+  const unpushedCount = useMemo(() => settlements.filter(s => validationStatusMap[s.settlement_id] === 'ready_to_push').length, [settlements, validationStatusMap]);
 
   useAiPageContext(() => ({
     routeId: 'settlements',
@@ -635,8 +648,9 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                      const isReconOnly = isReconciliationOnly((s as any).source, s.marketplace, s.settlement_id);
                      const reconGap = computeGap(s);
                      const reconOk = isReconSafeForPush(reconGap);
-                     const isSyncable = !isReconOnly && reconOk && (s.status === 'ingested' || s.status === 'ready_to_push');
-                     const isReconBlocked = !isReconOnly && !reconOk && (s.status === 'ingested' || s.status === 'ready_to_push');
+                     const valStatus = validationStatusMap[s.settlement_id];
+                     const isSyncable = !isReconOnly && reconOk && valStatus === 'ready_to_push';
+                     const isReconBlocked = !isReconOnly && !reconOk && (s.status === 'ingested' || valStatus === 'ready_to_push');
                     const isPushFailed = s.status === 'push_failed';
                     const isSynced = ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(s.status || '');
                     const isPreBoundary = !!(s as any).is_pre_boundary;
