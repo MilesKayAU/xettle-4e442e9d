@@ -1049,7 +1049,7 @@ function RowAction({
   }
   if (row.overall_status === 'gap_detected') {
     return (
-      <Button variant="outline" size="sm" className="h-7 text-xs gap-1 border-red-200 text-red-700 dark:border-red-800 dark:text-red-400" onClick={onUpload}>
+      <Button variant="outline" size="sm" className="h-7 text-xs gap-1 border-red-200 text-red-700 dark:border-red-800 dark:text-red-400" onClick={onReview}>
         <AlertTriangle className="h-3 w-3" /> Review
       </Button>
     );
