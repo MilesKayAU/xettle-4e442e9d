@@ -96,6 +96,7 @@ export default function ActionCentre({
   const [drawerSettlementId, setDrawerSettlementId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [autoPostRails, setAutoPostRails] = useState<Set<string>>(new Set());
+  const [uploadDialogRow, setUploadDialogRow] = useState<{ marketplace_code: string; period_label: string; period_start: string; period_end: string } | null>(null);
   const [autoPostFailed, setAutoPostFailed] = useState<Array<{
     id: string; marketplace: string | null; settlement_id: string;
     period_start: string; period_end: string; bank_deposit: number | null;
