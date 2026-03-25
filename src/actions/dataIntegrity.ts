@@ -106,8 +106,9 @@ export async function getApiCsvMismatchCount(): Promise<{
   // Deduplicate by settlement_id, keep most recent
   const seen = new Map<string, any>();
   for (const row of data) {
-    const sid = row.details?.settlement_id;
-    if (sid && !seen.has(sid)) seen.set(sid, row.details);
+    const details = row.details as Record<string, any> | null;
+    const sid = details?.settlement_id;
+    if (sid && !seen.has(sid)) seen.set(sid, details);
   }
 
   let needsManualFix = 0;
