@@ -189,6 +189,7 @@ export default function DataIntegrityScanner() {
               timestamp={timestamps[def.key] ?? null}
               isRunning={isRunning}
               isAnyRunning={isAnyRunning}
+              hasFailed={failedScans[def.key]}
               onRun={() => handleRunSingle(def.key, def.label)}
             />
           );
