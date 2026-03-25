@@ -464,6 +464,16 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
               </div>
             )}
 
+            {/* Parser bug warning banner */}
+            <ParserBugWarningBanner settlement={settlement} />
+
+            {/* Admin correction panel for pushed settlements with wrong bank_deposit */}
+            <SettlementCorrectionPanel
+              settlement={settlement}
+              isAdmin={isAdmin}
+              onSettlementUpdated={(updated) => setSettlement(updated)}
+            />
+
             {/* Header metadata */}
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
               <div>
