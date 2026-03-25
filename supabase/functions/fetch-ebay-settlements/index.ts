@@ -713,6 +713,17 @@ Deno.serve(async (req) => {
             })
           }
         }
+
+        // ─── API/CSV mismatch detection & auto-correction ───
+        try {
+          await detectAndCorrectCsvMismatch(
+            userAdminClient, userId, 'ebay_au',
+            settlement.period_start, settlement.period_end,
+            settlement.bank_deposit, settlementId,
+          )
+        } catch (mcErr: any) {
+          logger.warn(`[fetch-ebay-settlements] CSV mismatch check failed:`, mcErr)
+        }
       }
 
       // Reset rate limit cooldown on successful sync
