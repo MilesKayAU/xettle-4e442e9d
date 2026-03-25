@@ -490,10 +490,99 @@ async function fetchSettlementsForConnection(
       console.error(`[fetch-mirakl-settlements] Source priority check failed:`, spErr);
     }
 
+    // ─── API/CSV mismatch detection & auto-correction ───
+    try {
+      await detectAndCorrectCsvMismatch(
+        adminClient, userId, marketplaceCode,
+        periodStart || dateFrom, effectivePeriodEnd,
+        round2(totals.bank_deposit), settlementId,
+      );
+    } catch (mcErr: any) {
+      console.error(`[fetch-mirakl-settlements] CSV mismatch check failed:`, mcErr);
+    }
+
     imported++;
   }
 
   return { imported, skipped, empty_skipped: emptySkipped };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// API/CSV mismatch detection — when API data disagrees with a
+// previously-uploaded CSV settlement, auto-correct if unpushed
+// or flag for manual correction if already pushed to Xero.
+// ═══════════════════════════════════════════════════════════════
+
+async function detectAndCorrectCsvMismatch(
+  adminClient: any,
+  userId: string,
+  marketplace: string,
+  periodStart: string,
+  periodEnd: string,
+  apiBankDeposit: number,
+  apiSettlementId: string,
+) {
+  // Find CSV-uploaded settlements covering the same period
+  const { data: csvSettlements } = await adminClient
+    .from("settlements")
+    .select("id, settlement_id, bank_deposit, source, status")
+    .eq("user_id", userId)
+    .eq("marketplace", marketplace)
+    .in("source", ["csv_upload", "manual"])
+    .neq("status", "duplicate_suppressed")
+    .lte("period_start", periodEnd)
+    .gte("period_end", periodStart);
+
+  if (!csvSettlements || csvSettlements.length === 0) return;
+
+  for (const csv of csvSettlements) {
+    const discrepancy = Math.abs(apiBankDeposit - (csv.bank_deposit || 0));
+    if (discrepancy <= 1.0) continue; // Within tolerance
+
+    const isPushed = ["pushed_to_xero", "already_recorded"].includes(csv.status);
+
+    // Always log the mismatch
+    await adminClient.from("system_events").insert({
+      user_id: userId,
+      event_type: "api_csv_bank_deposit_mismatch",
+      severity: isPushed ? "warning" : "info",
+      marketplace_code: marketplace,
+      settlement_id: csv.settlement_id,
+      details: {
+        settlement_id: csv.settlement_id,
+        api_settlement_id: apiSettlementId,
+        marketplace,
+        stored_bank_deposit: csv.bank_deposit,
+        api_bank_deposit: apiBankDeposit,
+        discrepancy: round2(discrepancy),
+        settlement_status: csv.status,
+        source: csv.source,
+        auto_corrected: !isPushed,
+        correction_reason: isPushed
+          ? "already_pushed_to_xero_needs_manual_correction"
+          : "api_is_source_of_truth",
+      },
+    });
+
+    // Auto-correct only if not yet pushed to Xero
+    if (!isPushed) {
+      await adminClient
+        .from("settlements")
+        .update({
+          bank_deposit: apiBankDeposit,
+          sync_origin: "api_corrected",
+        })
+        .eq("id", csv.id);
+
+      console.log(
+        `[fetch-mirakl-settlements] ✅ Auto-corrected ${csv.settlement_id} bank_deposit: ${csv.bank_deposit} → ${apiBankDeposit}`,
+      );
+    } else {
+      console.log(
+        `[fetch-mirakl-settlements] ⚠️ Mismatch flagged for ${csv.settlement_id} (pushed): stored=${csv.bank_deposit}, api=${apiBankDeposit}`,
+      );
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════

@@ -27,6 +27,7 @@ import { checkXeroReadinessForMarketplace } from '@/actions/xeroReadiness';
 import { diagnoseGapReason } from '@/utils/diagnose-gap-reason';
 import ParserBugWarningBanner from './ParserBugWarningBanner';
 import SettlementCorrectionPanel from './SettlementCorrectionPanel';
+import ApiCsvMismatchBanner from './ApiCsvMismatchBanner';
 
 interface SettlementDetailDrawerProps {
   settlementId: string | null; // settlement_id (text), not DB uuid
@@ -466,6 +467,9 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
 
             {/* Parser bug warning banner */}
             <ParserBugWarningBanner settlement={settlement} />
+
+            {/* API/CSV mismatch banner */}
+            <ApiCsvMismatchBanner settlement={settlement} />
 
             {/* Admin correction panel for pushed settlements with wrong bank_deposit */}
             <SettlementCorrectionPanel
