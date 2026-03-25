@@ -291,6 +291,53 @@ export default function SettlementsOverview({
         <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
           <Circle className="h-3 w-3 fill-primary text-primary" />
           Settlements Overview
+          <div className="ml-auto">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 text-[10px] px-2 gap-1"
+              onClick={async () => {
+                setBatchRefetching(true);
+                try {
+                  const allIds = rows
+                    .filter(r => r.latestSettlementId)
+                    .map(r => r.latestSettlementId!);
+                  let ok = 0, fail = 0;
+                  for (const sid of allIds) {
+                    try {
+                      const res = await supabase.functions.invoke('verify-settlement', {
+                        body: { settlement_id: sid },
+                      });
+                      if (res.error) { fail++; continue; }
+                      const result = res.data;
+                      if (result.verdict === 'discrepancy' && result.transaction_count > 0) {
+                        const updates: Record<string, any> = {};
+                        for (const d of result.discrepancies || []) {
+                          if (['sales_principal','sales_shipping','seller_fees','refunds','bank_deposit','gst_on_income'].includes(d.field)) {
+                            updates[d.field] = d.api_value;
+                          }
+                        }
+                        if (Object.keys(updates).length > 0) {
+                          await supabase.from('settlements').update(updates).eq('settlement_id', sid);
+                        }
+                      }
+                      ok++;
+                    } catch { fail++; }
+                  }
+                  toast.success(`Re-fetched ${ok} settlements${fail > 0 ? ` · ${fail} failed` : ''}`);
+                  loadData();
+                } catch (err: any) {
+                  toast.error(err.message || 'Batch re-fetch failed');
+                } finally {
+                  setBatchRefetching(false);
+                }
+              }}
+              disabled={batchRefetching}
+            >
+              {batchRefetching ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+              Re-fetch All from API
+            </Button>
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
