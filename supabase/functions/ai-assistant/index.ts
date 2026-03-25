@@ -77,14 +77,19 @@ function buildGatewayPayload(
   messages: Array<{ role: string; content: string; tool_call_id?: string; tool_calls?: any[] }>,
   stream: boolean,
   toolDefs: ReturnType<typeof toOpenAIToolDefs>,
+  toolChoice?: string,
 ) {
-  return {
+  const payload: Record<string, any> = {
     model: MODEL,
     messages: [{ role: "system", content: systemPrompt }, ...messages],
     tools: toolDefs,
     stream,
     ...(stream ? {} : { max_tokens: 1024 }),
   };
+  if (toolChoice) {
+    payload.tool_choice = { type: "function", function: { name: toolChoice } };
+  }
+  return payload;
 }
 
 async function callGateway(
@@ -173,7 +178,7 @@ serve(async (req) => {
       }
     }
 
-    const { messages, context } = await req.json();
+    const { messages, context, forceToolCall } = await req.json();
     if (!messages || !Array.isArray(messages)) {
       return new Response(JSON.stringify({ error: "messages array required" }), {
         status: 400,
@@ -212,7 +217,9 @@ serve(async (req) => {
     const MAX_TOOL_ROUNDS = 3;
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const payload = buildGatewayPayload(systemPrompt, gatewayMessages, false, toolDefs);
+      // Force tool_choice on first round only if forceToolCall is specified
+      const roundToolChoice = (round === 0 && forceToolCall) ? forceToolCall : undefined;
+      const payload = buildGatewayPayload(systemPrompt, gatewayMessages, false, toolDefs, roundToolChoice);
       const response = await callGateway(LOVABLE_API_KEY, payload);
 
       if (!response.ok) {

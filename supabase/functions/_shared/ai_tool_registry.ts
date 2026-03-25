@@ -513,54 +513,94 @@ export async function executeTool(
       case "analyzeReconciliationGap": {
         const sid = toolInput.settlementId;
         console.log(`[analyzeReconciliationGap] Invoked for settlement_id=${sid}, user_id=${userId}`);
-        const [settRes, valRes, xeroMatchRes, bankTxRes, linesRes, feeObsRes, outstandingRes] = await Promise.all([
-          serviceClient.from("settlements")
+
+        // ── Settlement lookup with fallbacks ──
+        let matchMethod = "exact";
+        let settRes = await serviceClient.from("settlements")
+          .select("settlement_id, marketplace, source, period_end, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, bank_deposit, net_amount, gst_on_income, gst_on_expenses, metadata")
+          .eq("user_id", userId)
+          .eq("settlement_id", sid)
+          .maybeSingle();
+
+        if (!settRes.data) {
+          // Fallback 1: case-insensitive match
+          matchMethod = "ilike";
+          settRes = await serviceClient.from("settlements")
             .select("settlement_id, marketplace, source, period_end, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, bank_deposit, net_amount, gst_on_income, gst_on_expenses, metadata")
             .eq("user_id", userId)
-            .eq("settlement_id", sid)
-            .maybeSingle(),
+            .ilike("settlement_id", sid)
+            .maybeSingle();
+        }
+
+        if (!settRes.data) {
+          // Fallback 2: partial match
+          matchMethod = "partial";
+          settRes = await serviceClient.from("settlements")
+            .select("settlement_id, marketplace, source, period_end, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, bank_deposit, net_amount, gst_on_income, gst_on_expenses, metadata")
+            .eq("user_id", userId)
+            .ilike("settlement_id", `%${sid}%`)
+            .limit(1)
+            .maybeSingle();
+        }
+
+        // Log invocation to system_events
+        await serviceClient.from("system_events").insert({
+          user_id: userId,
+          event_type: "ai_gap_analysis_invoked",
+          severity: "info",
+          details: {
+            settlement_id: sid,
+            invoked_at: new Date().toISOString(),
+            id_match_method: matchMethod,
+            settlement_found: !!settRes.data,
+          },
+        });
+
+        const s = settRes.data;
+        if (!s) {
+          console.warn(`[analyzeReconciliationGap] Settlement not found after all fallbacks: ${sid}`);
+          return JSON.stringify({ error: "Settlement not found", settlement_id: sid, id_match_method: matchMethod, fallbacks_tried: ["exact", "ilike", "partial"] });
+        }
+        console.log(`[analyzeReconciliationGap] Found settlement via ${matchMethod}: ${s.marketplace}, bank_deposit=${s.bank_deposit}`);
+
+        const resolvedSid = s.settlement_id; // Use the actual stored ID for remaining queries
+
+        const [valRes, xeroMatchRes, bankTxRes, linesRes, feeObsRes, outstandingRes, mappingRes] = await Promise.all([
           serviceClient.from("marketplace_validation")
             .select("reconciliation_difference, overall_status, reconciliation_status, reconciliation_confidence, reconciliation_confidence_reason")
             .eq("user_id", userId)
-            .eq("settlement_id", sid)
+            .eq("settlement_id", resolvedSid)
             .maybeSingle(),
-          // Xero accounting match (pushed by Xettle or external tool)
           serviceClient.from("xero_accounting_matches")
             .select("xero_invoice_id, xero_invoice_number, xero_status, xero_type, match_method, matched_amount, matched_contact, matched_date")
             .eq("user_id", userId)
-            .eq("settlement_id", sid)
+            .eq("settlement_id", resolvedSid)
             .maybeSingle(),
-          // Bank transactions — find matching deposit by amount
           serviceClient.from("bank_transactions")
             .select("amount, date, description, contact_name, xero_status, reference")
             .eq("user_id", userId)
             .order("date", { ascending: false })
             .limit(200),
-          // Settlement line items — top 50 by absolute amount
           serviceClient.from("settlement_lines")
             .select("amount, amount_type, amount_description, transaction_type, accounting_category, order_id")
             .eq("user_id", userId)
-            .eq("settlement_id", sid)
+            .eq("settlement_id", resolvedSid)
             .order("amount", { ascending: true })
             .limit(50),
-          // Fee observations for this settlement
           serviceClient.from("marketplace_fee_observations")
             .select("fee_type, observed_rate, observed_amount, base_amount, fee_category")
             .eq("user_id", userId)
-            .eq("settlement_id", sid),
-          // Outstanding invoices cache
+            .eq("settlement_id", resolvedSid),
           serviceClient.from("outstanding_invoices_cache")
             .select("xero_invoice_id, invoice_number, total, amount_due, status, contact_name, date, due_date")
             .eq("user_id", userId)
             .limit(50),
+          // Check account mappings for this marketplace
+          serviceClient.from("marketplace_account_mapping")
+            .select("category, account_code, account_name")
+            .eq("user_id", userId)
+            .eq("marketplace_code", s.marketplace),
         ]);
-
-        const s = settRes.data;
-        if (!s) {
-          console.warn(`[analyzeReconciliationGap] Settlement not found: ${sid}`);
-          return JSON.stringify({ error: "Settlement not found", settlement_id: sid });
-        }
-        console.log(`[analyzeReconciliationGap] Found settlement: ${s.marketplace}, bank_deposit=${s.bank_deposit}`);
 
         const sales = (s.sales_principal || 0) + (s.sales_shipping || 0);
         const fees = Math.abs(s.seller_fees || 0) + Math.abs(s.fba_fees || 0) + Math.abs(s.storage_fees || 0) + Math.abs(s.advertising_costs || 0) + Math.abs(s.other_fees || 0);
@@ -772,9 +812,19 @@ export async function executeTool(
           }
         }
 
-        return JSON.stringify({
-          settlement_id: sid,
+        // ── Account mapping check ──
+        const REQUIRED_CATEGORIES = ["Sales", "Seller Fees", "Refunds", "Other Fees", "Shipping"];
+        const mappedCategories = (mappingRes.data || []).map((m: any) => m.category);
+        const missingMappings = REQUIRED_CATEGORIES.filter(c => !mappedCategories.includes(c));
+        let accountMappingWarning: string | null = null;
+        if (missingMappings.length > 0) {
+          accountMappingWarning = `Missing account mappings for ${s.marketplace}: ${missingMappings.join(", ")}. Configure these in Settings > Account Mapping before pushing to Xero.`;
+        }
+
+        const result = {
+          settlement_id: resolvedSid,
           marketplace: s.marketplace,
+          id_match_method: matchMethod,
           financial_breakdown: {
             sales,
             fees,
@@ -797,7 +847,27 @@ export async function executeTool(
           validation_status: valRes.data?.overall_status || "unknown",
           reconciliation_confidence: valRes.data?.reconciliation_confidence,
           confidence_reason: valRes.data?.reconciliation_confidence_reason,
+          account_mapping_warning: accountMappingWarning,
+          missing_account_mappings: missingMappings.length > 0 ? missingMappings : undefined,
+        };
+
+        // Log completion to system_events
+        await serviceClient.from("system_events").insert({
+          user_id: userId,
+          event_type: "ai_gap_analysis_complete",
+          severity: "info",
+          settlement_id: resolvedSid,
+          marketplace_code: s.marketplace,
+          details: {
+            settlement_id: resolvedSid,
+            recommended_action: recommendedAction,
+            gap_amount: validationGap,
+            id_match_method: matchMethod,
+            missing_mappings: missingMappings.length > 0 ? missingMappings : undefined,
+          },
         });
+
+        return JSON.stringify(result);
       }
 
       default:
