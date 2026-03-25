@@ -34,6 +34,7 @@ import { toast } from 'sonner';
 import { isBankMatchRequired } from '@/constants/settlement-rails';
 import { isReconciliationOnly } from '@/utils/settlement-policy';
 import { PUSHABLE_SOURCES } from '@/utils/settlementSources';
+import { isGapBlocking } from '@/utils/canonical-recon-status';
 
 interface SettlementRow {
   id: string;
@@ -56,6 +57,7 @@ interface SettlementRow {
   storage_fees: number | null;
   advertising_costs: number | null;
   is_pre_boundary: boolean;
+  reconciliation_difference?: number | null;
   dashboard_origin?: 'settlement' | 'validation';
   queue_type?: 'manual_upload' | 'api_sync';
 }
@@ -100,12 +102,20 @@ function formatDateRange(start: string, end: string): string {
 
 type StatusCategory = 'ready' | 'posted' | 'attention' | 'hidden' | 'completed' | 'other';
 
+/** Compute reconciliation gap from settlement fields */
+function computeSettlementGap(row: SettlementRow): number | null {
+  if (row.bank_deposit == null) return null;
+  const computed = (row.sales_principal || 0) + (row.seller_fees || 0) + (row.fba_fees || 0) +
+    (row.storage_fees || 0) + (row.refunds || 0) + (row.other_fees || 0) + (row.advertising_costs || 0);
+  if (computed === 0 && row.bank_deposit === 0) return 0;
+  return row.bank_deposit - computed;
+}
+
 function categorize(row: SettlementRow): StatusCategory {
   if ((row as any).is_hidden) return 'hidden';
   if (row.status === 'push_failed' || row.status === 'push_failed_permanent') return 'attention';
   if (row.status === 'settlement_needed' || row.status === 'missing') return 'other';
   if (row.status === 'awaiting_api_sync') return 'completed';
-  // Settlement-confirmed rails that are posted are considered complete, not "waiting"
   if (['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(row.status)) {
     if (row.marketplace && !isBankMatchRequired(row.marketplace)) return 'completed';
     if (row.status === 'reconciled_in_xero' || row.status === 'bank_verified' || row.xero_status === 'PAID') return 'completed';
@@ -116,13 +126,18 @@ function categorize(row: SettlementRow): StatusCategory {
     if (row.marketplace && !isBankMatchRequired(row.marketplace)) return 'completed';
     return 'posted';
   }
-  if (row.status === 'ready_to_push') return 'ready';
+  if (row.status === 'ready_to_push') {
+    // If there's a blocking gap, this needs attention, not pushing
+    const gap = computeSettlementGap(row);
+    if (isGapBlocking(gap)) return 'attention';
+    return 'ready';
+  }
   if (row.status === 'pre_boundary') return 'completed';
   if (row.status === 'ingested') return 'other';
   return 'other';
 }
 
-function StatusBadge({ status, xeroStatus, syncOrigin, marketplace }: { status: string; xeroStatus: string | null; syncOrigin?: string; marketplace?: string | null }) {
+function StatusBadge({ status, xeroStatus, syncOrigin, marketplace, reconGap }: { status: string; xeroStatus: string | null; syncOrigin?: string; marketplace?: string | null; reconGap?: number | null }) {
   if (status === 'settlement_needed' || status === 'missing') {
     return (
       <Badge variant="outline" className="text-xs text-muted-foreground">
@@ -190,6 +205,14 @@ function StatusBadge({ status, xeroStatus, syncOrigin, marketplace }: { status: 
     );
   }
   if (status === 'ready_to_push') {
+    if (isGapBlocking(reconGap)) {
+      return (
+        <Badge variant="outline" className="text-red-700 bg-red-50 border-red-200 dark:text-red-400 dark:bg-red-900/30 dark:border-red-800 text-xs">
+          <ShieldAlert className="h-3 w-3 mr-1" />
+          Gap ${reconGap != null ? `$${Math.abs(reconGap).toFixed(2)}` : ''}
+        </Badge>
+      );
+    }
     return (
       <Badge variant="outline" className="text-sky-700 bg-sky-50 border-sky-200 dark:text-sky-400 dark:bg-sky-900/30 dark:border-sky-800 text-xs">
         <Send className="h-3 w-3 mr-1" />
@@ -968,7 +991,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
                           Duplicate Risk
                         </Badge>
                       ) : (
-                        <StatusBadge status={row.status || ''} xeroStatus={row.xero_status} marketplace={row.marketplace} />
+                        <StatusBadge status={row.status || ''} xeroStatus={row.xero_status} marketplace={row.marketplace} reconGap={computeSettlementGap(row)} />
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
