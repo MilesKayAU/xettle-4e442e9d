@@ -765,7 +765,7 @@ export default function ValidationSweep({
                       <td className="px-3 py-2 text-center">
                         {row.settlement_uploaded ? (
                           (() => {
-                            const gap = row.reconciliation_difference;
+                            const gap = getDisplayGap({ reconciliation_difference: row.reconciliation_difference }, null);
                             const absGap = Math.abs(gap || 0);
                             if (!gap && gap !== 0) return <span className="text-xs text-muted-foreground">—</span>;
                             if (absGap <= 0.05) return (
