@@ -33,7 +33,7 @@ export default function SettlementCorrectionPanel({ settlement, isAdmin, onSettl
   const handleFetchCorrectAmount = useCallback(async () => {
     setVerifying(true);
     try {
-      const res = await supabase.functions.invoke('verify-mirakl-settlement', {
+      const res = await supabase.functions.invoke('verify-settlement', {
         body: { settlement_id: settlement.settlement_id },
       });
       if (res.error) throw new Error(res.error.message);

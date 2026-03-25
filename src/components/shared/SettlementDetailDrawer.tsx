@@ -919,7 +919,7 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
                           variant="ghost"
                           size="sm"
                           className="h-6 text-[10px] gap-1"
-                          onClick={handleVerifyMirakl}
+                          onClick={handleVerifyApi}
                           disabled={apiVerifying}
                         >
                           <Search className="h-3 w-3" />
