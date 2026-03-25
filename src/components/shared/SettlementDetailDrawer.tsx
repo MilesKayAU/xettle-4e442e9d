@@ -771,16 +771,28 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
                 <Separator />
                 <div className="space-y-2">
                   {!apiVerification && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs gap-1.5"
-                      onClick={handleVerifyApi}
-                      disabled={apiVerifying}
-                    >
-                      <Search className="h-3.5 w-3.5" />
-                      {apiVerifying ? 'Verifying via API…' : 'Verify via API'}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1.5"
+                        onClick={handleVerifyApi}
+                        disabled={apiVerifying || apiRefetching}
+                      >
+                        <Search className="h-3.5 w-3.5" />
+                        {apiVerifying ? 'Verifying via API…' : 'Verify via API'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1.5 text-amber-600 border-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:hover:bg-amber-900/20"
+                        onClick={handleRefetchFromApi}
+                        disabled={apiVerifying || apiRefetching}
+                      >
+                        <Zap className="h-3.5 w-3.5" />
+                        {apiRefetching ? 'Re-fetching…' : 'Re-fetch from API'}
+                      </Button>
+                    </div>
                   )}
 
                   {apiVerification && (
