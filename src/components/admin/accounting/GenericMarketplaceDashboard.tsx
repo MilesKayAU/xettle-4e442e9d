@@ -633,7 +633,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                     const net = s.bank_deposit || 0;
                     const isSelected = selected.has(s.id);
                      const isReconOnly = isReconciliationOnly((s as any).source, s.marketplace, s.settlement_id);
-                     const reconGap = (s as any).reconciliation_difference;
+                     const reconGap = computeGap(s);
                      const reconOk = isReconSafeForPush(reconGap);
                      const isSyncable = !isReconOnly && reconOk && (s.status === 'ingested' || s.status === 'ready_to_push');
                      const isReconBlocked = !isReconOnly && !reconOk && (s.status === 'ingested' || s.status === 'ready_to_push');
