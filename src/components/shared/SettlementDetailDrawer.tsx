@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertTriangle, CheckCircle2, Clock, Download, ExternalLink, GitCompare, Info, Pencil, Save, X, Zap } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, Clock, Download, ExternalLink, GitCompare, Info, Pencil, Save, Search, X, Zap } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatAUD, MARKETPLACE_LABELS } from '@/utils/settlement-engine';
 import { cn } from '@/lib/utils';
