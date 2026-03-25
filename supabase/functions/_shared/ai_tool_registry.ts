@@ -515,7 +515,7 @@ export async function executeTool(
         console.log(`[analyzeReconciliationGap] Invoked for settlement_id=${sid}, user_id=${userId}`);
         const [settRes, valRes, xeroMatchRes, bankTxRes, linesRes, feeObsRes, outstandingRes] = await Promise.all([
           serviceClient.from("settlements")
-            .select("settlement_id, marketplace, source, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, bank_deposit, net_amount, gst_on_income, gst_on_expenses, metadata")
+            .select("settlement_id, marketplace, source, period_end, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, bank_deposit, net_amount, gst_on_income, gst_on_expenses, metadata")
             .eq("user_id", userId)
             .eq("settlement_id", sid)
             .maybeSingle(),
