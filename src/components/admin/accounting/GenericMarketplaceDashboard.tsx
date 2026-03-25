@@ -279,8 +279,18 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const marketplaceName = def?.name || marketplace.marketplace_name;
 
   // ── AI Page Context ──────────────────────────────────────────────────────────
-  const reconciledCount = useMemo(() => settlements.filter(s => s.reconciliation_status === 'reconciled' || s.reconciliation_status === 'matched').length, [settlements]);
-  const flaggedCount = useMemo(() => settlements.filter(s => s.reconciliation_status === 'warning' || s.reconciliation_status === 'alert').length, [settlements]);
+  const reconciledCount = useMemo(() => settlements.filter(s => {
+    // Use canonical gap logic — don't trust legacy reconciliation_status strings
+    const gap = (s as any).reconciliation_difference;
+    if (gap != null) return !isGapBlocking(gap);
+    // Fallback to legacy strings only if no gap data
+    return s.reconciliation_status === 'reconciled' || s.reconciliation_status === 'matched';
+  }).length, [settlements]);
+  const flaggedCount = useMemo(() => settlements.filter(s => {
+    const gap = (s as any).reconciliation_difference;
+    if (gap != null) return isGapBlocking(gap);
+    return s.reconciliation_status === 'warning' || s.reconciliation_status === 'alert';
+  }).length, [settlements]);
   const pushedCount = useMemo(() => settlements.filter(s => ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(s.status || '')).length, [settlements]);
   const unpushedCount = useMemo(() => settlements.filter(s => s.status === 'ingested' || s.status === 'ready_to_push').length, [settlements]);
 
