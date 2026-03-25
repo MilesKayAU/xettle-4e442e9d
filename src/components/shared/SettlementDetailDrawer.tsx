@@ -219,14 +219,13 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
     })();
   }, []);
 
-  // Mirakl API verification handler
-  const handleVerifyMirakl = useCallback(async () => {
+  // Universal API verification handler
+  const handleVerifyApi = useCallback(async () => {
     if (!settlement?.settlement_id) return;
     setApiVerifying(true);
     setApiVerification(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await supabase.functions.invoke('verify-mirakl-settlement', {
+      const res = await supabase.functions.invoke('verify-settlement', {
         body: { settlement_id: settlement.settlement_id },
       });
       if (res.error) throw new Error(res.error.message);
@@ -235,7 +234,7 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
     } catch (err: any) {
       const is401 = err.message?.includes('401') || err.message?.includes('Unauthorized');
       const errorMsg = is401
-        ? 'Your Bunnings API key was rejected (401). Please verify it\'s still valid in the Bunnings seller portal and update it in Settings > API Connections.'
+        ? 'Your API key was rejected (401). Please verify it\'s still valid and update it in Settings > API Connections.'
         : `API verification failed: ${err.message}`;
       toast.error(errorMsg, { duration: is401 ? 8000 : 4000 });
       setApiVerification({ verdict: 'api_error', error: err.message, is_auth_error: is401 });
