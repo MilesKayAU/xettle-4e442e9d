@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import SettlementDetailDrawer from '@/components/shared/SettlementDetailDrawer';
+import InlineUploadDialog from '@/components/admin/accounting/InlineUploadDialog';
 import { triggerValidationSweep, formatAUD, MARKETPLACE_LABELS, GATEWAY_CODES, MARKETPLACE_ALIASES } from '@/utils/settlement-engine';
 import { isBankMatchRequired } from '@/constants/settlement-rails';
 import { toast } from 'sonner';
@@ -95,6 +96,7 @@ export default function ActionCentre({
   const [drawerSettlementId, setDrawerSettlementId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [autoPostRails, setAutoPostRails] = useState<Set<string>>(new Set());
+  const [uploadDialogRow, setUploadDialogRow] = useState<{ marketplace_code: string; period_label: string; period_start: string; period_end: string } | null>(null);
   const [autoPostFailed, setAutoPostFailed] = useState<Array<{
     id: string; marketplace: string | null; settlement_id: string;
     period_start: string; period_end: string; bank_deposit: number | null;
@@ -427,11 +429,21 @@ export default function ActionCentre({
               {uploadNeededManual.map(r => {
                 const isKogan = r.marketplace_code.toLowerCase().includes('kogan');
                 return (
-                  <li key={r.id} className="text-xs flex items-center gap-2 bg-background/50 rounded px-3 py-1.5">
+                  <li
+                    key={r.id}
+                    className="text-xs flex items-center gap-2 bg-background/50 rounded px-3 py-1.5 cursor-pointer hover:bg-muted/40 transition-colors"
+                    onClick={() => setUploadDialogRow({
+                      marketplace_code: r.marketplace_code,
+                      period_label: r.period_label,
+                      period_start: r.period_start,
+                      period_end: r.period_end,
+                    })}
+                  >
                     <span className="text-amber-400">↑</span>
                     <span className="font-medium">{MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code}</span>
                     <span className="text-muted-foreground">— {formatPeriod(r.period_start)}</span>
                     {isKogan && <span className="text-amber-600 dark:text-amber-400 font-medium">(CSV + PDF pair)</span>}
+                    <Upload className="h-3 w-3 text-muted-foreground ml-auto shrink-0" />
                   </li>
                 );
               })}
@@ -580,12 +592,27 @@ export default function ActionCentre({
         </Card>
       )}
 
-      {/* Settlement Detail Drawer */}
       <SettlementDetailDrawer
         settlementId={drawerSettlementId}
         open={drawerOpen}
         onClose={() => { setDrawerOpen(false); setDrawerSettlementId(null); }}
       />
+
+      {uploadDialogRow && (
+        <InlineUploadDialog
+          open={!!uploadDialogRow}
+          onClose={() => setUploadDialogRow(null)}
+          marketplaceCode={uploadDialogRow.marketplace_code}
+          periodLabel={uploadDialogRow.period_label}
+          periodStart={uploadDialogRow.period_start}
+          periodEnd={uploadDialogRow.period_end}
+          onComplete={() => { setUploadDialogRow(null); loadData(); }}
+          onOpenFullUpload={(code, period) => {
+            setUploadDialogRow(null);
+            onSwitchToUpload(buildMissingList().filter(m => m.marketplace_code === code));
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -17,6 +17,7 @@ import {
   ArrowUpDown, ArrowUp, ArrowDown, CalendarDays, Pause, Play, ChevronDown, ChevronUp, Square, CheckSquare, Eye,
 } from 'lucide-react';
 import SettlementDetailDrawer from '@/components/shared/SettlementDetailDrawer';
+import InlineUploadDialog from '@/components/admin/accounting/InlineUploadDialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
@@ -130,6 +131,7 @@ export default function ValidationSweep({
   const [drawerSettlementId, setDrawerSettlementId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [uploadSubTab, setUploadSubTab] = useState<'manual' | 'api' | 'recon'>('manual');
+  const [uploadDialogRow, setUploadDialogRow] = useState<{ marketplace_code: string; period_label: string; period_start: string; period_end: string } | null>(null);
 
   const handleConfirmBankMatch = async (row: ValidationRow, transactionId: string) => {
     setConfirmingBank(row.id);
@@ -799,7 +801,7 @@ export default function ValidationSweep({
                               pushing={pushing === row.id}
                               syncing={syncingRow === row.id}
                               isApiSynced={apiSyncedCodes.has(row.marketplace_code)}
-                              onUpload={() => onSwitchToUpload?.(row.marketplace_code, row.period_label)}
+                              onUpload={() => setUploadDialogRow({ marketplace_code: row.marketplace_code, period_label: row.period_label, period_start: row.period_start, period_end: row.period_end })}
                               onPush={() => handlePush(row)}
                               onSync={() => handleSyncRow(row)}
                             />
@@ -873,6 +875,19 @@ export default function ValidationSweep({
         open={drawerOpen}
         onClose={() => { setDrawerOpen(false); setDrawerSettlementId(null); }}
       />
+
+      {uploadDialogRow && (
+        <InlineUploadDialog
+          open={!!uploadDialogRow}
+          onClose={() => setUploadDialogRow(null)}
+          marketplaceCode={uploadDialogRow.marketplace_code}
+          periodLabel={uploadDialogRow.period_label}
+          periodStart={uploadDialogRow.period_start}
+          periodEnd={uploadDialogRow.period_end}
+          onComplete={() => { setUploadDialogRow(null); loadData(); }}
+          onOpenFullUpload={(code, period) => onSwitchToUpload?.(code, period)}
+        />
+      )}
     </div>
   );
 }
