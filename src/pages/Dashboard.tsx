@@ -31,6 +31,7 @@ import PostSetupBanner from '@/components/dashboard/PostSetupBanner';
 import WelcomeGuide from '@/components/dashboard/WelcomeGuide';
 import RecentUploads from '@/components/dashboard/RecentUploads';
 import GapTriageTable from '@/components/dashboard/GapTriageTable';
+import SettlementDetailDrawer from '@/components/shared/SettlementDetailDrawer';
 
 import ReconciliationHealthPanel from '@/components/dashboard/ReconciliationHealthPanel';
 import DataIntegrityScanner from '@/components/dashboard/DataIntegrityScanner';
