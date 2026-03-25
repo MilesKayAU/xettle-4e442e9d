@@ -429,11 +429,21 @@ export default function ActionCentre({
               {uploadNeededManual.map(r => {
                 const isKogan = r.marketplace_code.toLowerCase().includes('kogan');
                 return (
-                  <li key={r.id} className="text-xs flex items-center gap-2 bg-background/50 rounded px-3 py-1.5">
+                  <li
+                    key={r.id}
+                    className="text-xs flex items-center gap-2 bg-background/50 rounded px-3 py-1.5 cursor-pointer hover:bg-muted/40 transition-colors"
+                    onClick={() => setUploadDialogRow({
+                      marketplace_code: r.marketplace_code,
+                      period_label: r.period_label,
+                      period_start: r.period_start,
+                      period_end: r.period_end,
+                    })}
+                  >
                     <span className="text-amber-400">↑</span>
                     <span className="font-medium">{MARKETPLACE_LABELS[r.marketplace_code] || r.marketplace_code}</span>
                     <span className="text-muted-foreground">— {formatPeriod(r.period_start)}</span>
                     {isKogan && <span className="text-amber-600 dark:text-amber-400 font-medium">(CSV + PDF pair)</span>}
+                    <Upload className="h-3 w-3 text-muted-foreground ml-auto shrink-0" />
                   </li>
                 );
               })}
