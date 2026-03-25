@@ -32,6 +32,7 @@ import WelcomeGuide from '@/components/dashboard/WelcomeGuide';
 import RecentUploads from '@/components/dashboard/RecentUploads';
 
 import ReconciliationHealthPanel from '@/components/dashboard/ReconciliationHealthPanel';
+import DataIntegrityScanner from '@/components/dashboard/DataIntegrityScanner';
 
 import { Button } from '@/components/ui/button';
 import { LogOut, Shield, Settings, Sparkles, FileText, BarChart3, Upload, LayoutDashboard, ClipboardList, ChevronDown, CheckCircle2, AlertTriangle, Info, PackageOpen } from 'lucide-react';
@@ -1059,6 +1060,11 @@ export default function Dashboard() {
               />
               {showBankMapper && (
                 <DestinationAccountMapper />
+              )}
+
+              {/* Data Integrity Scanner */}
+              {(xeroConnected || userMarketplaces.length > 0) && (
+                <DataIntegrityScanner />
               )}
 
               {/* Kogan missingPdf alert */}

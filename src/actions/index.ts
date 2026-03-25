@@ -178,3 +178,13 @@ export {
   type AuditExportFilters,
   type AuditExportResult,
 } from './auditExport';
+
+// ─── Data Integrity Scanner ─────────────────────────────────────────────────
+export {
+  runDataIntegrityScan,
+  runAllDataIntegrityScans,
+  getLastScanTimestamps,
+  SCAN_DEFINITIONS,
+  type ScanDefinition,
+  type ScanResult,
+} from './dataIntegrity';
