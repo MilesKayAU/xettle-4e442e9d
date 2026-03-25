@@ -24,9 +24,10 @@ function relativeTime(iso: string | null): string {
   return `${days}d ago`;
 }
 
-type FreshnessStatus = 'fresh' | 'stale' | 'never';
+type FreshnessStatus = 'fresh' | 'stale' | 'failed' | 'never';
 
-function getFreshness(iso: string | null): FreshnessStatus {
+function getFreshness(iso: string | null, hasFailed?: boolean): FreshnessStatus {
+  if (hasFailed) return 'failed';
   if (!iso) return 'never';
   const diff = Date.now() - new Date(iso).getTime();
   return diff < 3_600_000 ? 'fresh' : 'stale';
@@ -35,6 +36,7 @@ function getFreshness(iso: string | null): FreshnessStatus {
 const statusConfig: Record<FreshnessStatus, { dot: string }> = {
   fresh: { dot: 'bg-emerald-500' },
   stale: { dot: 'bg-amber-500' },
+  failed: { dot: 'bg-destructive' },
   never: { dot: 'bg-destructive' },
 };
 
