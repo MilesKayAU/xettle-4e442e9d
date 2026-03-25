@@ -23,7 +23,7 @@ export interface AiToolDef {
 // ─── Drift Detection ─────────────────────────────────────────────────────────
 
 /** Must match EXPECTED_TOOL_COUNT in supabase/functions/_shared/ai_tool_registry.ts */
-export const EXPECTED_TOOL_COUNT = 6;
+export const EXPECTED_TOOL_COUNT = 7;
 
 // ─── Static registry (synced from server canonical) ──────────────────────────
 
@@ -57,6 +57,11 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
     name: "explainReadinessBlockers",
     description: "[Read-only] Explain why a settlement can't be pushed: missing mappings, stale COA, missing contact, support tier.",
     availableOn: ["settlements", "settlement_detail", "push_safety_preview", "settings"],
+  },
+  {
+    name: "analyzeReconciliationGap",
+    description: "[Read-only] Analyze a settlement's reconciliation gap: financial breakdown, diagnosis, and whether the gap is real or an artifact.",
+    availableOn: ["dashboard", "settlements", "settlement_detail"],
   },
 ];
 

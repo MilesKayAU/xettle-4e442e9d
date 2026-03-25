@@ -30,6 +30,8 @@ import ChannelAlertsBanner from '@/components/dashboard/ChannelAlertsBanner';
 import PostSetupBanner from '@/components/dashboard/PostSetupBanner';
 import WelcomeGuide from '@/components/dashboard/WelcomeGuide';
 import RecentUploads from '@/components/dashboard/RecentUploads';
+import GapTriageTable from '@/components/dashboard/GapTriageTable';
+import SettlementDetailDrawer from '@/components/shared/SettlementDetailDrawer';
 
 import ReconciliationHealthPanel from '@/components/dashboard/ReconciliationHealthPanel';
 import DataIntegrityScanner from '@/components/dashboard/DataIntegrityScanner';
@@ -360,6 +362,8 @@ export default function Dashboard() {
   const [showBankMapper, setShowBankMapper] = useState(false);
   const [pipelineFilter, setPipelineFilter] = useState<{ marketplace: string; month: string } | null>(null);
   const [settlementStatusFilter, setSettlementStatusFilter] = useState<string | null>(null);
+  const [drawerSettlementId, setDrawerSettlementId] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -1111,6 +1115,14 @@ export default function Dashboard() {
               />
               </div>
 
+              {/* Gap Triage — focused worklist of reconciliation gaps */}
+              <GapTriageTable
+                onEditSettlement={(sid) => {
+                  setDrawerSettlementId(sid);
+                  setDrawerOpen(true);
+                }}
+              />
+
               {/* Settlements table — only actionable rows */}
               <div id="settlements-table-section">
                 <RecentSettlements
@@ -1312,6 +1324,12 @@ export default function Dashboard() {
         )}
       </div>
 
+
+      <SettlementDetailDrawer
+        settlementId={drawerSettlementId}
+        open={drawerOpen}
+        onClose={() => { setDrawerOpen(false); setDrawerSettlementId(null); }}
+      />
     </div>
   );
 }
