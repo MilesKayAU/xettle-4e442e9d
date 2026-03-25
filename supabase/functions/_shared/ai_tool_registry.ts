@@ -16,7 +16,7 @@
 export const READ_ONLY_POLICY =
   "All tools are read-only lookups. No tool may write, update, or delete data. The assistant must never attempt write operations.";
 
-export const EXPECTED_TOOL_COUNT = 6;
+export const EXPECTED_TOOL_COUNT = 7;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
