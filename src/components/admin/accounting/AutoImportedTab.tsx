@@ -214,6 +214,7 @@ function BankIndicator({ settlement }: { settlement: AutoImportedSettlement }) {
 export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existingSettlementIds }: AutoImportedTabProps) {
   const [settlements, setSettlements] = useState<AutoImportedSettlement[]>([]);
   const [xeroMatches, setXeroMatches] = useState<Record<string, XeroMatch>>({});
+  const [validationStatusMap, setValidationStatusMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
