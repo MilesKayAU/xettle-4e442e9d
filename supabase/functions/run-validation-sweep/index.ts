@@ -918,7 +918,6 @@ async function sweepUser(adminSupabase: any, userId: string) {
       .like('settlement_id', 'shopify_auto_%')
 
     if (autoValidationRows && autoValidationRows.length > 0) {
-      // Get current boundaries for all shopify_auto settlements
       const autoSettlementIds = [...new Set(autoValidationRows.map((r: any) => r.settlement_id))]
       const { data: autoSettlements } = await adminSupabase
         .from('settlements')
@@ -935,10 +934,8 @@ async function sweepUser(adminSupabase: any, userId: string) {
       for (const row of autoValidationRows) {
         const expectedLabel = currentLabels.get(row.settlement_id)
         if (!expectedLabel) {
-          // Settlement no longer exists — orphaned
           orphanIds.push(row.id)
         } else if (row.period_label !== expectedLabel) {
-          // Period label doesn't match current settlement boundaries — stale
           orphanIds.push(row.id)
         }
       }
@@ -951,6 +948,47 @@ async function sweepUser(adminSupabase: any, userId: string) {
     }
   } catch (e) {
     console.error('[validation-sweep] shopify_auto orphan cleanup error:', e)
+  }
+
+  // P6: Deduplicate validation rows with same settlement_id but different period_labels.
+  // Keep the row whose period_label matches the actual settlement dates; delete others.
+  try {
+    const { data: allValRows } = await adminSupabase
+      .from('marketplace_validation')
+      .select('id, settlement_id, period_label, overall_status, updated_at')
+      .eq('user_id', userId)
+      .not('settlement_id', 'is', null)
+
+    if (allValRows && allValRows.length > 0) {
+      const bySettlement = new Map<string, any[]>()
+      for (const row of allValRows) {
+        if (!row.settlement_id) continue
+        if (!bySettlement.has(row.settlement_id)) bySettlement.set(row.settlement_id, [])
+        bySettlement.get(row.settlement_id)!.push(row)
+      }
+
+      const dupeIdsToDelete: string[] = []
+      for (const [sid, rows] of bySettlement) {
+        if (rows.length <= 1) continue
+        // Keep the row with a period_label containing ' → ' (real dates) over synthetic month labels
+        // If both have arrows, keep the most recently updated one
+        const realRows = rows.filter((r: any) => r.period_label?.includes(' → '))
+        const keeper = realRows.length > 0
+          ? realRows.sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0]
+          : rows.sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0]
+        for (const row of rows) {
+          if (row.id !== keeper.id) dupeIdsToDelete.push(row.id)
+        }
+      }
+
+      if (dupeIdsToDelete.length > 0) {
+        await adminSupabase.from('marketplace_validation').delete().in('id', dupeIdsToDelete)
+        console.log(`[validation-sweep] Cleaned ${dupeIdsToDelete.length} duplicate validation rows (same settlement_id)`)
+        await logEvent(adminSupabase, userId, 'validation_dedup_cleanup', { removed_count: dupeIdsToDelete.length }, 'info')
+      }
+    }
+  } catch (e) {
+    console.error('[validation-sweep] settlement_id dedup error:', e)
   }
 
   // Log sweep completion
