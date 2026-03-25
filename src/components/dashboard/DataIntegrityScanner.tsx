@@ -89,6 +89,7 @@ function ScanRow({
 
 export default function DataIntegrityScanner() {
   const [timestamps, setTimestamps] = useState<Record<string, string | null>>({});
+  const [failedScans, setFailedScans] = useState<Record<string, boolean>>({});
   const [runningScan, setRunningScan] = useState<string | null>(null);
   const [runningAll, setRunningAll] = useState(false);
   const [allProgress, setAllProgress] = useState(-1);
@@ -97,18 +98,23 @@ export default function DataIntegrityScanner() {
   const loadTimestamps = useCallback(async () => {
     const ts = await getLastScanTimestamps();
     setTimestamps(ts);
+    // Clear failed states when we reload timestamps (fresh data)
+    setFailedScans({});
   }, []);
 
   useEffect(() => { loadTimestamps(); }, [loadTimestamps]);
 
   const handleRunSingle = async (key: string, label: string) => {
     setRunningScan(key);
+    setFailedScans(prev => ({ ...prev, [key]: false }));
     const result = await runDataIntegrityScan(key);
     setRunningScan(null);
     if (result.success) {
       toast.success(`${label} complete`);
+      setFailedScans(prev => ({ ...prev, [key]: false }));
     } else {
       toast.error(result.error || 'Scan failed');
+      setFailedScans(prev => ({ ...prev, [key]: true }));
     }
     await loadTimestamps();
   };
