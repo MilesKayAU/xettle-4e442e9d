@@ -103,6 +103,10 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
   const [editing, setEditing] = useState(false);
   const [editFields, setEditFields] = useState<EditableFields | null>(null);
   const [saving, setSaving] = useState(false);
+  const [apiVerification, setApiVerification] = useState<any>(null);
+  const [apiVerifying, setApiVerifying] = useState(false);
+  const [apiVerifyOpen, setApiVerifyOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useAiPageContext(() => ({
     routeId: 'settlement_detail',
