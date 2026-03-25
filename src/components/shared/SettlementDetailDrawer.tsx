@@ -245,6 +245,64 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
     }
   }, [settlement?.settlement_id]);
 
+  // Re-fetch from API — verifies AND auto-corrects if discrepancies found
+  const handleRefetchFromApi = useCallback(async () => {
+    if (!settlement?.settlement_id || !settlement?.id) return;
+    setApiRefetching(true);
+    setApiVerification(null);
+    try {
+      const res = await supabase.functions.invoke('verify-settlement', {
+        body: { settlement_id: settlement.settlement_id },
+      });
+      if (res.error) throw new Error(res.error.message);
+      const result = res.data;
+      setApiVerification(result);
+      setApiVerifyOpen(true);
+
+      if (result.verdict === 'discrepancy' && result.transaction_count > 0) {
+        const updates: Record<string, any> = {};
+        for (const d of result.discrepancies || []) {
+          if (d.field === 'sales_principal') updates.sales_principal = d.api_value;
+          if (d.field === 'sales_shipping') updates.sales_shipping = d.api_value;
+          if (d.field === 'seller_fees') updates.seller_fees = d.api_value;
+          if (d.field === 'refunds') updates.refunds = d.api_value;
+          if (d.field === 'bank_deposit') updates.bank_deposit = d.api_value;
+          if (d.field === 'gst_on_income') updates.gst_on_income = d.api_value;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          const { error: updateErr } = await supabase
+            .from('settlements')
+            .update(updates)
+            .eq('id', settlement.id);
+
+          if (updateErr) {
+            toast.error('API data fetched but failed to update settlement');
+          } else {
+            setSettlement((prev: any) => prev ? { ...prev, ...updates } : prev);
+            toast.success(`Settlement updated with API data (${Object.keys(updates).length} fields corrected)`);
+            await supabase.from('system_events').insert({
+              user_id: settlement.user_id,
+              event_type: 'settlement_api_refetch_corrected',
+              severity: 'info',
+              marketplace_code: settlement.marketplace,
+              settlement_id: settlement.settlement_id,
+              details: { corrections: updates, original_verdict: result.verdict },
+            });
+          }
+        }
+      } else if (result.verdict === 'match') {
+        toast.success('Settlement already matches API data — no changes needed');
+      } else if (result.verdict === 'no_data') {
+        toast.info('No API transactions found for this period');
+      }
+    } catch (err: any) {
+      toast.error(`Re-fetch failed: ${err.message}`);
+    } finally {
+      setApiRefetching(false);
+    }
+  }, [settlement]);
+
   const handleDismissCandidate = useCallback(async () => {
     if (!externalCandidate?.id) return;
     setDismissingCandidate(true);
