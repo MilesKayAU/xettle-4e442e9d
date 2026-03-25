@@ -93,13 +93,48 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
     return true;
   };
 
+  const [lastDiagnostic, setLastDiagnostic] = useState<string | null>(null);
+  const [lastSuggestion, setLastSuggestion] = useState<string | null>(null);
+
   const handleConnect = async () => {
     if (!isFormValid()) {
       toast.error('Please fill in all required fields');
       return;
     }
+
+    // Client-side format check for API keys
+    if (apiKey && (authMode === 'api_key' || authMode === 'both')) {
+      const trimmed = apiKey.trim();
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const HEX_RE = /^[0-9a-f]{32,64}$/i;
+      
+      if (!UUID_RE.test(trimmed) && !HEX_RE.test(trimmed)) {
+        // Check if it looks like a password
+        const hasUpper = /[A-Z]/.test(trimmed);
+        const hasLower = /[a-z]/.test(trimmed);
+        const hasDigit = /\d/.test(trimmed);
+        const hasSpecial = /[!@#$%^&*()_+=\[\]{};':"\\|,.<>?/~`]/.test(trimmed);
+        
+        if (hasUpper && hasLower && hasDigit && hasSpecial && trimmed.length < 40) {
+          setLastError(`This looks like a password, not an API key. Mirakl API keys are UUID format (e.g. bfb2d8a3-914b-4d8e-828b-3d75199754c5).`);
+          setLastSuggestion('Go to your seller portal → My Settings → API Key tab → Generate a new API key');
+          toast.error('That looks like a password, not an API key');
+          return;
+        }
+        
+        if (trimmed.length < 20) {
+          setLastError(`Value is too short (${trimmed.length} chars) to be a valid API key.`);
+          setLastSuggestion('Go to your seller portal → My Settings → API Key tab and copy the full key');
+          toast.error('API key is too short');
+          return;
+        }
+      }
+    }
+
     setConnecting(true);
     setLastError(null);
+    setLastDiagnostic(null);
+    setLastSuggestion(null);
     try {
       const { data, error } = await supabase.functions.invoke('mirakl-auth', {
         headers: { 'x-action': 'connect' },
@@ -116,8 +151,12 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
         },
       });
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      toast.success(`${selectedMp.label} connection saved`);
+      if (data?.error) {
+        setLastDiagnostic(data.diagnostic || null);
+        setLastSuggestion(data.suggestion || null);
+        throw new Error(data.error);
+      }
+      toast.success(`${selectedMp.label} connection verified and saved ✓`);
       setClientId('');
       setClientSecret('');
       setApiKey('');
