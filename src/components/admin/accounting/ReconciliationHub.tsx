@@ -12,6 +12,7 @@ import { formatDistanceToNow, differenceInDays, subMonths, subDays } from 'date-
 import { toast } from 'sonner';
 import { buildPostingLineItems, toLineItemPreviews, createAccountCodeResolver, type LineItemPreview } from '@/utils/xero-posting-line-items';
 import { MARKETPLACE_CONTACTS } from '@/constants/marketplace-contacts';
+import { getDisplayGap } from '@/utils/getDisplayGap';
 
 const HistoricalAudit = lazy(() => import('./HistoricalAudit'));
 
@@ -273,7 +274,7 @@ export default function ReconciliationHub() {
           type: 'validation',
           urgencyTier: tier,
           title,
-          subtitle: `${v.period_start} → ${v.period_end}${v.reconciliation_difference ? ` · Δ ${formatAUD(v.reconciliation_difference)}` : ''}`,
+          subtitle: `${v.period_start} → ${v.period_end}${v.reconciliation_difference ? ` · Δ ${formatAUD(getDisplayGap({ reconciliation_difference: v.reconciliation_difference })!)}` : ''}`,
           marketplace: v.marketplace_code,
           amount: v.settlement_net || undefined,
           date: v.period_start,

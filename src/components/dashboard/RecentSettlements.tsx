@@ -10,6 +10,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ACTIVE_CONNECTION_STATUSES, isApiConnectionType } from '@/constants/connection-status';
+import { getDisplayGap } from '@/utils/getDisplayGap';
 import { logger } from '@/utils/logger';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -102,8 +103,13 @@ function formatDateRange(start: string, end: string): string {
 
 type StatusCategory = 'ready' | 'posted' | 'attention' | 'hidden' | 'completed' | 'other';
 
-/** Compute reconciliation gap from settlement fields */
+/** Compute reconciliation gap — uses canonical validation gap when available */
 function computeSettlementGap(row: SettlementRow): number | null {
+  // Prefer canonical validation gap
+  if (row.reconciliation_difference !== undefined && row.reconciliation_difference !== null) {
+    return row.reconciliation_difference;
+  }
+  // Fallback: compute from settlement fields for display only
   if (row.bank_deposit == null) return null;
   const computed = (row.sales_principal || 0) + (row.seller_fees || 0) + (row.fba_fees || 0) +
     (row.storage_fees || 0) + (row.refunds || 0) + (row.other_fees || 0) + (row.advertising_costs || 0);
@@ -411,7 +417,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
         actionableOnly
           ? supabase
               .from('marketplace_validation')
-              .select('id, overall_status, settlement_id, marketplace_code, period_start, period_end, settlement_net, updated_at')
+              .select('id, overall_status, settlement_id, marketplace_code, period_start, period_end, settlement_net, reconciliation_difference, updated_at')
               .in('overall_status', ['settlement_needed', 'missing', 'ready_to_push'])
           : Promise.resolve({ data: null, error: null } as any),
         actionableOnly
@@ -516,7 +522,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
       const [valRes, connRes] = await Promise.all([
         supabase
           .from('marketplace_validation')
-          .select('overall_status, settlement_net, marketplace_code, settlement_id')
+          .select('overall_status, settlement_net, marketplace_code, settlement_id, reconciliation_difference')
           .in('overall_status', ['ready_to_push', 'pushed_to_xero', 'settlement_needed', 'missing', 'gap_detected']),
         supabase
           .from('marketplace_connections')

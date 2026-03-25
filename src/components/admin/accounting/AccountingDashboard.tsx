@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { logger } from '@/utils/logger';
+import { getDisplayGap } from '@/utils/getDisplayGap';
 // pendingPushRef: triggers auto-push to Xero after history review loads parsed state
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -801,15 +802,16 @@ export default function AccountingDashboard() {
         gstOnExpenses: s.gst_on_expenses || 0,
         bankDeposit: s.bank_deposit || 0,
         reconciliationMatch: (() => {
-          // Prefer validation row gap when available; fall back to settlement fields
-          const gap = validationReconDiff != null
-            ? validationReconDiff
-            : (s.bank_deposit || 0) - grossTotal;
-          return Math.abs(gap) <= 1.00;
+          const gap = getDisplayGap(
+            { reconciliation_difference: validationReconDiff },
+            { net_amount: grossTotal, bank_deposit: s.bank_deposit || 0 }
+          );
+          return Math.abs(gap ?? 0) <= 1.00;
         })(),
-        reconciliationDiff: validationReconDiff != null
-          ? round2(validationReconDiff)
-          : round2((s.bank_deposit || 0) - grossTotal),
+        reconciliationDiff: getDisplayGap(
+          { reconciliation_difference: validationReconDiff },
+          { net_amount: grossTotal, bank_deposit: s.bank_deposit || 0 }
+        ) ?? 0,
         debugBreakdown: [],
         reconciliationChecks: [],
         auSales: round2((s.sales_principal || 0) + (s.sales_shipping || 0)),
