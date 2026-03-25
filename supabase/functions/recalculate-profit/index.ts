@@ -378,6 +378,17 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Log completion event for scanner telemetry
+    const { data: { user } } = await admin.auth.getUser();
+    if (user) {
+      await admin.from('system_events').insert({
+        user_id: user.id,
+        event_type: 'profit_recalc_complete',
+        details: { updated, skipped },
+        severity: 'info',
+      });
+    }
+
     return new Response(
       JSON.stringify({ success: true, updated, skipped }),
       {
