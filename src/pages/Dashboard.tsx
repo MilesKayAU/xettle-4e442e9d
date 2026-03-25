@@ -1046,6 +1046,18 @@ export default function Dashboard() {
                 onScanComplete={loadMarketplaces}
               />
 
+              {/* Sync Command Bar — primary user actions */}
+              <SyncCommandBar
+                onOpenPushPreview={(settlements) => {
+                  setPushPreviewSettlements(settlements);
+                  setPushPreviewOpen(true);
+                }}
+                onNavigateToMismatches={() => {
+                  switchView('settlements');
+                  switchSettlementsSubTab('overview');
+                }}
+              />
+
               {/* System status — consolidated connections + actions */}
               <SystemStatusStrip
                 showAiMapper={showAiMapper}
