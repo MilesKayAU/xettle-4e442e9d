@@ -1,45 +1,38 @@
 
 
-## Universal Settlement API Verification
+## Two Issues
 
-### Architecture
+### Issue 1: The `verify-settlement` edge function is not deployed
+The new universal verification function was created in the codebase but never deployed. The edge function logs confirm the OLD `verify-mirakl-settlement` function (with the broken document-number filter) is still being called. This is why you still see "No Data" — the fix exists in code but isn't live.
 
-The `verify-settlement` edge function is a universal API verification router that supports all marketplace types:
+**Fix**: Deploy the `verify-settlement` edge function. Once deployed, the "Verify via API" button will use the corrected date-range-only filtering and should return matched transactions.
 
-- **Mirakl** (Bunnings, Catch, MyDeal): Fetches transaction logs from Mirakl API
-- **eBay**: Fetches payouts from eBay Sell Finances API  
-- **Amazon**: Placeholder — SP-API settlement reports require async report generation (coming soon)
-- **Unknown marketplaces**: Returns `no_api_connection` verdict with diagnostic info
+### Issue 2: No auto-resync after credential fix
+When we corrected the API key, the system should have automatically re-fetched and corrected the Bunnings settlement data. Currently there's no mechanism that says "credential was fixed, go re-verify all settlements that previously failed." The next scheduled sync will fetch NEW settlements, but it won't go back and re-verify the existing `BUN-2301-2026-03-14` settlement that was ingested from CSV.
 
-### Source-Aware Filtering (Mirakl)
+**What you can do right now** (after deployment):
+1. Open the settlement detail drawer for BUN-2301-2026-03-14
+2. Press "Verify via API" — this will now work with the deployed fix
+3. If the API data shows different values, use "Correct & Repost" to update the settlement with API-verified figures
 
-The Mirakl verification path uses source-aware filtering to prevent false "No Data" results:
+**What we should build** (to prevent this happening again):
 
-- **csv_upload / manual**: Filters by date range only (1-day buffer). CSV-uploaded settlements have no Mirakl-native reference, so document number matching is impossible.
-- **mirakl_api**: Extracts the actual payout reference from `raw_payload` or settlement ID pattern (`mirakl-{marketplace}-{ref}`) and matches by that reference.
+### Step 1 — Deploy `verify-settlement`
+Deploy the already-written edge function so the UI fix takes effect immediately.
 
-### Standardized Response Shape
+### Step 2 — Add "Re-fetch from API" action to the settlement drawer
+For any settlement where a Mirakl/eBay/Amazon API connection exists, add a button that re-runs the fetch function for that specific settlement's period, compares the result to stored values, and offers to auto-correct if discrepancies are found. This is different from "Verify" (read-only comparison) — this actually updates the settlement data.
 
-All marketplace paths return the same response shape:
-```
-{
-  settlement_id, marketplace, source,
-  verdict: "match" | "discrepancy" | "no_data" | "api_error" | "no_api_connection",
-  filter_method: "date_range_only" | "payout_reference" | "none",
-  transaction_count,
-  api_totals: { sales, shipping, fees, refunds, payment, sales_tax },
-  stored_settlement: { ... },
-  discrepancies: [{ field, stored_value, api_value, difference }],
-  missing_transaction_types: [...]
-}
-```
+### Step 3 — Post-credential-fix auto-resync
+When an API credential is updated in `mirakl_tokens` (or `ebay_tokens`, `amazon_tokens`), trigger a background task that:
+1. Finds all settlements for that marketplace with `verdict = "api_error"` or `verdict = "no_data"` in their last verification
+2. Re-runs verification against each
+3. Logs results to `system_events`
 
-### UI
+This ensures credential fixes automatically propagate to affected settlements.
 
-The "Verify via API" button now appears for ALL settlements (admin only), not just Mirakl marketplaces. The function automatically detects the marketplace and routes to the correct verification path. If no API connection exists, it returns a clear message.
+### Files to modify
+- **Deploy**: `supabase/functions/verify-settlement/index.ts` (already written, just needs deployment)
+- **Edit**: `src/components/shared/SettlementDetailDrawer.tsx` — add "Re-fetch from API" button
+- **Edit**: `supabase/functions/mirakl-auth/index.ts` — after successful credential save, trigger re-verification of affected settlements
 
-### Files
-- `supabase/functions/verify-settlement/index.ts` — universal router
-- `supabase/functions/verify-mirakl-settlement/index.ts` — legacy, still functional independently
-- `src/components/shared/SettlementDetailDrawer.tsx` — marketplace-agnostic UI
-- `src/components/shared/SettlementCorrectionPanel.tsx` — uses universal function
