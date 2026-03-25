@@ -48,3 +48,10 @@ export const TOL_BUNNINGS_PDF = 0.10;
  * Slightly looser than strict line-sum to account for rounding across rows.
  */
 export const TOL_GENERIC_PARSER = 0.10;
+
+/**
+ * Reconciliation gap tolerance for push-to-Xero gating.
+ * Settlements with |bank_deposit - computed_net| > this value are blocked from pushing.
+ * Applied at: PushSafetyPreview (UI), xeroPush canonical action, sync-settlement-to-xero (server).
+ */
+export const RECONCILIATION_PUSH_TOLERANCE = 1.00;
