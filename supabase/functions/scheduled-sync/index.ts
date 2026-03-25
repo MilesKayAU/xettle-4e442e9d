@@ -11,12 +11,38 @@ Deno.serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  // Parse request body to detect manual vs cron trigger
+  let reqBody: any = {};
+  try { reqBody = await req.json(); } catch { /* no body */ }
+  const isManualTrigger = reqBody?.manual === true;
+
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
   const results: Record<string, any> = {};
   const startTime = Date.now();
+
+  // ─── Cron staleness guard: skip if last sync was < 6 hours ago ────
+  if (!isManualTrigger) {
+    const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+    const { data: lastEvent } = await adminClient
+      .from('system_events')
+      .select('created_at')
+      .eq('event_type', 'scheduled_sync_complete')
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (lastEvent && lastEvent.length > 0) {
+      const lastRunAt = new Date(lastEvent[0].created_at).getTime();
+      if (Date.now() - lastRunAt < SIX_HOURS_MS) {
+        logger.info('Cron skipped — last sync was less than 6 hours ago');
+        return new Response(JSON.stringify({ skipped: true, reason: 'Recent sync exists' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+  }
 
   // ─── Collect all user IDs early for interim records ─────────────
   const { data: amazonTokens } = await adminClient.from('amazon_tokens').select('user_id');

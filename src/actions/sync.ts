@@ -59,6 +59,48 @@ export async function runMarketplaceSync(rail?: string): Promise<SyncActionResul
 }
 
 /**
+ * Trigger a full user sync: calls scheduled-sync with manual flag
+ * so it runs immediately (bypasses cron staleness guard).
+ */
+export async function runFullUserSync(): Promise<SyncActionResult> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return { success: false, error: 'Not authenticated' };
+
+  const result = await callEdgeFunctionSafe(
+    'scheduled-sync',
+    session.access_token,
+    { manual: true },
+  );
+
+  if (!result.ok) {
+    if (result.rateLimited) {
+      return { success: false, error: 'Please wait at least 1 hour between manual syncs.' };
+    }
+    return { success: false, error: result.error || 'Full sync failed' };
+  }
+
+  return { success: true, detail: result.data?.message || 'Full sync complete' };
+}
+
+/**
+ * Get the timestamp of the user's most recent sync event.
+ */
+export async function getLastSyncTime(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return null;
+
+  const { data } = await supabase
+    .from('system_events')
+    .select('created_at')
+    .eq('user_id', session.user.id)
+    .in('event_type', ['scheduled_sync_complete', 'validation_sweep_complete'])
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  return data?.[0]?.created_at ?? null;
+}
+
+/**
  * Marketplace code → dedicated edge function mapping.
  * Only marketplaces with direct API fetch functions are listed.
  */

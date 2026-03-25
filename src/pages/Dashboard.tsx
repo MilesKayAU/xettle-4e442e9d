@@ -32,6 +32,8 @@ import WelcomeGuide from '@/components/dashboard/WelcomeGuide';
 import RecentUploads from '@/components/dashboard/RecentUploads';
 import GapTriageTable from '@/components/dashboard/GapTriageTable';
 import SettlementDetailDrawer from '@/components/shared/SettlementDetailDrawer';
+import SyncCommandBar from '@/components/dashboard/SyncCommandBar';
+import PushSafetyPreview from '@/components/admin/accounting/PushSafetyPreview';
 
 import ReconciliationHealthPanel from '@/components/dashboard/ReconciliationHealthPanel';
 import DataIntegrityScanner from '@/components/dashboard/DataIntegrityScanner';
@@ -509,6 +511,8 @@ export default function Dashboard() {
   const [settlementCounts, setSettlementCounts] = useState<Record<string, number>>({});
   const [readyToPushCount, setReadyToPushCount] = useState(0);
   const [koganMissingPdfCount, setKoganMissingPdfCount] = useState(0);
+  const [pushPreviewOpen, setPushPreviewOpen] = useState(false);
+  const [pushPreviewSettlements, setPushPreviewSettlements] = useState<Array<{ settlementId: string; marketplace: string }>>([]);
 
   // Derive API-connected marketplace codes dynamically from marketplace_connections + legacy token flags
   const apiConnectedCodes = useMemo(() => {
@@ -1044,6 +1048,18 @@ export default function Dashboard() {
                 onScanComplete={loadMarketplaces}
               />
 
+              {/* Sync Command Bar — primary user actions */}
+              <SyncCommandBar
+                onOpenPushPreview={(settlements) => {
+                  setPushPreviewSettlements(settlements);
+                  setPushPreviewOpen(true);
+                }}
+                onNavigateToMismatches={() => {
+                  switchView('settlements');
+                  switchSettlementsSubTab('overview');
+                }}
+              />
+
               {/* System status — consolidated connections + actions */}
               <SystemStatusStrip
                 showAiMapper={showAiMapper}
@@ -1329,6 +1345,16 @@ export default function Dashboard() {
         settlementId={drawerSettlementId}
         open={drawerOpen}
         onClose={() => { setDrawerOpen(false); setDrawerSettlementId(null); }}
+      />
+
+      <PushSafetyPreview
+        open={pushPreviewOpen}
+        onClose={() => { setPushPreviewOpen(false); setPushPreviewSettlements([]); }}
+        settlements={pushPreviewSettlements}
+        onConfirm={async () => {
+          setPushPreviewOpen(false);
+          setPushPreviewSettlements([]);
+        }}
       />
     </div>
   );
