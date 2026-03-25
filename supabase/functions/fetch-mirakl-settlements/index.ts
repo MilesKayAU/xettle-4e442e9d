@@ -490,6 +490,17 @@ async function fetchSettlementsForConnection(
       console.error(`[fetch-mirakl-settlements] Source priority check failed:`, spErr);
     }
 
+    // ─── API/CSV mismatch detection & auto-correction ───
+    try {
+      await detectAndCorrectCsvMismatch(
+        adminClient, userId, marketplaceCode,
+        periodStart || dateFrom, effectivePeriodEnd,
+        round2(totals.bank_deposit), settlementId,
+      );
+    } catch (mcErr: any) {
+      console.error(`[fetch-mirakl-settlements] CSV mismatch check failed:`, mcErr);
+    }
+
     imported++;
   }
 
