@@ -510,6 +510,100 @@ export async function executeTool(
         });
       }
 
+      case "analyzeReconciliationGap": {
+        const sid = toolInput.settlementId;
+        const [settRes, valRes] = await Promise.all([
+          serviceClient.from("settlements")
+            .select("settlement_id, marketplace, source, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, bank_deposit, net_amount, gst_on_income, gst_on_expenses, metadata")
+            .eq("user_id", userId)
+            .eq("settlement_id", sid)
+            .maybeSingle(),
+          serviceClient.from("marketplace_validation")
+            .select("reconciliation_difference, overall_status, reconciliation_status, reconciliation_confidence, reconciliation_confidence_reason")
+            .eq("user_id", userId)
+            .eq("settlement_id", sid)
+            .maybeSingle(),
+        ]);
+
+        const s = settRes.data;
+        if (!s) return JSON.stringify({ error: "Settlement not found", settlement_id: sid });
+
+        const sales = (s.sales_principal || 0) + (s.sales_shipping || 0);
+        const fees = Math.abs(s.seller_fees || 0) + Math.abs(s.fba_fees || 0) + Math.abs(s.storage_fees || 0) + Math.abs(s.advertising_costs || 0) + Math.abs(s.other_fees || 0);
+        const refunds = s.refunds || 0;
+        const reimbursements = s.reimbursements || 0;
+        const expectedNet = sales - fees + refunds + reimbursements;
+        const bankDeposit = s.bank_deposit || 0;
+        const computedGap = bankDeposit - expectedNet;
+        const validationGap = valRes.data?.reconciliation_difference ?? computedGap;
+        const absGap = Math.abs(validationGap);
+
+        // Rule-based diagnosis
+        const marketplace = (s.marketplace || "").toLowerCase();
+        const source = s.source || "";
+        let diagnosis = "";
+        let gapType: "real" | "artifact" | "uncertain" = "uncertain";
+
+        if (source === "api" && marketplace.includes("ebay")) {
+          const feeTotal = Math.abs(s.seller_fees || 0);
+          if (feeTotal > 0 && Math.abs(absGap - feeTotal) < 1.00) {
+            diagnosis = "eBay API returned net amounts (fees already deducted) but fees were subtracted again. This is a data artifact — re-sync eBay to fix.";
+            gapType = "artifact";
+          } else {
+            diagnosis = "eBay settlement may have stale data from a previous API sync.";
+            gapType = "uncertain";
+          }
+        } else if (marketplace.includes("kogan")) {
+          const hasPdf = s.metadata?.pdfMerged || s.metadata?.hasPdf;
+          if (!hasPdf) {
+            diagnosis = "Kogan CSV doesn't include returns, ad fees, or monthly seller fees. Upload the Remittance PDF to capture all deductions.";
+            gapType = "real";
+          } else {
+            diagnosis = "Kogan PDF adjustments may not have been fully captured.";
+            gapType = "uncertain";
+          }
+        } else if (marketplace.includes("bunnings")) {
+          diagnosis = bankDeposit < 0
+            ? "Bunnings bank deposit is negative — likely a fee-only period."
+            : "Bunnings PDF extraction can produce rounding errors.";
+          gapType = absGap < 5 ? "artifact" : "uncertain";
+        } else if (marketplace.includes("mydeal")) {
+          if ((s.sales_principal || 0) === 0 && Math.abs(s.seller_fees || 0) > 0) {
+            diagnosis = "MyDeal has fees but no sales captured — CSV column mapping may need review.";
+            gapType = "real";
+          }
+        } else if (marketplace.includes("shopify")) {
+          diagnosis = "Shopify payout may include GST components not broken out in fields.";
+          gapType = absGap < 2 ? "artifact" : "uncertain";
+        }
+
+        if (!diagnosis) {
+          diagnosis = validationGap > 0
+            ? "Bank deposit exceeds computed net — possible uncaptured income (reimbursements, adjustments)."
+            : "Computed net exceeds bank deposit — possible uncaptured deductions (ad spend, returns, fees).";
+        }
+
+        return JSON.stringify({
+          settlement_id: sid,
+          marketplace: s.marketplace,
+          financial_breakdown: {
+            sales,
+            fees,
+            refunds,
+            reimbursements,
+            expected_net: expectedNet,
+            bank_deposit: bankDeposit,
+          },
+          gap_amount: validationGap,
+          gap_direction: validationGap > 0 ? "bank_higher" : validationGap < 0 ? "net_higher" : "balanced",
+          gap_type: gapType,
+          diagnosis,
+          validation_status: valRes.data?.overall_status || "unknown",
+          reconciliation_confidence: valRes.data?.reconciliation_confidence,
+          confidence_reason: valRes.data?.reconciliation_confidence_reason,
+        });
+      }
+
       default:
         return JSON.stringify({ error: `Unknown tool: ${toolName}` });
     }
