@@ -814,12 +814,18 @@ export async function executeTool(
         }
 
         // ── Account mapping check ──
+        // Mappings are stored in app_settings as JSON: { "Category:Marketplace": "code", "Category": "code" }
         const REQUIRED_CATEGORIES = ["Sales", "Seller Fees", "Refunds", "Other Fees", "Shipping"];
-        const mappedCategories = (mappingRes.data || []).map((m: any) => m.category);
-        const missingMappings = REQUIRED_CATEGORIES.filter(c => !mappedCategories.includes(c));
+        const mappingJson = mappingRes.data?.value ? (typeof mappingRes.data.value === "string" ? JSON.parse(mappingRes.data.value) : mappingRes.data.value) : {};
+        const marketplaceName = (s.marketplace || "").charAt(0).toUpperCase() + (s.marketplace || "").slice(1); // e.g. "bunnings" -> "Bunnings"
+        const missingMappings = REQUIRED_CATEGORIES.filter(cat => {
+          // Check marketplace-specific key first (e.g. "Sales:Bunnings"), then base key (e.g. "Sales")
+          const specificKey = `${cat}:${marketplaceName}`;
+          return !mappingJson[specificKey] && !mappingJson[cat];
+        });
         let accountMappingWarning: string | null = null;
         if (missingMappings.length > 0) {
-          accountMappingWarning = `Missing account mappings for ${s.marketplace}: ${missingMappings.join(", ")}. Configure these in Settings > Account Mapping before pushing to Xero.`;
+          accountMappingWarning = `Missing account mappings for ${marketplaceName}: ${missingMappings.join(", ")}. Configure these in Settings > Account Mapping before pushing to Xero.`;
         }
 
         const result = {
