@@ -55,6 +55,7 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
     alertsRes,
     xeroTokensRes,
     mfnLinesRes,
+    validationCountsRes,
   ] = await Promise.all([
     // Settlements with status breakdowns (non-hidden, non-pre-boundary)
     supabase
@@ -94,6 +95,11 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
       .select('settlement_id, fulfilment_channel')
       .in('fulfilment_channel', ['MFN', 'MFN_inferred'])
       .limit(100),
+
+    // Validation pipeline counts — the canonical source of truth for stage counts
+    supabase
+      .from('marketplace_validation')
+      .select('overall_status'),
   ]);
 
   const settlements = settlementsRes.data || [];
