@@ -500,23 +500,33 @@ async function sweepUser(adminSupabase: any, userId: string) {
       if (s.marketplace === mc && s.status !== 'duplicate_suppressed' && !isReconciliationOnly(s.source, s.marketplace, s.settlement_id)) periodKeys.add(`${s.period_start} → ${s.period_end}`)
     }
 
-    // ── Kogan awareness: auto-generated settlements (shopify_auto_kogan_*) should create
-    // settlement_needed rows so the dashboard shows "Upload Needed" for these periods
+    // ── Recon-only awareness: auto-generated settlements should create
+    // settlement_needed rows so the dashboard shows "Upload Needed" for these periods.
+    // Applies to ALL marketplaces with recon-only data (Kogan, Shopify sub-channels, etc.)
     const autoOnlyPeriods = new Set<string>()
-    if (mc.toLowerCase().includes('kogan')) {
-      for (const s of (settlements || [])) {
-        if (s.marketplace === mc && s.status !== 'duplicate_suppressed' && isReconciliationOnly(s.source, s.marketplace, s.settlement_id)) {
-          const pk = `${s.period_start} → ${s.period_end}`
-          if (!periodKeys.has(pk)) {
-            autoOnlyPeriods.add(pk)
-            periodKeys.add(pk)
-          }
+    for (const s of (settlements || [])) {
+      if (s.marketplace === mc && s.status !== 'duplicate_suppressed' && isReconciliationOnly(s.source, s.marketplace, s.settlement_id)) {
+        const pk = `${s.period_start} → ${s.period_end}`
+        if (!periodKeys.has(pk)) {
+          autoOnlyPeriods.add(pk)
+          periodKeys.add(pk)
         }
       }
     }
 
-    // Only create synthetic monthly periods if NO real settlement periods exist for this marketplace
-    // This prevents phantom "full month" rows when actual settlements are fortnightly/weekly
+    // ── Synthetic month creation: only if NO settlement periods exist AND no auto-only periods
+    // This prevents duplicate rows where a real/auto period covers part of the month
+    // and a synthetic "full month" row covers the same month.
+    // Helper: check if any existing period overlaps the given month
+    const currentMonthYM = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
+    const existingCoversMonth = (ym: string): boolean => {
+      for (const pk of periodKeys) {
+        const pkStart = pk.split(' → ')[0] || ''
+        if (pkStart.startsWith(ym)) return true
+      }
+      return false
+    }
+
     if (periodKeys.size === 0) {
       const mcLower = mc.replace('_', ' ').toLowerCase()
       const mcPrefix = mc.split('_')[0].toLowerCase()
@@ -532,9 +542,12 @@ async function sweepUser(adminSupabase: any, userId: string) {
         periodKeys.add(monthLabel(mk))
       }
     }
-    if (periodKeys.size === 0) {
-      const now = new Date()
-      periodKeys.add(monthLabel(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`))
+    // Only add current month if nothing covers it yet
+    if (periodKeys.size === 0 || !existingCoversMonth(currentMonthYM)) {
+      // But ONLY if we truly have zero periods — avoid phantom rows
+      if (periodKeys.size === 0) {
+        periodKeys.add(monthLabel(currentMonthYM))
+      }
     }
 
     for (const pl of periodKeys) {
@@ -695,11 +708,14 @@ async function sweepUser(adminSupabase: any, userId: string) {
           const gap = Math.round((bankDeposit - computedNet) * 100) / 100
           record.reconciliation_difference = gap
 
-          if (settlement.reconciliation_status === 'reconciled') {
+          // Gap is the canonical truth — legacy reconciliation_status is advisory only.
+          // NEVER override with 'matched' if the computed gap exceeds tolerance.
+          if (Math.abs(gap) <= 1.00) {
             record.reconciliation_status = 'matched'
-            record.orders_found = true
-          } else if (Math.abs(gap) <= 1.00) {
-            record.reconciliation_status = 'matched'
+            // Preserve orders_found if legacy status was reconciled
+            if (settlement.reconciliation_status === 'reconciled') {
+              record.orders_found = true
+            }
           } else {
             record.reconciliation_status = 'warning'
           }
