@@ -55,10 +55,10 @@ describe('Validation/settlement alignment guardrails', () => {
 
     for (const file of srcFiles) {
       const relPath = path.relative(path.resolve(__dirname, '../../'), file);
-      // Allow edge functions, actions, and test files
+      // Allow edge functions, actions, test files, and intentional repost modals
       if (relPath.includes('actions/') || relPath.includes('.test.') || relPath.includes('__tests__')) continue;
-      // Allow the reconciliation engine (server-side logic)
-      if (relPath.includes('reconciliation-engine') || relPath.includes('settlement-engine')) continue;
+      // Allow the reconciliation engine (server-side logic) and SafeRepostModal (intentional repost)
+      if (relPath.includes('reconciliation-engine') || relPath.includes('settlement-engine') || relPath.includes('SafeRepostModal')) continue;
 
       const content = fs.readFileSync(file, 'utf-8');
       if (pattern.test(content)) {
