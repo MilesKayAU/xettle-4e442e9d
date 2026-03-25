@@ -1000,10 +1000,10 @@ function SettlementCell({ row }: { row: ValidationRow }) {
 }
 
 function RowAction({
-  row, pushing, syncing, isApiSynced, onUpload, onPush, onSync,
+  row, pushing, syncing, isApiSynced, onUpload, onPush, onSync, onReview,
 }: {
   row: ValidationRow; pushing: boolean; syncing?: boolean; isApiSynced?: boolean;
-  onUpload: () => void; onPush: () => void; onSync?: () => void;
+  onUpload: () => void; onPush: () => void; onSync?: () => void; onReview?: () => void;
 }) {
   const marketplaceLabel = MARKETPLACE_LABELS[row.marketplace_code] || row.marketplace_code;
   if (row.overall_status === 'settlement_needed' || row.overall_status === 'missing') {
