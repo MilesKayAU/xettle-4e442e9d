@@ -1626,10 +1626,17 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         refundsExGst: -refundsExGst,
       };
       
+      // Update ALL financial fields from PDF — not just bank_deposit
+      // Without this, the reconciliation formula sees the old CSV-only figures
+      // while bank_deposit reflects the PDF total, creating a gap.
       const { error } = await supabase
         .from('settlements')
         .update({
           bank_deposit: pdfResult.totalPaidAmount,
+          advertising_costs: adSpendExGst > 0 ? -adSpendExGst : 0,
+          other_fees: -(Math.abs((existing.metadata?.subscriptionAmount || 0)) + sellerFeeExGst),
+          refunds: -refundsExGst,
+          metadata: updatedMetadata,
         } as any)
         .eq('id', existing.id)
         .eq('user_id', user.id);

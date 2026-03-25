@@ -344,10 +344,13 @@ function buildSettlementFromPayout(
 
     switch (type) {
       case 'SALE': {
-        salesTotal += amount
+        // eBay API returns tx.amount as NET (fees already deducted).
+        // Reconstruct GROSS sales by adding fees back to prevent double-counting.
+        const grossAmount = amount + Math.abs(feeAmount)
+        salesTotal += grossAmount
         feesTotal -= Math.abs(feeAmount)
-        // Extract GST from eBay-provided fields or estimate
-        const gst = extractTransactionGst(tx, amount, currency)
+        // Extract GST using GROSS amount (GST is on the sale price, not net-of-fees)
+        const gst = extractTransactionGst(tx, grossAmount, currency)
         gstOnIncomeTotal += gst.taxAmount
         gstModeSet.add(gst.mode)
         // GST on fees (estimate only — eBay doesn't break out fee GST per-line)
@@ -359,9 +362,15 @@ function buildSettlementFromPayout(
       case 'REFUND':
         refundsTotal += amount // already negative from eBay
         break
-      case 'CREDIT':
-        salesTotal += amount
+      case 'CREDIT': {
+        // Same as SALE: eBay returns net amount, reconstruct gross
+        const grossCreditAmount = amount + Math.abs(feeAmount)
+        salesTotal += grossCreditAmount
+        if (feeAmount !== 0) {
+          feesTotal -= Math.abs(feeAmount)
+        }
         break
+      }
       case 'DISPUTE':
       case 'SHIPPING_LABEL':
       case 'TRANSFER':
