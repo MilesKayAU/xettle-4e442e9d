@@ -81,6 +81,45 @@ export const SCAN_DEFINITIONS: ScanDefinition[] = [
 export const MANUAL_SCANS = SCAN_DEFINITIONS.filter((d) => d.mode === 'manual');
 export const AUTO_SCANS = SCAN_DEFINITIONS.filter((d) => d.mode === 'auto');
 
+/**
+ * Returns count of unresolved API/CSV bank deposit mismatches.
+ * These are system_events where API data disagrees with stored CSV data.
+ */
+export async function getApiCsvMismatchCount(): Promise<{
+  total: number;
+  needsManualFix: number;
+  autoCorrected: number;
+}> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return { total: 0, needsManualFix: 0, autoCorrected: 0 };
+
+  const { data } = await supabase
+    .from('system_events')
+    .select('details')
+    .eq('user_id', session.user.id)
+    .eq('event_type', 'api_csv_bank_deposit_mismatch')
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (!data) return { total: 0, needsManualFix: 0, autoCorrected: 0 };
+
+  // Deduplicate by settlement_id, keep most recent
+  const seen = new Map<string, any>();
+  for (const row of data) {
+    const sid = row.details?.settlement_id;
+    if (sid && !seen.has(sid)) seen.set(sid, row.details);
+  }
+
+  let needsManualFix = 0;
+  let autoCorrected = 0;
+  for (const d of seen.values()) {
+    if (d.auto_corrected) autoCorrected++;
+    else needsManualFix++;
+  }
+
+  return { total: seen.size, needsManualFix, autoCorrected };
+}
+
 export interface ScanResult {
   key: string;
   success: boolean;
