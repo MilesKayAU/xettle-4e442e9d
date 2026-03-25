@@ -4,8 +4,8 @@ import { Badge } from '@/components/ui/badge';
 import { RefreshCw, ShieldCheck, Send, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { runFullUserSync, getLastSyncTime } from '@/actions/sync';
-import { getApiCsvMismatchCount } from '@/actions/dataIntegrity';
 import { supabase } from '@/integrations/supabase/client';
+import { callEdgeFunctionSafe } from '@/utils/sync-capabilities';
 import { formatDistanceToNow } from 'date-fns';
 
 interface SyncCommandBarProps {
@@ -19,8 +19,9 @@ export default function SyncCommandBar({ onOpenPushPreview, onNavigateToMismatch
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const [lastSyncLabel, setLastSyncLabel] = useState<string | null>(null);
 
-  const [verifying, setVerifying] = useState(false);
-  const [issueCount, setIssueCount] = useState<number | null>(null);
+  const [resolving, setResolving] = useState(false);
+  const [gapCount, setGapCount] = useState<number | null>(null);
+  const [resolveResult, setResolveResult] = useState<{ fixed: number; manual: number; unchanged: number } | null>(null);
 
   const [readyCount, setReadyCount] = useState(0);
   const [readySettlements, setReadySettlements] = useState<Array<{ settlementId: string; marketplace: string }>>([]);
@@ -29,31 +30,32 @@ export default function SyncCommandBar({ onOpenPushPreview, onNavigateToMismatch
 
   // Load initial data
   const loadData = useCallback(async () => {
-    const [syncTime, mismatch] = await Promise.all([
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const [syncTime, gapResult, readyResult] = await Promise.all([
       getLastSyncTime(),
-      getApiCsvMismatchCount(),
+      supabase
+        .from('marketplace_validation')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', session.user.id)
+        .eq('overall_status', 'gap_detected'),
+      supabase
+        .from('marketplace_validation')
+        .select('settlement_id, marketplace_code', { count: 'exact' })
+        .eq('user_id', session.user.id)
+        .eq('overall_status', 'ready_to_push'),
     ]);
 
     setLastSyncTime(syncTime);
     if (syncTime) {
       setLastSyncLabel(formatDistanceToNow(new Date(syncTime), { addSuffix: true }));
     }
-    setIssueCount(mismatch.needsManualFix);
-
-    // Load ready-to-push count
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      const { data, count } = await supabase
-        .from('marketplace_validation')
-        .select('settlement_id, marketplace_code', { count: 'exact' })
-        .eq('user_id', session.user.id)
-        .eq('overall_status', 'ready_to_push');
-
-      setReadyCount(count ?? 0);
-      setReadySettlements(
-        (data ?? []).map(r => ({ settlementId: r.settlement_id!, marketplace: r.marketplace_code }))
-      );
-    }
+    setGapCount(gapResult.count ?? 0);
+    setReadyCount(readyResult.count ?? 0);
+    setReadySettlements(
+      (readyResult.data ?? []).map(r => ({ settlementId: r.settlement_id!, marketplace: r.marketplace_code }))
+    );
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
@@ -74,12 +76,19 @@ export default function SyncCommandBar({ onOpenPushPreview, onNavigateToMismatch
       const result = await runFullUserSync();
       if (!result.success) {
         toast.error(result.error || 'Sync failed');
-      } else {
-        setSyncDone(true);
-        toast.success('All data refreshed');
-        setTimeout(() => setSyncDone(false), 3000);
-        await loadData();
+        return;
       }
+
+      // Trigger validation sweep so gap counts reflect new data immediately
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        await callEdgeFunctionSafe('run-validation-sweep', session.access_token, {});
+      }
+
+      setSyncDone(true);
+      toast.success('All data refreshed');
+      setTimeout(() => setSyncDone(false), 3000);
+      await loadData();
     } catch (err: any) {
       toast.error(`Sync failed: ${err.message}`);
     } finally {
@@ -87,50 +96,71 @@ export default function SyncCommandBar({ onOpenPushPreview, onNavigateToMismatch
     }
   };
 
-  const handleVerifyAll = async () => {
-    setVerifying(true);
+  const handleResolveGaps = async () => {
+    setResolving(true);
+    setResolveResult(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      // Get all settlements with API connections for verification
-      const { data: settlements } = await supabase
-        .from('settlements')
-        .select('settlement_id, marketplace')
+      // Get all gap_detected settlements
+      const { data: gaps } = await supabase
+        .from('marketplace_validation')
+        .select('settlement_id, marketplace_code')
         .eq('user_id', session.user.id)
-        .in('source', ['api', 'amazon_api', 'ebay_api', 'mirakl_api'])
-        .not('status', 'in', '("duplicate_suppressed","push_failed_permanent")')
-        .order('period_end', { ascending: false })
-        .limit(50);
+        .eq('overall_status', 'gap_detected');
 
-      if (!settlements || settlements.length === 0) {
-        setIssueCount(0);
-        toast.success('No API settlements to verify');
+      if (!gaps || gaps.length === 0) {
+        setGapCount(0);
+        toast.success('No gaps to resolve');
+        setResolving(false);
         return;
       }
 
-      let discrepancies = 0;
-      let matches = 0;
+      toast.info(`Resolving ${gaps.length} gap${gaps.length !== 1 ? 's' : ''}...`);
 
-      // Verify in batches
-      for (const s of settlements) {
-        const { data } = await supabase.functions.invoke('verify-settlement', {
-          body: { settlement_id: s.settlement_id },
-        });
-        if (data?.discrepancy) discrepancies++;
-        else matches++;
+      let fixed = 0;
+      let manual = 0;
+      let unchanged = 0;
+
+      for (const gap of gaps) {
+        if (!gap.settlement_id) { manual++; continue; }
+
+        try {
+          const { data } = await supabase.functions.invoke('verify-settlement', {
+            body: { settlement_id: gap.settlement_id, auto_correct: true },
+          });
+
+          if (data?.auto_corrected) {
+            fixed++;
+          } else if (data?.verdict === 'no_api_connection') {
+            manual++;
+          } else {
+            unchanged++;
+          }
+        } catch {
+          unchanged++;
+        }
       }
 
-      setIssueCount(discrepancies);
-      if (discrepancies === 0) {
-        toast.success(`All ${matches} settlements verified — no issues found`);
+      // Trigger validation sweep to recalculate all statuses
+      await callEdgeFunctionSafe('run-validation-sweep', session.access_token, {});
+
+      setResolveResult({ fixed, manual, unchanged });
+
+      if (fixed > 0) {
+        toast.success(`Fixed ${fixed} gap${fixed !== 1 ? 's' : ''}${manual > 0 ? ` · ${manual} need manual review` : ''}`);
+      } else if (manual > 0) {
+        toast.warning(`${manual} gap${manual !== 1 ? 's' : ''} need manual review — no API connection available`);
       } else {
-        toast.warning(`${discrepancies} discrepanc${discrepancies === 1 ? 'y' : 'ies'} found, ${matches} matched`);
+        toast.info('No gaps could be auto-resolved');
       }
+
+      await loadData();
     } catch (err: any) {
-      toast.error(`Verification failed: ${err.message}`);
+      toast.error(`Gap resolution failed: ${err.message}`);
     } finally {
-      setVerifying(false);
+      setResolving(false);
     }
   };
 
@@ -169,29 +199,31 @@ export default function SyncCommandBar({ onOpenPushPreview, onNavigateToMismatch
 
         <div className="h-8 w-px bg-border hidden sm:block" />
 
-        {/* Button 2: Verify All */}
+        {/* Button 2: Resolve Gaps */}
         <div className="flex flex-col items-start gap-0.5">
           <Button
             size="sm"
             variant="outline"
-            onClick={handleVerifyAll}
-            disabled={verifying}
+            onClick={handleResolveGaps}
+            disabled={resolving}
             className="gap-1.5"
           >
-            {verifying ? (
+            {resolving ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
               <ShieldCheck className="h-3.5 w-3.5" />
             )}
-            {verifying ? 'Verifying...' : 'Verify All'}
-            {issueCount !== null && issueCount > 0 && (
+            {resolving ? 'Resolving...' : 'Resolve Gaps'}
+            {gapCount !== null && gapCount > 0 && (
               <Badge variant="destructive" className="ml-1 h-5 px-1.5 text-[10px]">
-                {issueCount}
+                {gapCount}
               </Badge>
             )}
           </Button>
           <span className="text-[10px] text-muted-foreground pl-1">
-            {issueCount === null ? '—' : issueCount === 0 ? 'All clear' : `${issueCount} issue${issueCount !== 1 ? 's' : ''} found`}
+            {resolveResult
+              ? `${resolveResult.fixed} fixed · ${resolveResult.manual} manual · ${resolveResult.unchanged} unchanged`
+              : gapCount === null ? '—' : gapCount === 0 ? 'All clear' : `${gapCount} gap${gapCount !== 1 ? 's' : ''} detected`}
           </span>
         </div>
 
@@ -219,8 +251,8 @@ export default function SyncCommandBar({ onOpenPushPreview, onNavigateToMismatch
           </span>
         </div>
 
-        {/* Verify issues CTA */}
-        {issueCount !== null && issueCount > 0 && (
+        {/* Gap review CTA */}
+        {gapCount !== null && gapCount > 0 && (
           <>
             <div className="h-8 w-px bg-border hidden sm:block" />
             <button
@@ -228,7 +260,7 @@ export default function SyncCommandBar({ onOpenPushPreview, onNavigateToMismatch
               className="text-xs text-amber-600 hover:text-amber-700 hover:underline flex items-center gap-1"
             >
               <AlertTriangle className="h-3 w-3" />
-              Review discrepancies →
+              Review gaps →
             </button>
           </>
         )}
