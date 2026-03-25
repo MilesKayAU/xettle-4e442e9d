@@ -702,12 +702,22 @@ export default function AccountingDashboard() {
       if (lineErr) throw lineErr;
 
       // 3. Fetch settlement_unmapped
-      const { data: unmappedData, error: unmappedErr } = await supabase
-        .from('settlement_unmapped')
-        .select('*')
-        .eq('settlement_id', settlementTextId)
-        .eq('user_id', user.id);
+      const [unmappedRes, valRes] = await Promise.all([
+        supabase
+          .from('settlement_unmapped')
+          .select('*')
+          .eq('settlement_id', settlementTextId)
+          .eq('user_id', user.id),
+        supabase
+          .from('marketplace_validation')
+          .select('reconciliation_difference')
+          .eq('settlement_id', settlementTextId)
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      const { data: unmappedData, error: unmappedErr } = unmappedRes;
       if (unmappedErr) throw unmappedErr;
+      const validationReconDiff = (valRes.data as any)?.reconciliation_difference as number | null;
 
       // 4. Reconstruct ParsedSettlement
       const s = settData as any;
