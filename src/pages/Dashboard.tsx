@@ -1351,7 +1351,7 @@ export default function Dashboard() {
         open={pushPreviewOpen}
         onClose={() => { setPushPreviewOpen(false); setPushPreviewSettlements([]); }}
         settlements={pushPreviewSettlements}
-        onPushComplete={() => {
+        onConfirm={async () => {
           setPushPreviewOpen(false);
           setPushPreviewSettlements([]);
         }}

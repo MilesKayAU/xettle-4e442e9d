@@ -410,9 +410,7 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {isApiConnected && (
-            <SyncNowButton marketplaceCode={code} />
-          )}
+          {/* SyncNowButton removed — use Refresh All on Home dashboard */}
           <Button
             variant="outline"
             size="sm"

@@ -317,12 +317,12 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
               <Button
                 variant="outline"
                 size="sm"
-                onClick={(e) => handleFetchNow(e)}
+                onClick={(e) => handleTestConnection(e)}
                 disabled={fetching}
                 className="gap-1.5"
               >
                 {fetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                {fetching ? 'Fetching...' : 'Fetch Settlements'}
+                {fetching ? 'Testing...' : 'Test Connection'}
               </Button>
               <Button
                 variant="outline"
