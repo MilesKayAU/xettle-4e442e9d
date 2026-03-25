@@ -240,14 +240,26 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
   const loadApiSettlements = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('settlements')
-        .select('*')
-        .eq('source', 'api')
-        .like('marketplace', 'amazon_%')
-        .order('period_end', { ascending: false });
-      if (error) throw error;
-      setSettlements((data || []) as unknown as AutoImportedSettlement[]);
+      const [settRes, valRes] = await Promise.all([
+        supabase
+          .from('settlements')
+          .select('*')
+          .eq('source', 'api')
+          .like('marketplace', 'amazon_%')
+          .order('period_end', { ascending: false }),
+        supabase
+          .from('marketplace_validation')
+          .select('settlement_id, overall_status')
+          .like('marketplace_code', 'amazon_%'),
+      ]);
+      if (settRes.error) throw settRes.error;
+      setSettlements((settRes.data || []) as unknown as AutoImportedSettlement[]);
+      // Build validation status lookup by settlement_id
+      const valMap: Record<string, string> = {};
+      for (const v of (valRes.data || []) as any[]) {
+        if (v.settlement_id) valMap[v.settlement_id] = v.overall_status;
+      }
+      setValidationStatusMap(valMap);
     } catch {
       // silent
     } finally {
