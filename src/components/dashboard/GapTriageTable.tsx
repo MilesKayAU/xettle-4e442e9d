@@ -35,8 +35,8 @@ interface GapRow {
   sales_principal?: number;
   gst_on_income?: number;
   gst_on_expenses?: number;
-  metadata?: any;
-  net_amount?: number;
+  raw_payload?: any;
+  net_ex_gst?: number;
 }
 
 export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps) {
@@ -70,7 +70,7 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
       const settlementIds = validationRows.map(v => v.settlement_id).filter(Boolean);
       const { data: settlements } = await supabase
         .from('settlements' as any)
-        .select('settlement_id, source, marketplace, seller_fees, bank_deposit, sales_principal, gst_on_income, gst_on_expenses, metadata, net_amount')
+        .select('settlement_id, source, marketplace, seller_fees, bank_deposit, sales_principal, gst_on_income, gst_on_expenses, raw_payload, net_ex_gst')
         .in('settlement_id', settlementIds);
 
       const settlementMap = new Map((settlements || []).map((s: any) => [s.settlement_id, s]));
@@ -91,7 +91,7 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
           row.reconciliation_difference ?? null,
           row.overall_status,
           row.bank_deposit ?? null,
-          row.net_amount ?? null,
+          row.net_ex_gst ?? null,
         ]),
       );
 
@@ -234,11 +234,11 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
           {visibleRows.map(row => {
             const gap = getDisplayGap(
               { reconciliation_difference: row.reconciliation_difference },
-              { net_amount: row.net_amount ?? null, bank_deposit: row.bank_deposit ?? null }
+              { net_amount: row.net_ex_gst ?? null, bank_deposit: row.bank_deposit ?? null }
             );
             const absGap = Math.abs(gap || 0);
             const isBlocking = absGap > 1.00;
-            const diagnosis = diagnoseGapReason(row, gap || 0);
+            const diagnosis = diagnoseGapReason({ ...row, metadata: row.raw_payload }, gap || 0);
             const label = MARKETPLACE_LABELS[row.marketplace_code] || row.marketplace_code;
             const aiResult = aiResults[row.settlement_id];
             const isScanning = aiScanning === row.settlement_id;
