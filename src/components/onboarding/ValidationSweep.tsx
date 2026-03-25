@@ -828,7 +828,7 @@ export default function ValidationSweep({
                             </TooltipProvider>
                           )}
                           {!isReconciliationOnly(row.settlement_source, row.marketplace_code, row.settlement_id) && (
-                            <RowAction
+                             <RowAction
                               row={row}
                               pushing={pushing === row.id}
                               syncing={syncingRow === row.id}
@@ -836,6 +836,7 @@ export default function ValidationSweep({
                               onUpload={() => setUploadDialogRow({ marketplace_code: row.marketplace_code, period_label: row.period_label, period_start: row.period_start, period_end: row.period_end })}
                               onPush={() => handlePush(row)}
                               onSync={() => handleSyncRow(row)}
+                              onReview={() => { setDrawerSettlementId(row.settlement_id); setDrawerOpen(true); }}
                             />
                           )}
                         </div>
@@ -1000,10 +1001,10 @@ function SettlementCell({ row }: { row: ValidationRow }) {
 }
 
 function RowAction({
-  row, pushing, syncing, isApiSynced, onUpload, onPush, onSync,
+  row, pushing, syncing, isApiSynced, onUpload, onPush, onSync, onReview,
 }: {
   row: ValidationRow; pushing: boolean; syncing?: boolean; isApiSynced?: boolean;
-  onUpload: () => void; onPush: () => void; onSync?: () => void;
+  onUpload: () => void; onPush: () => void; onSync?: () => void; onReview?: () => void;
 }) {
   const marketplaceLabel = MARKETPLACE_LABELS[row.marketplace_code] || row.marketplace_code;
   if (row.overall_status === 'settlement_needed' || row.overall_status === 'missing') {
@@ -1049,7 +1050,7 @@ function RowAction({
   }
   if (row.overall_status === 'gap_detected') {
     return (
-      <Button variant="outline" size="sm" className="h-7 text-xs gap-1 border-red-200 text-red-700 dark:border-red-800 dark:text-red-400">
+      <Button variant="outline" size="sm" className="h-7 text-xs gap-1 border-red-200 text-red-700 dark:border-red-800 dark:text-red-400" onClick={onReview}>
         <AlertTriangle className="h-3 w-3" /> Review
       </Button>
     );

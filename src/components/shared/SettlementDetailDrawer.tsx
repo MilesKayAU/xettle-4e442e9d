@@ -84,6 +84,62 @@ function calculateReconGap(s: any): number {
   return bankDeposit - expectedNet;
 }
 
+/**
+ * Diagnose the likely cause of a reconciliation gap based on marketplace source and financial patterns.
+ */
+function diagnoseGapReason(settlement: any, gap: number): string | null {
+  const source = settlement.source || '';
+  const marketplace = (settlement.marketplace || '').toLowerCase();
+  const absGap = Math.abs(gap);
+
+  // eBay API: fee double-counting (pre-fix data)
+  if (source === 'api' && marketplace.includes('ebay')) {
+    const feeTotal = Math.abs(settlement.seller_fees || 0);
+    if (feeTotal > 0 && Math.abs(absGap - feeTotal) < 1.00) {
+      return 'eBay API returned net amounts (fees already deducted) but fees were subtracted again. Re-sync eBay to fix.';
+    }
+    return 'eBay settlement may have stale data. Try re-syncing from Settings → Connections.';
+  }
+
+  // Kogan: PDF adjustments missing
+  if (marketplace.includes('kogan')) {
+    const hasPdfMerge = settlement.metadata?.pdfMerged || settlement.metadata?.hasPdf;
+    if (!hasPdfMerge) {
+      return 'Kogan CSV doesn\'t include returns, ad fees, or monthly seller fees. Upload the Remittance PDF to capture all deductions.';
+    }
+    return 'Kogan PDF adjustments (returns, ad spend, seller fees) may not have been fully captured. Try re-merging the PDF.';
+  }
+
+  // Bunnings
+  if (marketplace.includes('bunnings')) {
+    if ((settlement.bank_deposit || 0) < 0) {
+      return 'Bunnings bank deposit is negative — this may be a monthly fee-only period with no sales. Verify in Marketplace Hub.';
+    }
+    return 'Bunnings PDF extraction can produce rounding errors. Check the original Remittance Advice.';
+  }
+
+  // MyDeal
+  if (marketplace.includes('mydeal')) {
+    if ((settlement.sales_principal || 0) === 0 && Math.abs(settlement.seller_fees || 0) > 0) {
+      return 'MyDeal settlement has fees but no sales captured — the CSV column mapping may need review in Format Inspector.';
+    }
+  }
+
+  // Shopify Payments
+  if (marketplace.includes('shopify')) {
+    const taxFields = (settlement.gst_on_income || 0) + (settlement.gst_on_expenses || 0);
+    if (Math.abs(taxFields) > 0 && absGap > 0) {
+      return 'Shopify payout may include GST components not broken out in individual fields. Check the payout report.';
+    }
+  }
+
+  // Generic
+  if (gap > 0) {
+    return 'Bank deposit is higher than computed net — there may be income (e.g. reimbursements, adjustments) not captured in the settlement fields.';
+  }
+  return 'Bank deposit is lower than computed net — there may be deductions (e.g. ad spend, returns, platform fees) not captured in the settlement fields.';
+}
+
 export default function SettlementDetailDrawer({ settlementId, open, onClose }: SettlementDetailDrawerProps) {
   const [settlement, setSettlement] = useState<any>(null);
   const [snapshot, setSnapshot] = useState<SnapshotDetails | null>(null);
@@ -472,29 +528,57 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose }: 
               )}
             </div>
 
-            {/* Reconciliation Gap Card */}
-            {settlement.reconciliation_status && settlement.reconciliation_status !== 'reconciled' && settlement.reconciliation_status !== 'matched' && (() => {
+            {/* Reconciliation Gap Card — always shown when gap > $0.05 */}
+            {(() => {
               const gap = calculateReconGap(settlement);
+              if (Math.abs(gap) <= 0.05) return null;
               const sales = (settlement.sales_principal || 0) + (settlement.sales_shipping || 0);
               const fees = Math.abs(settlement.seller_fees || 0) + Math.abs(settlement.fba_fees || 0) + Math.abs(settlement.storage_fees || 0) + Math.abs(settlement.advertising_costs || 0) + Math.abs(settlement.other_fees || 0);
               const expectedNet = sales - fees + (settlement.refunds || 0) + (settlement.reimbursements || 0);
+              const isBlocking = Math.abs(gap) > 1.00;
+              const diagnosis = diagnoseGapReason(settlement, gap);
               return (
-                <div className="rounded-lg border-2 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3 space-y-2">
+                <div className={cn(
+                  "rounded-lg border-2 p-3 space-y-2",
+                  isBlocking
+                    ? "border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20"
+                    : "border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20"
+                )}>
                   <div className="flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                    <span className="text-sm font-semibold text-amber-800 dark:text-amber-200">Reconciliation Gap: {formatAUD(Math.abs(gap))}</span>
+                    <AlertTriangle className={cn("h-4 w-4", isBlocking ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400")} />
+                    <span className={cn("text-sm font-semibold", isBlocking ? "text-red-800 dark:text-red-200" : "text-amber-800 dark:text-amber-200")}>
+                      Reconciliation Gap: {formatAUD(Math.abs(gap))}
+                      {isBlocking && " — Xero push blocked"}
+                    </span>
                   </div>
                   <div className="grid grid-cols-2 gap-1 text-xs">
-                    <span className="text-muted-foreground">Expected net (Sales − Fees + Refunds)</span>
+                    <span className="text-muted-foreground">Sales (principal + shipping)</span>
+                    <span className="font-mono text-right text-foreground">{formatAUD(sales)}</span>
+                    <span className="text-muted-foreground">Total fees</span>
+                    <span className="font-mono text-right text-foreground">−{formatAUD(fees)}</span>
+                    <span className="text-muted-foreground">Refunds</span>
+                    <span className="font-mono text-right text-foreground">{formatAUD(settlement.refunds || 0)}</span>
+                    <span className="text-muted-foreground">Reimbursements</span>
+                    <span className="font-mono text-right text-foreground">{formatAUD(settlement.reimbursements || 0)}</span>
+                    <Separator className="col-span-2 my-1" />
+                    <span className="text-muted-foreground">Expected net</span>
                     <span className="font-mono text-right text-foreground">{formatAUD(expectedNet)}</span>
                     <span className="text-muted-foreground">Actual bank deposit</span>
                     <span className="font-mono text-right text-foreground">{formatAUD(settlement.bank_deposit || 0)}</span>
                     <span className="text-muted-foreground font-medium">Difference</span>
-                    <span className="font-mono text-right font-medium text-amber-700 dark:text-amber-300">{gap >= 0 ? '+' : ''}{formatAUD(gap)}</span>
+                    <span className={cn("font-mono text-right font-medium", isBlocking ? "text-red-700 dark:text-red-300" : "text-amber-700 dark:text-amber-300")}>
+                      {gap >= 0 ? '+' : ''}{formatAUD(gap)}
+                    </span>
                   </div>
+                  {diagnosis && (
+                    <div className="rounded-md bg-background/50 border border-border p-2 mt-1">
+                      <p className="text-[11px] font-medium text-foreground mb-0.5">💡 Likely cause:</p>
+                      <p className="text-[11px] text-muted-foreground">{diagnosis}</p>
+                    </div>
+                  )}
                   {isEditable && !editing && (
-                    <p className="text-[11px] text-amber-700 dark:text-amber-300">
-                      The file's figures don't add up — click <strong>Edit Figures</strong> below to correct.
+                    <p className="text-[11px] text-muted-foreground">
+                      Click <strong>Edit Figures</strong> below to correct the amounts and resolve the gap.
                     </p>
                   )}
                 </div>
