@@ -33,6 +33,7 @@ interface SettlementDetailDrawerProps {
   settlementId: string | null; // settlement_id (text), not DB uuid
   open: boolean;
   onClose: () => void;
+  autoVerify?: boolean;
 }
 
 interface NormalizedLineItem {
