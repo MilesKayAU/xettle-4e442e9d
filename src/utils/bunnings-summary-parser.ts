@@ -219,13 +219,37 @@ export async function parseBunningsSummaryPdf(
     const normalisedFeesExGst = netFeesExGst > 0 ? 0 : netFeesExGst;
     const netFeesGst = Math.abs(negCommGst) - refundCommGst; // Absolute GST on fees
 
-    // ─── Total / net payout ────────────────────────────────────────
-    let netPayout: number;
-    const totalLineMatch = rawText.match(/\bTotal\b[^\n]*?(AUD\s*-?[\d,.]+)\s*(?:\n|$)/im);
-    if (totalLineMatch) {
-      netPayout = extractAmount(totalLineMatch[1]) ?? 0;
-    } else {
-      // Calculate from components
+    // ─── Total / net payout — priority-ordered extraction ─────────
+    let netPayout: number | null = null;
+
+    // Priority 1: "Amount due to seller"
+    const p1 = rawText.match(/Amount\s+due\s+to\s+seller[^\n]*?(AUD\s*-?[\d,.]+)/i);
+    if (p1) netPayout = extractAmount(p1[1]);
+
+    // Priority 2: "Total amount due"
+    if (netPayout === null) {
+      const p2 = rawText.match(/Total\s+amount\s+due[^\n]*?(AUD\s*-?[\d,.]+)/i);
+      if (p2) netPayout = extractAmount(p2[1]);
+    }
+
+    // Priority 3: "Net amount" or "Net payout"
+    if (netPayout === null) {
+      const p3 = rawText.match(/Net\s+(?:amount|payout)[^\n]*?(AUD\s*-?[\d,.]+)/i);
+      if (p3) netPayout = extractAmount(p3[1]);
+    }
+
+    // Priority 4: Last occurrence of standalone "Total" followed by AUD amount
+    // (avoids matching "Total subscription" or "Total commission")
+    if (netPayout === null) {
+      const allTotals = [...rawText.matchAll(/\bTotal\b(?!\s+(?:subscription|commission|payable|refund|shipping|manual|other|delivery))[^\n]*?(AUD\s*-?[\d,.]+)/gim)];
+      if (allTotals.length > 0) {
+        const lastMatch = allTotals[allTotals.length - 1];
+        netPayout = extractAmount(lastMatch[1]);
+      }
+    }
+
+    // Priority 5: Component calculation fallback
+    if (netPayout === null) {
       netPayout = Math.round((
         sales.inclGst +
         negCommInclGst +
