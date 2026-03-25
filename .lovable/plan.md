@@ -1,58 +1,42 @@
 
 
-# Fix Debit Period Detection in AI Gap Analysis
+## Diagnosis
 
-## Problem
-The `analyzeReconciliationGap` tool returns `contact_marketplace` for Bunnings settlement BUN-2301-2026-03-14, which has a negative bank deposit (-$50). This is a normal debit period (fees exceeded sales), not a gap requiring marketplace contact. The existing Bunnings branch (line 893) even diagnoses "fee-only period" but doesn't set the correct action.
+Two separate issues found:
 
-Additionally, `sync-settlement-to-xero` already handles ACCPAY for negative settlements (line 738: `netAmount < 0 → ACCPAY`), so no changes needed there.
+### Issue 1: verify-mirakl-settlement 401
+The edge function logs show ALL auth variants failing with 401 against `marketplace.bunnings.com.au`. The stored API key (`J@cobGuy1996...`) appears to be a password rather than a proper Mirakl API key. However, `fetch-mirakl-settlements` successfully created a `mirakl_api` settlement on March 23 using the same credential and same endpoint, so the key was valid 2 days ago. This is likely a credential expiry or rotation on Bunnings' side.
 
-## Plan
+**Before any code changes**: You need to verify your Bunnings Mirakl API key is still valid. Log into marketplace.bunnings.com.au seller portal and check if the API key has been rotated or expired. If it has, update it in Settings > API Connections.
 
-### 1. Add debit period detection at Priority 0 in the decision tree
-**File:** `supabase/functions/_shared/ai_tool_registry.ts` (~line 846, before the existing `if` chain)
+### Issue 2: Auto-correction not triggering
+The scheduled-sync orchestrator DOES call `fetch-mirakl-settlements` (Step 4.7, line 340), but it only runs if the elapsed time hasn't exceeded 4 minutes. Looking at the system_events, there are zero `mirakl_fetch_complete` events — the Mirakl step is being skipped every cycle due to the elapsed timeout (Amazon, eBay, Shopify all run first and consume the time budget).
 
-Insert two new rules before all existing checks:
-- **Priority 0a:** `bankDeposit < 0 && expectedNet > 0` — marketplace debited the account; fees/refunds exceeded sales
-- **Priority 0b:** `bankDeposit < 0 && expectedNet <= 0` — pure fee debit, no sales
+### Plan (code changes needed)
 
-Both set `recommended_action = 'record_as_bill'` with clear explanation that this should be an ACCPAY bill in Xero.
+**Step 1 — Fix Mirakl priority in scheduled-sync**
+Move the Mirakl fetch step earlier in the pipeline (before Shopify channel scan) or add an independent elapsed check that ensures Mirakl gets at least one attempt per cycle. Currently Amazon (Step 4), eBay (Step 4.5), and Shopify (Step 5) consume the entire 4-minute budget, so Mirakl at Step 4.7 is always skipped.
 
-### 2. Update the Bunnings-specific branch
-**File:** `supabase/functions/_shared/ai_tool_registry.ts` (lines 893-905)
+**Step 2 — Add mirakl_fetch_complete event logging**
+The fetch-mirakl-settlements function does not log a `mirakl_fetch_complete` system_event like the other fetch functions do. Add this so the Data Integrity scanner can track Mirakl sync freshness.
 
-The Bunnings branch currently handles `bankDeposit < 0` in diagnosis text but still falls through. After fix #1, debit periods will be caught before reaching this branch, so no change needed here — but we'll verify the flow is correct.
+**Step 3 — Credential validation surface**
+The verify function's 401 retry loop is correct but the underlying credential is rejected. No code fix will resolve this — the user needs to re-validate or re-enter their Bunnings API key. Add a clearer error message in the UI: "Your Bunnings API key was rejected — please verify it's still valid in the Bunnings seller portal and update in Settings > API Connections."
 
-### 3. Add `record_as_bill` to the client-side registry
-**File:** `src/ai/tools/aiToolRegistry.ts`
+### Technical detail
 
-Update the tool description to mention the `record_as_bill` action in the available actions list.
+```text
+Current pipeline order (4-min budget):
+  Step 1: Xero audit
+  Step 2: Bank txns
+  Step 3: Sync windows
+  Step 4: Amazon           ← often takes 60-90s
+  Step 4.5: eBay           ← often takes 30-60s
+  Step 4.7: Mirakl         ← STARVED (timeout reached)
+  Step 5: Shopify          ← sometimes runs
+  Step 5.5: Channel scan
 
-### 4. Redeploy the edge function
-Deploy `ai-assistant` to pick up the updated `ai_tool_registry.ts`.
-
-## Technical Detail
-
-The debit period check inserts at line ~846, before `if (xeroMatch && ...)`:
-
-```typescript
-// Priority 0 — Debit period: bank deposit is negative
-if (bankDeposit < 0 && expectedNet > 0) {
-  diagnosis = `Bank deposit is negative ($${bankDeposit.toFixed(2)}), meaning the marketplace debited your account this period. Fees and refunds exceeded sales. This should be recorded as a bill (ACCPAY) in Xero.`;
-  gapType = "debit_period";
-  recommendedAction = "record_as_bill";
-  recommendedActionReason = `Bank deposit is -$${Math.abs(bankDeposit).toFixed(2)} against computed net of $${expectedNet.toFixed(2)}. This is a debit period where marketplace deductions exceeded sales. Record as an ACCPAY bill, not an ACCREC invoice.`;
-} else if (bankDeposit < 0 && expectedNet <= 0) {
-  diagnosis = `Both bank deposit ($${bankDeposit.toFixed(2)}) and computed net ($${expectedNet.toFixed(2)}) are negative. Pure fee debit period with no net sales.`;
-  gapType = "debit_period";
-  recommendedAction = "record_as_bill";
-  recommendedActionReason = `Pure fee debit period. Record as ACCPAY bill in Xero.`;
-}
+Proposed: Interleave Mirakl with eBay (both are fast) or add a
+per-step time budget so each rail gets at least one attempt.
 ```
-
-The existing `sync-settlement-to-xero` line 738 already does `netAmount < 0 → ACCPAY` for all marketplaces including Bunnings — no changes needed there.
-
-## Files Modified
-- `supabase/functions/_shared/ai_tool_registry.ts` — add debit period rules
-- `src/ai/tools/aiToolRegistry.ts` — update description
 
