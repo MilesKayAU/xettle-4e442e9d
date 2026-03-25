@@ -189,33 +189,23 @@ export default function MiraklConnectionPanel({ onSettlementsAutoFetched, market
     }
   };
 
-  const handleFetchNow = async (e?: React.MouseEvent) => {
+  const handleTestConnection = async (e?: React.MouseEvent) => {
     e?.preventDefault();
     setFetching(true);
     setLastError(null);
     try {
-      const { data, error } = await supabase.functions.invoke('fetch-mirakl-settlements');
+      const { data, error } = await supabase.functions.invoke('mirakl-auth', {
+        headers: { 'x-action': 'status' },
+      });
       if (error) throw error;
-      if (data?.error) {
-        const msg = data.error;
-        setLastError(msg);
-        if (msg.includes('401') || msg.toLowerCase().includes('unauthorized')) {
-          toast.error('API credentials are invalid or expired. Please reconnect with updated credentials.');
-        } else {
-          toast.error(`Sync error: ${msg}`);
-        }
-        return;
+      if (data?.connected) {
+        toast.success(`${connection?.marketplace_label || 'Mirakl'} connection is working ✓`);
+      } else {
+        toast.error('Connection test failed — credentials may be invalid');
       }
-      const { imported = 0, skipped = 0, empty_skipped = 0 } = data || {};
-      const parts = [];
-      if (imported > 0) parts.push(`${imported} imported`);
-      if (skipped > 0) parts.push(`${skipped} duplicates skipped`);
-      if (empty_skipped > 0) parts.push(`${empty_skipped} empty periods skipped`);
-      toast.success(parts.length > 0 ? `Done! ${parts.join(', ')}.` : 'No new settlements found.');
-      if (imported > 0) onSettlementsAutoFetched?.();
     } catch (err: any) {
       setLastError(err.message);
-      toast.error(`Fetch failed: ${err.message}`);
+      toast.error(`Connection test failed: ${err.message}`);
     } finally {
       setFetching(false);
     }
