@@ -1,0 +1,1 @@
+UPDATE public.mirakl_tokens SET api_key = 'bfb2d8a3-914b-4d8e-828b-3d75199754c5', updated_at = now() WHERE id = '3d36f8ce-b176-4da7-b156-fff65c37c8bb'
