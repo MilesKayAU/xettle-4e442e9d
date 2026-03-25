@@ -561,7 +561,7 @@ Deno.serve(async (req) => {
   try {
     const { userId } = await verifyRequest(req, { requireAdmin: true });
     const body = await req.json();
-    const { settlement_id } = body;
+    const { settlement_id, auto_correct } = body;
 
     if (!settlement_id) {
       return new Response(
@@ -586,7 +586,7 @@ Deno.serve(async (req) => {
     }
 
     const marketplace = (settlement.marketplace || "").toLowerCase();
-    console.log(`[verify-settlement] Routing: marketplace=${marketplace}, source=${settlement.source}`);
+    console.log(`[verify-settlement] Routing: marketplace=${marketplace}, source=${settlement.source}, auto_correct=${!!auto_correct}`);
 
     let result: StandardResponse;
 
@@ -620,8 +620,71 @@ Deno.serve(async (req) => {
       };
     }
 
+    // ── Auto-correct logic ──
+    let autoCorrected = false;
+    if (
+      auto_correct &&
+      result.verdict === "discrepancy" &&
+      result.discrepancies.length > 0 &&
+      !["pushed_to_xero", "already_recorded"].includes(settlement.status)
+    ) {
+      // Build update payload from API-verified values
+      const corrections: Record<string, { old: number; new: number }> = {};
+      const updatePayload: Record<string, any> = {};
+
+      const FIELD_MAP: Record<string, string> = {
+        bank_deposit: "bank_deposit",
+        sales_principal: "sales_principal",
+        sales_shipping: "sales_shipping",
+        seller_fees: "seller_fees",
+        refunds: "refunds",
+        gst_on_income: "gst_on_income",
+      };
+
+      for (const d of result.discrepancies) {
+        const dbField = FIELD_MAP[d.field];
+        if (dbField && Math.abs(d.difference) > 1.00) {
+          corrections[dbField] = { old: d.stored_value, new: d.api_value };
+          updatePayload[dbField] = d.api_value;
+        }
+      }
+
+      if (Object.keys(updatePayload).length > 0) {
+        // Log BEFORE writing correction
+        await adminClient.from("system_events").insert({
+          user_id: userId,
+          event_type: "gap_auto_corrected",
+          severity: "info",
+          details: {
+            settlement_id,
+            marketplace: settlement.marketplace,
+            corrections,
+            triggered_by: "resolve_gaps_button",
+            corrected_at: new Date().toISOString(),
+          },
+        });
+
+        // Apply corrections
+        updatePayload.sync_origin = "api_corrected";
+        updatePayload.updated_at = new Date().toISOString();
+
+        const { error: updateErr } = await adminClient
+          .from("settlements")
+          .update(updatePayload)
+          .eq("settlement_id", settlement_id)
+          .eq("user_id", userId);
+
+        if (updateErr) {
+          console.error("[verify-settlement] Auto-correct update failed:", updateErr.message);
+        } else {
+          autoCorrected = true;
+          console.log(`[verify-settlement] Auto-corrected ${settlement_id}: ${JSON.stringify(corrections)}`);
+        }
+      }
+    }
+
     return new Response(
-      JSON.stringify(result),
+      JSON.stringify({ ...result, auto_corrected: autoCorrected }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err: any) {
