@@ -1,0 +1,1 @@
+ALTER TABLE public.marketplace_validation ADD CONSTRAINT uq_marketplace_validation_user_settlement UNIQUE (user_id, settlement_id);
