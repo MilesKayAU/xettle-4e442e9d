@@ -60,7 +60,7 @@ export const AI_TOOL_REGISTRY: AiToolDef[] = [
   },
   {
     name: "analyzeReconciliationGap",
-    description: "[Read-only] Comprehensive forensic analysis of a settlement's reconciliation gap. Cross-references Xero invoice status, bank deposits, line items, fee observations, and outstanding invoices. Returns structured recommended_action enum for UI action buttons.",
+    description: "[Read-only] Comprehensive forensic analysis of a settlement's reconciliation gap. Cross-references Xero invoice status, bank deposits, line items, fee observations, and outstanding invoices. Returns structured recommended_action enum (record_as_bill, mark_already_recorded, rounding_safe_to_push, push_to_xero, await_payout, contact_marketplace, etc.) for UI action buttons.",
     availableOn: ["dashboard", "settlements", "settlement_detail"],
   },
 ];
