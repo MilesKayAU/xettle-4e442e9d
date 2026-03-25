@@ -389,6 +389,7 @@ export default function SettlementsOverview({
                           size="sm"
                           className="h-6 w-6 p-0"
                           onClick={() => {
+                            setDrawerAutoVerify(false);
                             setDrawerSettlementId(row.latestSettlementId);
                             setDrawerOpen(true);
                           }}
@@ -397,6 +398,28 @@ export default function SettlementsOverview({
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent side="left" className="text-xs">Preview settlement</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+                {row.latestSettlementId && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-[10px] px-2 gap-1"
+                          onClick={() => {
+                            setDrawerAutoVerify(true);
+                            setDrawerSettlementId(row.latestSettlementId);
+                            setDrawerOpen(true);
+                          }}
+                        >
+                          <Zap className="h-3 w-3" />
+                          Verify
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="left" className="text-xs">Verify via API &amp; auto-correct</TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 )}
