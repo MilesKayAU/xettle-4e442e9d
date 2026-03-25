@@ -15,7 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import {
   Trash2, Loader2, FileText, Upload, ArrowRight, Send, SkipForward,
   CheckSquare, Square, Eye, ShieldCheck, ShieldAlert,
-  Download, RefreshCw, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, CloudUpload, BarChart3, Scale, Filter, Zap
+  Download, RefreshCw, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, CloudUpload, BarChart3, Scale, Filter
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
