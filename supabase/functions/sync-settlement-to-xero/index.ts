@@ -685,8 +685,20 @@ serve(async (req) => {
       throw new Error('Missing settlementId — reference is generated server-side and requires a settlement identifier');
     }
     const splitSuffix = body.splitPart ? `-P${body.splitPart}` : '';
-    const reference = `Xettle-${settlementId}${splitSuffix}`;
     const cacheSettlementKey = `${settlementId}${splitSuffix}`;
+
+    // ─── KOGAN AUMKA REFERENCE OVERRIDE ─────────────────────────────
+    // Kogan settlements use the AUMKA reference string (e.g. AUMKA:KOG:AU:20260131)
+    // instead of Xettle-{id} to match existing Xero invoices and bookkeeper conventions.
+    const settlementMarketplace = body.settlementData?.marketplace || body.marketplace || '';
+    let reference: string;
+    if (settlementMarketplace === 'kogan' && body.settlementData?.period_end) {
+      const dateStr = String(body.settlementData.period_end).replace(/-/g, '');
+      reference = `AUMKA:KOG:AU:${dateStr}`;
+      console.log(`[kogan-ref] Using AUMKA reference: ${reference}`);
+    } else {
+      reference = `Xettle-${settlementId}${splitSuffix}`;
+    }
 
     // ─── IDEMPOTENCY LOCK — prevents double-click / retry / concurrent push ──
     // Acquires a per-settlement mutex via acquire_sync_lock RPC.
@@ -1259,7 +1271,7 @@ serve(async (req) => {
       bigw: 'Big W Marketplace',
       catch: 'Catch Marketplace',
       mydeal: 'MyDeal Marketplace',
-      kogan: 'Kogan Marketplace',
+      kogan: 'Kogan Australia Pty Ltd',
       woolworths: 'Woolworths Marketplace',
       woolworths_marketplus: 'Woolworths MarketPlus',
       ebay_au: 'eBay Australia',
