@@ -119,6 +119,7 @@ const SETTINGS_HELP: Record<string, string> = {
   fulfilment_methods: 'Tell Xettle how each marketplace fulfils orders — FBA (marketplace ships it), self-ship, or mixed. This affects profit calculations because shipping costs differ. If you self-ship, you can also enter your average postage cost per order.',
   data_quality: 'Tools to fix historical data issues — re-sync marketplace labels, correct misclassified settlements, and clean up any data that was imported incorrectly. Use this if you notice wrong marketplace names or categories on older records.',
   active_marketplaces: 'Toggle marketplaces on or off site-wide. Deactivated marketplaces are hidden from all scoring, syncs, posting, and reconciliation views across the entire app.',
+  upload_preferences: 'Control how re-uploads and duplicate settlements are handled. By default, Xettle uses smart context-aware behaviour — auto re-parsing problem settlements and asking before overwriting clean ones.',
 };
 
 function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConnected: boolean; onConnectXero: () => void; onGoToUpload: () => void }) {
