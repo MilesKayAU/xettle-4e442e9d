@@ -1103,9 +1103,13 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       const { data: { user } } = await supabase.auth.getUser();
 
       for (const s of settlements) {
-        const result = await saveSettlement(s);
+        const isOverwrite = df.forceOverwrite === true;
+        const result = isOverwrite ? await overwriteSettlement(s) : await saveSettlement(s);
         if (result.success) {
           savedCount++;
+          if (result.overwritten) {
+            toast.success(`Re-parsed & overwritten: ${s.settlement_id}`);
+          }
 
           // Save settlement_lines for drill-down
           if (user && marketplace === 'woolworths_marketplus' && woolworthsRows.length > 0) {
