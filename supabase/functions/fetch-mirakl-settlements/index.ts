@@ -117,7 +117,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ─── Item 6: Load accounting boundary date ───
+    // Load accounting boundary date
     const { data: boundaryRow } = await adminClient
       .from("app_settings")
       .select("value")
@@ -154,7 +154,7 @@ Deno.serve(async (req) => {
     const errors = allResults.filter((r) => r.error);
     console.log(`[fetch-mirakl-settlements] ✅ Done — imported: ${totalImported}, skipped: ${totalSkipped}, empty: ${totalEmpty}, errors: ${errors.length}`);
 
-    // Log mirakl_fetch_complete event for Data Integrity scanner freshness tracking
+    // Log mirakl_fetch_complete event
     await adminClient.from("system_events").insert({
       user_id: targetUserId,
       event_type: "mirakl_fetch_complete",
@@ -197,8 +197,30 @@ Deno.serve(async (req) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// CORE FETCH + MAP LOGIC — IV01 PRIMARY, TL05 LINE-ITEM FALLBACK
+// CORE FETCH — HYBRID: IV01 billing cycle calendar + TL05 transactions
+//
+// IV01 (/api/invoices) returns COMMISSION invoices — operator fees
+// charged TO the seller. These give us authoritative billing cycle
+// date ranges and fee breakdowns.
+//
+// TL05 (/api/sellerpayment/transactions_logs) returns individual
+// order transactions — sales, refunds, payments. These give us
+// the full settlement data including bank_deposit (payout amount).
+//
+// Hybrid approach:
+//   1. IV01 → discover billing cycle date ranges + fee amounts
+//   2. TL05 → fetch all transactions, group by IV01 cycle dates
+//   3. Sum TL05 transactions per cycle for authoritative totals
 // ═══════════════════════════════════════════════════════════════
+
+interface BillingCycle {
+  cycleNumber: string;
+  periodStart: string;
+  periodEnd: string;
+  iv01Commission: number;
+  iv01Tax: number;
+  iv01Subscription: number;
+}
 
 async function fetchSettlementsForConnection(
   adminClient: any,
@@ -210,6 +232,8 @@ async function fetchSettlementsForConnection(
 ) {
   const baseUrl = connection.base_url.replace(/\/$/, "");
   const marketplaceCode = (connection.marketplace_label || "mirakl").toLowerCase().replace(/\s+/g, "_");
+  const shopId = connection.seller_company_id && connection.seller_company_id !== "default"
+    ? connection.seller_company_id : null;
 
   // Default to 90 days if no sync_from
   const defaultFrom = new Date();
@@ -217,433 +241,205 @@ async function fetchSettlementsForConnection(
   const dateFrom = syncFrom || defaultFrom.toISOString().split("T")[0];
 
   // ═══════════════════════════════════════════════════════════════
-  // STEP 1: Fetch billing cycles via IV01 (Accounting Documents)
-  // This is the AUTHORITATIVE source for payout amounts
+  // STEP 1: Fetch billing cycles from IV01 (Accounting Documents)
+  // These are COMMISSION invoices, not payouts.
+  // We use them to discover billing cycle date ranges.
   // ═══════════════════════════════════════════════════════════════
 
-  const iv01Url = `${baseUrl}/api/invoices?${new URLSearchParams({
-    type: "ALL",
-    limit: "50",
-    start_date: `${dateFrom}T00:00:00Z`,
-  })}`;
+  let billingCycles: BillingCycle[] = [];
 
-  console.log(`[fetch-mirakl-settlements] 🌐 IV01 URL: ${iv01Url}`);
+  try {
+    const iv01Url = `${baseUrl}/api/invoices?${new URLSearchParams({
+      type: "ALL",
+      limit: "50",
+      start_date: `${dateFrom}T00:00:00Z`,
+    })}`;
 
-  const iv01Res = await fetch(iv01Url, {
-    headers: {
-      [authResult.headerName]: authResult.headerValue,
-      Accept: "application/json",
-    },
-  });
+    console.log(`[fetch-mirakl-settlements] 🌐 IV01 URL: ${iv01Url}`);
 
-  console.log(`[fetch-mirakl-settlements] 📡 IV01 Response status: ${iv01Res.status}`);
-
-  if (!iv01Res.ok) {
-    const errorText = await iv01Res.text().catch(() => "");
-    console.error(`[fetch-mirakl-settlements] ❌ IV01 API error ${iv01Res.status}: ${errorText.slice(0, 500)}`);
-
-    // If IV01 fails, fall back to TL05 legacy path
-    console.log(`[fetch-mirakl-settlements] ⚠️ IV01 failed — falling back to TL05 transaction logs`);
-    return await fetchSettlementsViaTL05(adminClient, userId, connection, authResult, dateFrom, accountingBoundary);
-  }
-
-  const iv01Data = await iv01Res.json();
-  const invoices = iv01Data.invoices || iv01Data.data || [];
-
-  console.log(`[fetch-mirakl-settlements] 📦 IV01 response keys: ${Object.keys(iv01Data).join(", ")}`);
-  console.log(`[fetch-mirakl-settlements] 📦 IV01 invoices count: ${Array.isArray(invoices) ? invoices.length : "not an array"}`);
-
-  if (Array.isArray(invoices) && invoices.length > 0) {
-    console.log(`[fetch-mirakl-settlements] 📦 IV01 invoice[0] keys: ${Object.keys(invoices[0]).join(", ")}`);
-    console.log(`[fetch-mirakl-settlements] 📦 IV01 invoice[0] sample: ${JSON.stringify(invoices[0]).slice(0, 500)}`);
-  }
-
-  if (!Array.isArray(invoices) || invoices.length === 0) {
-    console.log(`[fetch-mirakl-settlements] ⚠️ IV01 returned no invoices — falling back to TL05`);
-    return await fetchSettlementsViaTL05(adminClient, userId, connection, authResult, dateFrom, accountingBoundary);
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  // STEP 2: Process each billing cycle invoice
-  // ═══════════════════════════════════════════════════════════════
-
-  let imported = 0;
-  let skipped = 0;
-  let emptySkipped = 0;
-
-  for (const invoice of invoices) {
-    try {
-      // Extract billing cycle number — the canonical identifier
-      const cycleNumber = invoice.accounting_document_number
-        || invoice.invoice_id
-        || invoice.id
-        || null;
-
-      if (!cycleNumber) {
-        console.warn(`[fetch-mirakl-settlements] ⚠️ Invoice missing cycle number, skipping`);
-        skipped++;
-        continue;
-      }
-
-      // Extract authoritative payout amount from IV01
-      // Bunnings IV01 actual fields: total_charged_amount, total_amount_excl_taxes,
-      // total_amount_incl_taxes, total_taxes, payment (nested), summary (nested)
-      const rawPayoutField =
-        invoice.total_charged_amount ??
-        invoice.amount_due_to_seller ??
-        invoice.total_amount_due_to_seller ??
-        invoice.seller_amount ??
-        invoice.total_amount_incl_taxes ??
-        invoice.net_amount ??
-        invoice.amount_transferred ??
-        invoice.total_amount ??
-        invoice.amount ??
-        // Check nested payment object
-        (invoice.payment && typeof invoice.payment === "object" ? invoice.payment.amount : null) ??
-        null;
-      const bankDeposit = rawPayoutField !== null ? parseFloat(String(rawPayoutField)) : NaN;
-
-      if (isNaN(bankDeposit)) {
-        console.warn(`[fetch-mirakl-settlements] ⚠️ Invoice ${cycleNumber} has no parseable payout amount — skipping`);
-        // Log the FULL invoice for diagnostics so we can see nested field values
-        await adminClient.from("system_events").insert({
-          user_id: userId,
-          event_type: "mirakl_iv01_no_payout_amount",
-          severity: "warning",
-          marketplace_code: marketplaceCode,
-          details: {
-            cycle_number: cycleNumber,
-            invoice_keys: Object.keys(invoice),
-            marketplace: connection.marketplace_label,
-            invoice_sample: JSON.stringify(invoice).slice(0, 2000),
-          },
-        });
-        skipped++;
-        continue;
-      }
-
-      // Zero-guard: skip zero-amount invoices
-      if (Math.abs(bankDeposit) < 0.01) {
-        emptySkipped++;
-        continue;
-      }
-
-      // Extract dates — Bunnings uses start_time/end_time, not start_date/end_date
-      const periodStart = invoice.start_time?.split("T")[0]
-        || invoice.start_date?.split("T")[0]
-        || invoice.date_created?.split("T")[0]
-        || dateFrom;
-      const periodEnd = invoice.end_time?.split("T")[0]
-        || invoice.end_date?.split("T")[0]
-        || invoice.due_date?.split("T")[0]
-        || invoice.issue_date?.split("T")[0]
-        || new Date().toISOString().split("T")[0];
-
-      // Extract component amounts — use actual Bunnings IV01 field names
-      const totalSales = parseFloat(String(
-        invoice.total_amount_excl_taxes ??
-        invoice.total_amount_excluding_taxes ??
-        invoice.total_order_amount ?? 0
-      )) || 0;
-      const totalCommission = parseFloat(String(
-        invoice.total_commission ??
-        invoice.commission_amount ??
-        invoice.operator_amount ?? 0
-      )) || 0;
-      const totalTax = parseFloat(String(
-        invoice.total_taxes ??
-        invoice.total_tax ??
-        invoice.tax_amount ?? 0
-      )) || 0;
-      const totalRefunds = parseFloat(String(
-        invoice.total_refund_amount ??
-        invoice.refund_amount ?? 0
-      )) || 0;
-
-      // Build settlement ID matching the CSV convention
-      const settlementId = `BUN-${cycleNumber}-${periodEnd}`;
-
-      console.log(`[fetch-mirakl-settlements] 📊 IV01 cycle ${cycleNumber}: bank_deposit=${bankDeposit}, period=${periodStart}→${periodEnd}`);
-
-      // ─── Boundary check ───
-      let isPreBoundary = false;
-      if (accountingBoundary && periodEnd < accountingBoundary) {
-        isPreBoundary = true;
-      }
-
-      // ─── Reconciliation check ───
-      // With IV01 the payout IS the authoritative amount, so recon is always clean
-      // unless we fetched component amounts that don't add up
-      const calculatedComponents = round2(totalSales + totalCommission + totalTax + totalRefunds);
-      const hasComponents = Math.abs(totalSales) > 0.01 || Math.abs(totalCommission) > 0.01;
-      const reconDiff = hasComponents ? Math.abs(calculatedComponents - bankDeposit) : 0;
-      const reconStatus = reconDiff >= 1.0 ? "recon_warning" : "reconciled";
-
-      if (reconDiff >= 1.0) {
-        await adminClient.from("system_events").insert({
-          user_id: userId,
-          event_type: "mirakl_reconciliation_mismatch",
-          severity: "warning",
-          marketplace_code: marketplaceCode,
-          details: {
-            cycle_number: cycleNumber,
-            calculated_components: calculatedComponents,
-            bank_deposit: bankDeposit,
-            difference: round2(reconDiff),
-            marketplace: connection.marketplace_label,
-            source: "iv01",
-          },
-        });
-      }
-
-      const settlementStatus = isPreBoundary
-        ? "pre_boundary"
-        : reconStatus === "recon_warning" ? "recon_warning" : "saved";
-
-      // ─── Upsert settlement ───
-      const settlementRow = {
-        user_id: userId,
-        settlement_id: settlementId,
-        marketplace: marketplaceCode,
-        period_start: periodStart,
-        period_end: periodEnd,
-        bank_deposit: round2(bankDeposit),
-        sales_principal: round2(totalSales),
-        sales_shipping: 0,
-        seller_fees: round2(totalCommission),
-        refunds: round2(totalRefunds),
-        reimbursements: 0,
-        other_fees: 0,
-        gst_on_income: round2(totalTax > 0 ? totalTax : 0),
-        gst_on_expenses: 0,
-        status: settlementStatus,
-        source: "mirakl_api",
-        is_pre_boundary: isPreBoundary,
-        raw_payload: invoice,
-      };
-
-      const { error: upsertErr } = await adminClient.from("settlements").upsert(
-        settlementRow,
-        { onConflict: "user_id,settlement_id" },
-      );
-
-      if (upsertErr) {
-        console.error(`[fetch-mirakl-settlements] Upsert failed for ${settlementId}:`, upsertErr);
-        continue;
-      }
-
-      // ═══════════════════════════════════════════════════════════════
-      // STEP 3: Optionally fetch TL05 transaction lines for this cycle
-      // ═══════════════════════════════════════════════════════════════
-      try {
-        await fetchAndStoreTL05Lines(
-          adminClient, userId, connection, authResult, baseUrl,
-          marketplaceCode, settlementId, cycleNumber, periodStart, periodEnd,
-        );
-      } catch (lineErr: any) {
-        console.error(`[fetch-mirakl-settlements] TL05 line fetch failed for ${settlementId}:`, lineErr.message);
-      }
-
-      // ─── Source priority check ───
-      try {
-        await serverSideSourcePriority(
-          adminClient, userId, marketplaceCode, periodStart, periodEnd, settlementId,
-        );
-      } catch (spErr: any) {
-        console.error(`[fetch-mirakl-settlements] Source priority check failed:`, spErr);
-      }
-
-      // ─── CSV mismatch detection ───
-      try {
-        await detectAndCorrectCsvMismatch(
-          adminClient, userId, marketplaceCode,
-          periodStart, periodEnd,
-          round2(bankDeposit), settlementId,
-        );
-      } catch (mcErr: any) {
-        console.error(`[fetch-mirakl-settlements] CSV mismatch check failed:`, mcErr);
-      }
-
-      imported++;
-    } catch (invoiceErr: any) {
-      console.error(`[fetch-mirakl-settlements] Error processing invoice:`, invoiceErr);
-      skipped++;
-    }
-  }
-
-  return { imported, skipped, empty_skipped: emptySkipped, source: "iv01" };
-}
-
-// ═══════════════════════════════════════════════════════════════
-// TL05 LINE-ITEM FETCHER — fetches transaction-level detail
-// for a specific billing cycle and stores as settlement_lines
-// ═══════════════════════════════════════════════════════════════
-
-async function fetchAndStoreTL05Lines(
-  adminClient: any,
-  userId: string,
-  connection: any,
-  authResult: { headerName: string; headerValue: string },
-  baseUrl: string,
-  marketplaceCode: string,
-  settlementId: string,
-  cycleNumber: string,
-  periodStart: string,
-  periodEnd: string,
-) {
-  // Fetch TL05 transactions for the date range of this billing cycle
-  const tl05Url = `${baseUrl}/api/sellerpayment/transactions_logs?${new URLSearchParams({
-    start_date: `${periodStart}T00:00:00Z`,
-    end_date: `${periodEnd}T23:59:59Z`,
-    paginate: "false",
-  })}`;
-
-  if (connection.seller_company_id && connection.seller_company_id !== "default") {
-    // Add shop filter if available
-  }
-
-  console.log(`[fetch-mirakl-settlements] 📝 TL05 line fetch: ${tl05Url}`);
-
-  const res = await fetch(tl05Url, {
-    headers: {
-      [authResult.headerName]: authResult.headerValue,
-      Accept: "application/json",
-    },
-  });
-
-  if (!res.ok) {
-    console.warn(`[fetch-mirakl-settlements] TL05 returned ${res.status} — skipping line items`);
-    return;
-  }
-
-  const data = await res.json();
-  const transactions = data.transactions || data.transaction_logs || data.data || [];
-
-  if (!Array.isArray(transactions) || transactions.length === 0) {
-    console.log(`[fetch-mirakl-settlements] TL05 returned 0 transactions for ${settlementId}`);
-    return;
-  }
-
-  console.log(`[fetch-mirakl-settlements] 📝 TL05 returned ${transactions.length} lines for ${settlementId}`);
-
-  const lineRows: any[] = [];
-  for (const txn of transactions) {
-    const amount = Number(txn.amount) || 0;
-    const type = (txn.transaction_type || txn.type || "").toUpperCase();
-    const txnDate = txn.date_created || txn.transaction_date || txn.created_date || "";
-    const dateOnly = txnDate ? txnDate.split("T")[0] : "";
-
-    let accountingCategory = "adjustment";
-    if (MIRAKL_TYPE_MAP[type]) {
-      accountingCategory = MIRAKL_TYPE_MAP[type].accountingCategory;
-    }
-
-    lineRows.push({
-      user_id: userId,
-      settlement_id: settlementId,
-      order_id: txn.order_id || txn.order_commercial_id || null,
-      sku: null,
-      amount: round2(amount),
-      amount_description: type,
-      transaction_type: txn.transaction_type || txn.type || "Unknown",
-      amount_type: type,
-      accounting_category: accountingCategory,
-      marketplace_name: connection.marketplace_label || "Mirakl",
-      posted_date: dateOnly || null,
-      source: "mirakl_api",
+    const iv01Res = await fetch(iv01Url, {
+      headers: {
+        [authResult.headerName]: authResult.headerValue,
+        Accept: "application/json",
+      },
     });
-  }
 
-  // Delete-then-insert for idempotency
-  await adminClient
-    .from("settlement_lines")
-    .delete()
-    .eq("user_id", userId)
-    .eq("settlement_id", settlementId);
+    console.log(`[fetch-mirakl-settlements] 📡 IV01 Response status: ${iv01Res.status}`);
 
-  for (let i = 0; i < lineRows.length; i += 500) {
-    const chunk = lineRows.slice(i, i + 500);
-    const { error: lineErr } = await adminClient.from("settlement_lines").insert(chunk);
-    if (lineErr) {
-      console.error(`[fetch-mirakl-settlements] settlement_lines insert failed:`, lineErr);
+    if (iv01Res.ok) {
+      const iv01Data = await iv01Res.json();
+      const invoices = iv01Data.invoices || iv01Data.data || [];
+      console.log(`[fetch-mirakl-settlements] 📦 IV01 invoices count: ${Array.isArray(invoices) ? invoices.length : 0}`);
+
+      if (Array.isArray(invoices)) {
+        for (const inv of invoices) {
+          const cycleNumber = inv.invoice_id || inv.accounting_document_number || inv.id;
+          if (!cycleNumber) continue;
+
+          // Bunnings uses start_time/end_time
+          const periodStart = inv.start_time?.split("T")[0] || inv.start_date?.split("T")[0] || dateFrom;
+          const periodEnd = inv.end_time?.split("T")[0] || inv.end_date?.split("T")[0]
+            || inv.issue_date?.split("T")[0] || new Date().toISOString().split("T")[0];
+
+          // Extract fee breakdown from IV01 detail lines
+          let commission = 0;
+          let subscription = 0;
+          let tax = 0;
+          if (Array.isArray(inv.details)) {
+            for (const detail of inv.details) {
+              const desc = (detail.description || "").toLowerCase();
+              const amount = parseFloat(String(detail.amount_excl_taxes || detail.amount || 0)) || 0;
+              const detailTax = Array.isArray(detail.taxes)
+                ? detail.taxes.reduce((s: number, t: any) => s + (parseFloat(String(t.amount)) || 0), 0)
+                : 0;
+
+              if (desc.includes("commission")) {
+                commission += amount;
+              } else if (desc.includes("subscription")) {
+                subscription += amount;
+              } else {
+                commission += amount;
+              }
+              tax += detailTax;
+            }
+          } else {
+            commission = parseFloat(String(inv.total_amount_excl_taxes || 0)) || 0;
+            tax = parseFloat(String(inv.total_taxes || 0)) || 0;
+          }
+
+          billingCycles.push({
+            cycleNumber: String(cycleNumber),
+            periodStart,
+            periodEnd,
+            iv01Commission: round2(commission),
+            iv01Tax: round2(tax),
+            iv01Subscription: round2(subscription),
+          });
+
+          console.log(`[fetch-mirakl-settlements] 📊 IV01 cycle ${cycleNumber}: ${periodStart}→${periodEnd}, commission=${round2(commission)}, sub=${round2(subscription)}, tax=${round2(tax)}`);
+        }
+      }
+    } else {
+      console.warn(`[fetch-mirakl-settlements] ⚠️ IV01 returned ${iv01Res.status} — will use TL05-only mode`);
     }
+  } catch (iv01Err: any) {
+    console.warn(`[fetch-mirakl-settlements] ⚠️ IV01 fetch failed: ${iv01Err.message} — will use TL05-only mode`);
   }
-  console.log(`[fetch-mirakl-settlements] 📝 Wrote ${lineRows.length} settlement_lines for ${settlementId}`);
-}
 
-// ═══════════════════════════════════════════════════════════════
-// TL05 LEGACY FALLBACK — used only if IV01 endpoint fails
-// This is the original transaction-logs-based fetch path
-// ═══════════════════════════════════════════════════════════════
-
-async function fetchSettlementsViaTL05(
-  adminClient: any,
-  userId: string,
-  connection: any,
-  authResult: { headerName: string; headerValue: string },
-  dateFrom: string,
-  accountingBoundary?: string | null,
-) {
-  const baseUrl = connection.base_url.replace(/\/$/, "");
-  const marketplaceCode = (connection.marketplace_label || "mirakl").toLowerCase().replace(/\s+/g, "_");
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 2: Fetch ALL TL05 transactions for the full date range
+  // TL05 returns order-level transactions — sales, refunds, payouts
+  // ═══════════════════════════════════════════════════════════════
 
   let apiUrl = `${baseUrl}/api/sellerpayment/transactions_logs?start_date=${dateFrom}T00:00:00Z&paginate=false`;
+  if (shopId) apiUrl += `&shop=${shopId}`;
 
-  if (connection.seller_company_id && connection.seller_company_id !== "default") {
-    apiUrl += `&shop=${connection.seller_company_id}`;
-  }
+  console.log(`[fetch-mirakl-settlements] 🌐 TL05 URL: ${apiUrl}`);
 
-  console.log(`[fetch-mirakl-settlements] 🌐 TL05 FALLBACK URL: ${apiUrl}`);
-
-  const res = await fetch(apiUrl, {
+  const tl05Res = await fetch(apiUrl, {
     headers: {
       [authResult.headerName]: authResult.headerValue,
       Accept: "application/json",
     },
   });
 
-  if (!res.ok) {
-    const errorText = await res.text().catch(() => "");
-    throw new Error(`Mirakl TL05 API error ${res.status}: ${errorText.slice(0, 200)}`);
+  if (!tl05Res.ok) {
+    const errorText = await tl05Res.text().catch(() => "");
+    throw new Error(`Mirakl TL05 API error ${tl05Res.status}: ${errorText.slice(0, 200)}`);
   }
 
-  const data = await res.json();
-  const transactions = data.transactions || data.transaction_logs || data.data || [];
+  const tl05Data = await tl05Res.json();
+  const transactions = tl05Data.transactions || tl05Data.transaction_logs || tl05Data.data || [];
+  console.log(`[fetch-mirakl-settlements] 📦 TL05 transactions count: ${Array.isArray(transactions) ? transactions.length : 0}`);
+
+  if (Array.isArray(transactions) && transactions.length > 0) {
+    console.log(`[fetch-mirakl-settlements] 📦 TL05 txn[0] keys: ${Object.keys(transactions[0]).join(", ")}`);
+    console.log(`[fetch-mirakl-settlements] 📦 TL05 txn[0] sample: ${JSON.stringify(transactions[0]).slice(0, 300)}`);
+  }
 
   if (!Array.isArray(transactions) || transactions.length === 0) {
-    return { imported: 0, skipped: 0, empty_skipped: 0, message: "No transactions found (TL05 fallback)", source: "tl05_fallback" };
+    console.log(`[fetch-mirakl-settlements] ⚠️ TL05 returned no transactions`);
+    return { imported: 0, skipped: 0, empty_skipped: 0, message: "No transactions found" };
   }
 
-  // Group by payment_reference
-  const groups = new Map<string, any[]>();
-  for (const txn of transactions) {
-    const key = txn.payment_reference || txn.payout_id || txn.accounting_document_number || "ungrouped";
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(txn);
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 3: Group TL05 transactions by billing cycle date ranges
+  // If IV01 gave us cycles, use those. Otherwise use payment_reference.
+  // ═══════════════════════════════════════════════════════════════
+
+  type GroupedTxns = { cycle: BillingCycle | null; txns: any[] };
+  const groups = new Map<string, GroupedTxns>();
+
+  if (billingCycles.length > 0) {
+    // Sort cycles by periodStart ascending
+    billingCycles.sort((a, b) => a.periodStart.localeCompare(b.periodStart));
+
+    // Initialize groups for each cycle
+    for (const cycle of billingCycles) {
+      groups.set(cycle.cycleNumber, { cycle, txns: [] });
+    }
+
+    // Assign each TL05 transaction to the matching billing cycle
+    for (const txn of transactions) {
+      const txnDate = (txn.date_created || txn.transaction_date || txn.created_date || "").split("T")[0];
+      if (!txnDate) continue;
+
+      let matched = false;
+      for (const cycle of billingCycles) {
+        if (txnDate >= cycle.periodStart && txnDate <= cycle.periodEnd) {
+          groups.get(cycle.cycleNumber)!.txns.push(txn);
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        // Transaction outside any known cycle — overflow bucket
+        if (!groups.has("overflow")) {
+          groups.set("overflow", { cycle: null, txns: [] });
+        }
+        groups.get("overflow")!.txns.push(txn);
+      }
+    }
+  } else {
+    // No IV01 data — fall back to payment_reference grouping
+    for (const txn of transactions) {
+      const key = txn.payment_reference || txn.payout_id || txn.accounting_document_number || "ungrouped";
+      if (!groups.has(key)) groups.set(key, { cycle: null, txns: [] });
+      groups.get(key)!.txns.push(txn);
+    }
   }
+
+  console.log(`[fetch-mirakl-settlements] 📊 Grouped into ${groups.size} settlement groups (IV01 cycles: ${billingCycles.length})`);
+
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 4: Process each group into a settlement
+  // ═══════════════════════════════════════════════════════════════
 
   let imported = 0;
   let skipped = 0;
   let emptySkipped = 0;
 
-  for (const [payoutRef, txns] of groups) {
+  for (const [groupKey, { cycle, txns }] of groups) {
+    if (groupKey === "overflow" || txns.length === 0) continue;
+
+    // Accumulate TL05 transactions using MIRAKL_TYPE_MAP
     const totals: Record<string, number> = {
       sales_principal: 0, sales_shipping: 0, seller_fees: 0, refunds: 0,
       reimbursements: 0, other_fees: 0, gst_on_income: 0, gst_on_expenses: 0, bank_deposit: 0,
     };
-
-    let periodStart = "";
-    let periodEnd = "";
+    let periodStart = cycle?.periodStart || "";
+    let periodEnd = cycle?.periodEnd || "";
     const lineRows: any[] = [];
 
     for (const txn of txns) {
       const amount = Number(txn.amount) || 0;
       const type = (txn.transaction_type || txn.type || "").toUpperCase();
-      const txnDate = txn.date_created || txn.transaction_date || txn.created_date || "";
-      const dateOnly = txnDate ? txnDate.split("T")[0] : "";
-      if (dateOnly) {
-        if (!periodStart || dateOnly < periodStart) periodStart = dateOnly;
-        if (!periodEnd || dateOnly > periodEnd) periodEnd = dateOnly;
+      const txnDate = (txn.date_created || txn.transaction_date || txn.created_date || "").split("T")[0];
+
+      // Track date range if no cycle dates
+      if (txnDate && !cycle) {
+        if (!periodStart || txnDate < periodStart) periodStart = txnDate;
+        if (!periodEnd || txnDate > periodEnd) periodEnd = txnDate;
       }
 
       let accountingCategory = "adjustment";
@@ -659,7 +455,7 @@ async function fetchSettlementsViaTL05(
 
       lineRows.push({
         user_id: userId,
-        settlement_id: "",
+        settlement_id: "", // Set below
         order_id: txn.order_id || txn.order_commercial_id || null,
         sku: null,
         amount: round2(amount),
@@ -668,65 +464,123 @@ async function fetchSettlementsViaTL05(
         amount_type: type,
         accounting_category: accountingCategory,
         marketplace_name: connection.marketplace_label || "Mirakl",
-        posted_date: dateOnly || null,
+        posted_date: txnDate || null,
         source: "mirakl_api",
       });
     }
 
+    // Skip empty settlements
     const hasActivity = Object.values(totals).some(v => Math.abs(v) > 0.001);
     if (!hasActivity) { emptySkipped++; continue; }
 
+    // Build settlement ID
+    const effectivePeriodEnd = periodEnd || new Date().toISOString().split("T")[0];
     let settlementId: string;
-    if (payoutRef === "ungrouped") {
+    if (cycle) {
+      // Match CSV convention: BUN-{shop_id}-{end_date}
+      const shopPrefix = shopId || "2301";
+      settlementId = `BUN-${shopPrefix}-${effectivePeriodEnd}`;
+    } else if (groupKey === "ungrouped") {
       const dateBucket = (periodStart || dateFrom).replace(/-/g, "");
       settlementId = `mirakl-${marketplaceCode}-${dateBucket}`;
     } else {
-      settlementId = `mirakl-${marketplaceCode}-${payoutRef}`;
+      settlementId = `mirakl-${marketplaceCode}-${groupKey}`;
     }
 
     for (const row of lineRows) { row.settlement_id = settlementId; }
 
+    // If IV01 gave us fee data, use it as authoritative for seller_fees
+    // IV01 commission is what operator charges — should be negative in settlement convention
+    if (cycle && (cycle.iv01Commission > 0 || cycle.iv01Subscription > 0)) {
+      const iv01TotalFees = -(cycle.iv01Commission + cycle.iv01Subscription);
+      const iv01TotalTax = -(cycle.iv01Tax);
+      // Only override if TL05 didn't capture fees
+      if (Math.abs(totals.seller_fees) < 0.01) {
+        totals.seller_fees = iv01TotalFees;
+        totals.gst_on_expenses = iv01TotalTax;
+      }
+    }
+
+    // Boundary check
     let isPreBoundary = false;
-    const effectivePeriodEnd = periodEnd || new Date().toISOString().split("T")[0];
     if (accountingBoundary && effectivePeriodEnd < accountingBoundary) {
       isPreBoundary = true;
     }
 
+    // Reconciliation check
     const calculatedSum = round2(
       totals.sales_principal + totals.sales_shipping + totals.seller_fees + totals.refunds +
       totals.reimbursements + totals.other_fees + totals.gst_on_income + totals.gst_on_expenses,
     );
     const reconDiff = Math.abs(calculatedSum - totals.bank_deposit);
-    const reconStatus = reconDiff >= 1.0 ? "recon_warning" : "reconciled";
+    let reconStatus = "reconciled";
+    if (reconDiff >= 1.0) {
+      reconStatus = "recon_warning";
+      await adminClient.from("system_events").insert({
+        user_id: userId,
+        event_type: "mirakl_reconciliation_mismatch",
+        severity: "warning",
+        marketplace_code: marketplaceCode,
+        details: {
+          settlement_id: settlementId,
+          calculated_sum: calculatedSum,
+          bank_deposit: totals.bank_deposit,
+          difference: round2(reconDiff),
+          cycle_number: cycle?.cycleNumber,
+          source: cycle ? "iv01_tl05_hybrid" : "tl05_only",
+        },
+      });
+    }
 
     const settlementStatus = isPreBoundary ? "pre_boundary"
       : reconStatus === "recon_warning" ? "recon_warning" : "saved";
 
+    console.log(`[fetch-mirakl-settlements] 📊 Settlement ${settlementId}: bank_deposit=${round2(totals.bank_deposit)}, sales=${round2(totals.sales_principal)}, fees=${round2(totals.seller_fees)}, txns=${txns.length}`);
+
+    // Upsert — unique constraint is (user_id, marketplace, settlement_id)
     const { error: upsertErr } = await adminClient.from("settlements").upsert({
-      user_id: userId, settlement_id: settlementId, marketplace: marketplaceCode,
-      period_start: periodStart || dateFrom, period_end: effectivePeriodEnd,
-      bank_deposit: round2(totals.bank_deposit), sales_principal: round2(totals.sales_principal),
-      sales_shipping: round2(totals.sales_shipping), seller_fees: round2(totals.seller_fees),
-      refunds: round2(totals.refunds), reimbursements: round2(totals.reimbursements),
-      other_fees: round2(totals.other_fees), gst_on_income: round2(totals.gst_on_income),
-      gst_on_expenses: round2(totals.gst_on_expenses), status: settlementStatus,
-      source: "mirakl_api", is_pre_boundary: isPreBoundary,
-    }, { onConflict: "user_id,settlement_id" });
+      user_id: userId,
+      settlement_id: settlementId,
+      marketplace: marketplaceCode,
+      period_start: periodStart || dateFrom,
+      period_end: effectivePeriodEnd,
+      bank_deposit: round2(totals.bank_deposit),
+      sales_principal: round2(totals.sales_principal),
+      sales_shipping: round2(totals.sales_shipping),
+      seller_fees: round2(totals.seller_fees),
+      refunds: round2(totals.refunds),
+      reimbursements: round2(totals.reimbursements),
+      other_fees: round2(totals.other_fees),
+      gst_on_income: round2(totals.gst_on_income),
+      gst_on_expenses: round2(totals.gst_on_expenses),
+      status: settlementStatus,
+      source: "mirakl_api",
+      is_pre_boundary: isPreBoundary,
+    }, { onConflict: "user_id,marketplace,settlement_id" });
 
-    if (upsertErr) { console.error(`[fetch-mirakl-settlements] TL05 upsert failed:`, upsertErr); continue; }
+    if (upsertErr) {
+      console.error(`[fetch-mirakl-settlements] Upsert failed for ${settlementId}:`, upsertErr);
+      continue;
+    }
 
-    // Write lines
+    // Write settlement_lines (delete-then-insert for idempotency)
     try {
       await adminClient.from("settlement_lines").delete().eq("user_id", userId).eq("settlement_id", settlementId);
       for (let i = 0; i < lineRows.length; i += 500) {
-        await adminClient.from("settlement_lines").insert(lineRows.slice(i, i + 500));
+        const { error: lineErr } = await adminClient.from("settlement_lines").insert(lineRows.slice(i, i + 500));
+        if (lineErr) console.error(`[fetch-mirakl-settlements] Lines insert failed:`, lineErr);
       }
-    } catch (e: any) { console.error(`[fetch-mirakl-settlements] TL05 lines failed:`, e); }
+      console.log(`[fetch-mirakl-settlements] 📝 Wrote ${lineRows.length} settlement_lines for ${settlementId}`);
+    } catch (e: any) {
+      console.error(`[fetch-mirakl-settlements] Lines write failed:`, e);
+    }
 
+    // Source priority check — self-suppress if CSV already exists
     try {
       await serverSideSourcePriority(adminClient, userId, marketplaceCode, periodStart || dateFrom, effectivePeriodEnd, settlementId);
     } catch (e: any) { /* ignore */ }
 
+    // CSV mismatch detection
     try {
       await detectAndCorrectCsvMismatch(adminClient, userId, marketplaceCode, periodStart || dateFrom, effectivePeriodEnd, round2(totals.bank_deposit), settlementId);
     } catch (e: any) { /* ignore */ }
@@ -734,7 +588,7 @@ async function fetchSettlementsViaTL05(
     imported++;
   }
 
-  return { imported, skipped, empty_skipped: emptySkipped, source: "tl05_fallback" };
+  return { imported, skipped, empty_skipped: emptySkipped, source: billingCycles.length > 0 ? "iv01_tl05_hybrid" : "tl05_only" };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -752,7 +606,6 @@ async function detectAndCorrectCsvMismatch(
   apiBankDeposit: number,
   apiSettlementId: string,
 ) {
-  // Find CSV-uploaded settlements covering the same period
   const { data: csvSettlements } = await adminClient
     .from("settlements")
     .select("id, settlement_id, bank_deposit, source, status")
@@ -767,11 +620,10 @@ async function detectAndCorrectCsvMismatch(
 
   for (const csv of csvSettlements) {
     const discrepancy = Math.abs(apiBankDeposit - (csv.bank_deposit || 0));
-    if (discrepancy <= 1.0) continue; // Within tolerance
+    if (discrepancy <= 1.0) continue;
 
     const isPushed = ["pushed_to_xero", "already_recorded"].includes(csv.status);
 
-    // Always log the mismatch
     await adminClient.from("system_events").insert({
       user_id: userId,
       event_type: "api_csv_bank_deposit_mismatch",
@@ -794,29 +646,20 @@ async function detectAndCorrectCsvMismatch(
       },
     });
 
-    // Auto-correct only if not yet pushed to Xero
     if (!isPushed) {
       await adminClient
         .from("settlements")
-        .update({
-          bank_deposit: apiBankDeposit,
-          sync_origin: "api_corrected",
-        })
+        .update({ bank_deposit: apiBankDeposit, sync_origin: "api_corrected" })
         .eq("id", csv.id);
-
-      console.log(
-        `[fetch-mirakl-settlements] ✅ Auto-corrected ${csv.settlement_id} bank_deposit: ${csv.bank_deposit} → ${apiBankDeposit}`,
-      );
+      console.log(`[fetch-mirakl-settlements] ✅ Auto-corrected ${csv.settlement_id} bank_deposit: ${csv.bank_deposit} → ${apiBankDeposit}`);
     } else {
-      console.log(
-        `[fetch-mirakl-settlements] ⚠️ Mismatch flagged for ${csv.settlement_id} (pushed): stored=${csv.bank_deposit}, api=${apiBankDeposit}`,
-      );
+      console.log(`[fetch-mirakl-settlements] ⚠️ Mismatch flagged for ${csv.settlement_id} (pushed): stored=${csv.bank_deposit}, api=${apiBankDeposit}`);
     }
   }
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Item 3: Server-side source priority — mirakl_api self-suppresses
+// Server-side source priority — mirakl_api self-suppresses
 // if a manual/csv_upload settlement already exists for the period
 // ═══════════════════════════════════════════════════════════════
 
