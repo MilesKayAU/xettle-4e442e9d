@@ -721,34 +721,19 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               const firstDupeStatus = existingStatuses[dbDupeIds[0]] || '';
               existingSettlementStatus = firstDupeStatus;
 
-              // Check user setting for always-confirm
-              let alwaysConfirm = false;
-              try {
-                const { data: { user } } = await supabase.auth.getUser();
-                if (user) {
-                  const { data: setting } = await supabase
-                    .from('app_settings')
-                    .select('value')
-                    .eq('user_id', user.id)
-                    .eq('key', 'always_confirm_reparse')
-                    .maybeSingle();
-                  alwaysConfirm = setting?.value === 'true';
-                }
-              } catch {}
-
               if (firstDupeStatus === 'pushed_to_xero') {
                 // BLOCK — already pushed to Xero
                 status = 'error';
                 error = 'This settlement has already been pushed to Xero. To correct it, use the Correct & Repost option in the settlement drawer.';
               } else if (
-                !alwaysConfirm && 
+                !alwaysConfirmReparse && 
                 ['gap_detected', 'settlement_needed', 'upload_needed', 'missing', 'ingested'].includes(firstDupeStatus)
               ) {
                 // AUTO re-parse — user is clearly fixing a problem
                 status = 'detected';
                 forceOverwrite = true;
                 toast.info('Settlement will be re-parsed with updated data.', { duration: 4000 });
-              } else if (['ready_to_push', 'already_recorded'].includes(firstDupeStatus) || alwaysConfirm) {
+              } else if (['ready_to_push', 'already_recorded'].includes(firstDupeStatus) || alwaysConfirmReparse) {
                 // ASK — settlement is clean, confirm before overwriting
                 status = 'reparse_confirm';
               } else {
