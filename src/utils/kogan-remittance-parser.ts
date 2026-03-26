@@ -475,12 +475,15 @@ export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittan
   try {
     const rawText = await extractPdfText(file);
 
+    console.log('[Kogan PDF] Raw text length:', rawText?.length, 'First 500 chars:', rawText?.substring(0, 500));
+
     if (!rawText || rawText.trim().length < 30) {
       return { ...empty, success: false, error: 'Could not extract text from PDF.', rawText };
     }
 
     // Normalise: collapse whitespace (including newlines) to single spaces for regex matching
     const norm = rawText.replace(/\s+/g, ' ');
+    console.log('[Kogan PDF] Normalised text (first 800):', norm.substring(0, 800));
 
     // Extract remittance number from title
     const remittanceMatch = norm.match(/Remittance\s+Advice\s*-?\s*#?\s*(\d+)/i);
@@ -502,6 +505,7 @@ export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittan
     // Extract total paid amount — may or may not have colon
     const totalMatch = norm.match(/Total\s+paid\s+amount:?\s*([\d,]+\.?\d*)\s*AUD/i);
     const totalPaidAmount = totalMatch ? parseAmount(totalMatch[1]) : undefined;
+    console.log('[Kogan PDF] Total paid amount match:', totalMatch?.[0], '→', totalPaidAmount);
 
     // ── Parse paid documents table ──
     // Strategy: find each document type marker and capture doc number, date, then
@@ -517,6 +521,7 @@ export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittan
     const markers = [
       ...norm.matchAll(/(?:^|\s)(\d+)\s+(Journal\s+Entry|A\/P\s+Invoice|A\/P\s+Credit\s+note)\s+(\d+)\s+(\d{1,2}\/\d{1,2}\/\d{4})/gi)
     ];
+    console.log('[Kogan PDF] Found', markers.length, 'document markers');
 
     for (let i = 0; i < markers.length; i++) {
       const m = markers[i];
