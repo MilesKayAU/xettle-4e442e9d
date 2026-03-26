@@ -2073,6 +2073,76 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
   return (
     <div className="space-y-4">
+      {/* Drop zone — always at the top for quick access */}
+      <Card
+        className={`border-2 border-dashed transition-all cursor-pointer ${
+          isDragging
+            ? 'border-primary bg-primary/10 scale-[1.01]'
+            : hasFiles
+              ? 'border-muted-foreground/25 hover:border-muted-foreground/40'
+              : 'border-primary/30 hover:border-primary/60 bg-primary/5'
+        }`}
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onClick={() => inputRef.current?.click()}
+      >
+        <CardContent className={`${hasFiles ? 'py-4' : 'py-8'} text-center`}>
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".csv,.tsv,.txt,.xlsx,.xls,.pdf"
+            multiple
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+          <div className="flex flex-col items-center gap-2">
+            {isDragging ? (
+              <>
+                <div className="h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center animate-pulse">
+                  <Upload className="h-6 w-6 text-primary" />
+                </div>
+                <p className="text-sm font-medium text-primary">
+                  Drop files to detect & preview
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    Drop files here or click to upload
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Xettle auto-detects, previews settlements, and prepares for Xero
+                  </p>
+                </div>
+                {!hasFiles && (
+                  <div className="flex flex-wrap justify-center gap-1.5 mt-1">
+                    {[
+                      { label: 'Amazon TSV', color: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
+                      { label: 'Shopify CSV', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' },
+                      { label: 'Bunnings PDF', color: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300' },
+                      { label: 'XLSX', color: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300' },
+                      { label: 'Any CSV', color: 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300' },
+                    ].map(fmt => (
+                      <span
+                        key={fmt.label}
+                        className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold ${fmt.color}`}
+                      >
+                        {fmt.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Missing settlements checklist banner */}
       {hasMissingChecklist && (
         <Card className={`border-amber-200 dark:border-amber-800 ${allMissingUploaded ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-amber-50/50 dark:bg-amber-900/10'} sticky top-0 z-10`}>
