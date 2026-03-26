@@ -338,8 +338,14 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         toast.info(`All Shopify payouts already imported (${skipped} checked)`);
       }
     } catch (err: any) {
-      // Also catch 401 from the function invoke
-      if (err.message?.includes('401') || err.message?.includes('invalid') || err.message?.includes('expired')) {
+      // Check for 429 thrown as FunctionsHttpError
+      const status = err?.context?.status ?? err?.status;
+      let body = '';
+      try { body = await err?.context?.text?.() ?? ''; } catch {}
+      const is429 = status === 429 || /cooldown|already in progress/i.test(body) || /cooldown|already in progress/i.test(err?.message ?? '');
+      if (is429) {
+        toast.info('Shopify payouts were recently synced — please wait before syncing again.');
+      } else if (err.message?.includes('401') || err.message?.includes('invalid') || err.message?.includes('expired')) {
         setShopifyTokenInvalid(true);
         toast.error('Shopify token is invalid. Please reconnect via OAuth in Settings.');
       } else {
