@@ -2023,21 +2023,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       const docNumber = docNums[0] || pdf.file.name.replace(/\.[^.]+$/, '');
       const pdfMonth = pdf.koganPdfPeriodMonth || pdf.koganRemittanceResult?.periodMonth;
       
-      // Try DB match by doc number first, then by period month
+      // Match DB settlement by AP Invoice doc number ONLY
       let dbMatch = existingKoganSettlements[docNumber] || null;
-      if (!dbMatch && pdfMonth) {
-        // Search existing settlements by period overlap
-        for (const key of Object.keys(existingKoganSettlements)) {
-          const s = existingKoganSettlements[key];
-          if (s.metadata?.period_start) {
-            const sMonth = s.metadata.period_start.substring(0, 7);
-            if (sMonth === pdfMonth) {
-              dbMatch = s;
-              break;
-            }
-          }
-        }
-      }
       
       groups.push({
         docNumber,
