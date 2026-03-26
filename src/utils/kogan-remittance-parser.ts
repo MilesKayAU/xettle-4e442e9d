@@ -34,13 +34,16 @@ export interface KoganRemittanceResult {
   /** Period month derived from transfer date or line item dates, e.g. "2026-02" */
   periodMonth?: string;
   lineItems: KoganRemittanceLineItem[];
-  totalPaidAmount?: number;        // Bank deposit amount
+  totalPaidAmount?: number;        // Bank deposit amount (THIS IS THE AUTHORITATIVE BANK DEPOSIT)
   /** Breakdown of adjustments */
-  invoiceTotal: number;            // Sum of A/P Invoice amounts
+  invoiceTotal: number;            // Sum of A/P Invoice amounts (gross pre-deduction)
   creditNoteTotal: number;         // Sum of A/P Credit note amounts (positive = deduction)
   advertisingFees: number;         // Sum of Journal Entry amounts (usually negative)
   monthlySellerFee: number;        // From "Monthly Seller Fee" credit note
+  monthlyFeePerOrder: number;      // From "Monthly Fee per Order" credit notes
   returnsCreditNotes: number;      // Non-fee credit notes (returns)
+  /** AP Invoice doc number — used to link CSV ↔ PDF */
+  apInvoiceRef?: string;
   error?: string;
   rawText?: string;
 }
