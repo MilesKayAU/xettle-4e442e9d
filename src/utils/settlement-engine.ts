@@ -606,19 +606,28 @@ export async function overwriteSettlement(settlement: StandardSettlement): Promi
     }
 
     const meta = settlement.metadata || {};
+    const isKoganPdf = !!meta.koganPdfMerged;
+    const koganAdFees = isKoganPdf ? Math.abs(meta.koganAdvertisingFees || 0) : 0;
+    const koganReturns = isKoganPdf ? Math.abs(meta.koganReturnsCreditNotes || 0) : 0;
+    const advertisingCosts = isKoganPdf ? -koganAdFees : 0;
+    const otherFees = isKoganPdf
+      ? 0
+      : -Math.abs((meta.subscriptionAmount || 0) + (meta.manualDebitInclGst || 0) + (meta.otherChargesInclGst || 0));
     const newFields = {
       sales_principal: settlement.sales_ex_gst,
       sales_shipping: meta.shippingExGst || 0,
       seller_fees: -(Math.abs(settlement.fees_ex_gst)),
-      refunds: meta.refundsExGst || 0,
+      refunds: isKoganPdf ? -koganReturns : (meta.refundsExGst || 0),
       reimbursements: (meta.refundCommissionExGst || 0) + (meta.manualCreditInclGst || 0),
-      other_fees: -Math.abs((meta.subscriptionAmount || 0) + (meta.manualDebitInclGst || 0) + (meta.otherChargesInclGst || 0)),
+      advertising_costs: advertisingCosts,
+      other_fees: otherFees,
       gst_on_income: settlement.gst_on_sales,
       gst_on_expenses: -Math.abs(settlement.gst_on_fees),
       bank_deposit: settlement.net_payout,
       period_start: settlement.period_start,
       period_end: settlement.period_end,
       reconciliation_status: settlement.reconciles ? 'reconciled' : 'warning',
+      raw_payload: Object.keys(meta).length > 0 ? meta : null,
     };
 
     const oldValues = {
