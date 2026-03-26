@@ -60,6 +60,8 @@ import {
 } from '@/utils/multi-marketplace-splitter';
 import MultiMarketplaceSplitCard from './MultiMarketplaceSplitCard';
 
+function round2(n: number): number { return Math.round(n * 100) / 100; }
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type FileStatus = 'detecting' | 'detected' | 'reviewing' | 'wrong_file' | 'unknown' | 'first_contact' | 'ai_analyzing' | 'confirmed' | 'saving' | 'saved' | 'error' | 'multi_split';
