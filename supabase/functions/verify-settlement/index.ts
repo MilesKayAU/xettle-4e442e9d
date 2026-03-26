@@ -127,6 +127,9 @@ async function tryIV01(
       const invoices = data.invoices || data.data || [];
       console.log(`[verify-settlement] IV01 invoice count: ${invoices.length}`);
       if (invoices.length > 0) {
+        // Log first invoice's actual keys so we can see the real field names
+        console.log(`[verify-settlement] IV01 invoice[0] keys: ${Object.keys(invoices[0]).join(", ")}`);
+        console.log(`[verify-settlement] IV01 invoice[0] sample: ${JSON.stringify(invoices[0]).slice(0, 800)}`);
         return { ok: true, invoice: invoices[0] };
       }
       return { ok: true }; // API worked but no matching invoice
