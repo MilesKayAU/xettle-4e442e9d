@@ -201,6 +201,16 @@ export default function DataIntegrityScanner() {
           );
         })}
 
+        {/* Ingestion validation warnings */}
+        {ingestionWarnings > 0 && (
+          <div className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+            <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              {ingestionWarnings} settlement{ingestionWarnings > 1 ? 's' : ''} had sign corrections applied at ingestion (last 30 days)
+            </p>
+          </div>
+        )}
+
         {/* Auto scans — collapsed by default */}
         <button
           type="button"
