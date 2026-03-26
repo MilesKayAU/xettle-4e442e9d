@@ -9,6 +9,7 @@ import {
   runDataIntegrityScan,
   runManualScans,
   getLastScanTimestamps,
+  getIngestionWarningCount,
   type ScanDefinition,
 } from '@/actions/dataIntegrity';
 
