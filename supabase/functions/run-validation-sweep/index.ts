@@ -695,7 +695,6 @@ async function sweepUser(adminSupabase: any, userId: string) {
           const bankDeposit = parseFloat(settlement.bank_deposit) || 0
           const computedNet = (parseFloat(settlement.sales_principal) || 0)
             + (parseFloat(settlement.sales_shipping) || 0)
-            + (parseFloat(settlement.gst_on_income) || 0)
             - Math.abs(parseFloat(settlement.seller_fees) || 0)
             - Math.abs(parseFloat(settlement.fba_fees) || 0)
             - Math.abs(parseFloat(settlement.storage_fees) || 0)
