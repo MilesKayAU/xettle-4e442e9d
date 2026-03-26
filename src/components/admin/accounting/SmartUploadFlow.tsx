@@ -2021,11 +2021,26 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       if (usedPdfIndices.has(pdf.originalIdx)) continue;
       const docNums = pdf.koganDocNumbers || [];
       const docNumber = docNums[0] || pdf.file.name.replace(/\.[^.]+$/, '');
+      
+      // If a CSV group already exists for this docNumber, attach the PDF to it instead of creating a new group
+      if (seenDocNumbers.has(docNumber)) {
+        const existingIdx = seenDocNumbers.get(docNumber)!;
+        const existingGroup = groups[existingIdx];
+        if (!existingGroup.hasPdf) {
+          existingGroup.pdfFile = pdf;
+          existingGroup.pdfIdx = pdf.originalIdx;
+          existingGroup.hasPdf = true;
+          existingGroup.netPayout = pdf.koganRemittanceResult?.totalPaidAmount ?? existingGroup.netPayout;
+        }
+        continue;
+      }
+      
       const pdfMonth = pdf.koganPdfPeriodMonth || pdf.koganRemittanceResult?.periodMonth;
       
       // Match DB settlement by AP Invoice doc number ONLY
       let dbMatch = existingKoganSettlements[docNumber] || null;
       
+      seenDocNumbers.set(docNumber, groups.length);
       groups.push({
         docNumber,
         periodMonth: pdfMonth,
