@@ -339,11 +339,11 @@ async function fetchSettlementsForConnection(
         || invoice.issue_date?.split("T")[0]
         || new Date().toISOString().split("T")[0];
 
-      // Extract component amounts if available from IV01
+      // Extract component amounts — use actual Bunnings IV01 field names
       const totalSales = parseFloat(String(
+        invoice.total_amount_excl_taxes ??
         invoice.total_amount_excluding_taxes ??
-        invoice.total_order_amount ??
-        invoice.order_amount ?? 0
+        invoice.total_order_amount ?? 0
       )) || 0;
       const totalCommission = parseFloat(String(
         invoice.total_commission ??
@@ -351,6 +351,7 @@ async function fetchSettlementsForConnection(
         invoice.operator_amount ?? 0
       )) || 0;
       const totalTax = parseFloat(String(
+        invoice.total_taxes ??
         invoice.total_tax ??
         invoice.tax_amount ?? 0
       )) || 0;
