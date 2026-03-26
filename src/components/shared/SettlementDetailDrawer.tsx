@@ -28,6 +28,7 @@ import { diagnoseGapReason } from '@/utils/diagnose-gap-reason';
 import ParserBugWarningBanner from './ParserBugWarningBanner';
 import SettlementCorrectionPanel from './SettlementCorrectionPanel';
 import ApiCsvMismatchBanner from './ApiCsvMismatchBanner';
+import SettlementCorrectDataSection from './SettlementCorrectDataSection';
 
 interface SettlementDetailDrawerProps {
   settlementId: string | null; // settlement_id (text), not DB uuid
@@ -1082,6 +1083,14 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose, au
                 </Button>
               </div>
             )}
+            {/* Admin: Correct Data section (re-parse / delete) */}
+            <SettlementCorrectDataSection
+              settlement={settlement}
+              isAdmin={isAdmin}
+              onSettlementUpdated={(updated) => setSettlement(updated)}
+              onClose={onClose}
+            />
+
             {events.length > 0 && (
               <>
                 <Separator />
@@ -1150,6 +1159,8 @@ function formatEventType(type: string): string {
     external_link_removed: 'External link removed (cleanup)',
     external_xero_detected: 'External Xero invoice detected',
     settlement_corrected: '⚠ Settlement corrected (parser bug fix)',
+    settlement_reparsed: '🔄 Settlement re-parsed (data corrected)',
+    settlement_deleted_for_reupload: '🗑 Settlement deleted for re-upload',
   };
   return labels[type] || type.replace(/_/g, ' ');
 }
