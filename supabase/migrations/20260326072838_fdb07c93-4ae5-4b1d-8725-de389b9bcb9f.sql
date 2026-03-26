@@ -1,0 +1,1 @@
+UPDATE app_settings SET value = '2026-01-01', updated_at = now() WHERE key = 'accounting_boundary_date' AND value = '2026-03-19';
