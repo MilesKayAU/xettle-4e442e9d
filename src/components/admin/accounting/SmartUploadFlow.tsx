@@ -839,16 +839,23 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
     const df = filesRef.current[idx];
     if (!df?.detection || !df.detection.isSettlementFile) return;
 
-    // ── Kogan PDFs are companion files — never process standalone ──
+    // ── Kogan PDFs: companion files when CSV present, standalone otherwise ──
     if (df.detection.marketplace === 'kogan' && df.file.name.toLowerCase().endsWith('.pdf')) {
-      // Mark as informational, not an error
-      setFiles(prev => {
-        const updated = [...prev];
-        updated[idx] = { ...updated[idx], status: 'detected', error: undefined };
-        return updated;
-      });
-      toast.info('Kogan PDFs are merged automatically when their matching CSV is saved.');
-      return;
+      // Check if there's a matching CSV already queued
+      const hasMatchingCsv = filesRef.current.some(f => 
+        f !== df && f.detection?.marketplace === 'kogan' && !f.file.name.toLowerCase().endsWith('.pdf')
+      );
+      if (hasMatchingCsv) {
+        // PDF will be merged when CSV is saved
+        setFiles(prev => {
+          const updated = [...prev];
+          updated[idx] = { ...updated[idx], status: 'detected', error: undefined };
+          return updated;
+        });
+        toast.info('Kogan PDFs are merged automatically when their matching CSV is saved.');
+        return;
+      }
+      // No matching CSV — process PDF standalone (creates settlement from PDF only)
     }
 
     const marketplace = df.overrideMarketplace || df.detection.marketplace;
