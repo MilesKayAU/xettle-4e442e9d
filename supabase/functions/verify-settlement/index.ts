@@ -94,6 +94,49 @@ function buildDiscrepancies(
 
 // ── Mirakl verification path ──
 
+async function tryIV01(
+  baseUrl: string,
+  authCandidates: Array<{ headerName: string; headerValue: string; label: string }>,
+  billingCycleNumber: string,
+): Promise<{ ok: boolean; invoice?: any; error?: string }> {
+  const invoiceUrl = `${baseUrl}/api/invoices?${new URLSearchParams({
+    accounting_document_number: billingCycleNumber,
+    type: "ALL",
+  })}`;
+  console.log(`[verify-settlement] IV01 fetch: ${invoiceUrl}`);
+
+  let lastErr = "";
+  for (const candidate of authCandidates) {
+    console.log(`[verify-settlement] IV01 trying auth: ${candidate.label}`);
+    try {
+      const res = await fetch(invoiceUrl, {
+        headers: { [candidate.headerName]: candidate.headerValue, Accept: "application/json" },
+      });
+      if (res.status === 401) {
+        lastErr = await res.text().catch(() => "");
+        console.warn(`[verify-settlement] IV01 401 with ${candidate.label}`);
+        continue;
+      }
+      if (!res.ok) {
+        lastErr = `IV01 returned ${res.status}`;
+        console.warn(`[verify-settlement] IV01 non-OK: ${res.status}`);
+        break; // non-auth error, don't retry
+      }
+      const data = await res.json();
+      console.log(`[verify-settlement] IV01 response keys: ${Object.keys(data).join(", ")}`);
+      const invoices = data.invoices || data.data || [];
+      console.log(`[verify-settlement] IV01 invoice count: ${invoices.length}`);
+      if (invoices.length > 0) {
+        return { ok: true, invoice: invoices[0] };
+      }
+      return { ok: true }; // API worked but no matching invoice
+    } catch (e: any) {
+      lastErr = e.message;
+    }
+  }
+  return { ok: false, error: lastErr };
+}
+
 async function verifyMirakl(
   adminClient: any,
   settlement: any,
@@ -126,7 +169,7 @@ async function verifyMirakl(
     };
   }
 
-  // FIX 4: Marketplace-aware Mirakl token matching
+  // Marketplace-aware Mirakl token matching
   const miraklRow = miraklRows.find(r => {
     const label = (r.marketplace_label ?? '').toLowerCase();
     const mkt = (settlement.marketplace ?? '').toLowerCase();
@@ -157,29 +200,9 @@ async function verifyMirakl(
     };
   }
 
-  // Build date range with 1-day buffer
-  const dateFrom = settlement.period_start
-    ? new Date(`${settlement.period_start}T00:00:00.000Z`)
-    : null;
-  if (dateFrom) dateFrom.setUTCDate(dateFrom.getUTCDate() - 1);
-
-  const dateTo = settlement.period_end
-    ? new Date(`${settlement.period_end}T23:59:59.999Z`)
-    : null;
-  if (dateTo) dateTo.setUTCDate(dateTo.getUTCDate() + 1);
-
   const baseUrl = miraklRow.base_url.replace(/\/$/, "");
-  const params = new URLSearchParams();
-  if (dateFrom) params.set("start_date", dateFrom.toISOString());
-  params.set("paginate", "false");
-  if (miraklRow.seller_company_id && miraklRow.seller_company_id !== "default") {
-    params.set("shop", miraklRow.seller_company_id);
-  }
 
-  const apiUrl = `${baseUrl}/api/sellerpayment/transactions_logs?${params.toString()}`;
-  console.log(`[verify-settlement] Mirakl fetch: ${apiUrl}`);
-
-  // Auth fallback candidates
+  // Build auth candidates (reused for both IV01 and transaction logs)
   const authCandidates = [
     { headerName: authResult.headerName, headerValue: authResult.headerValue, label: "primary" },
   ];
@@ -195,6 +218,89 @@ async function verifyMirakl(
       }
     }
   }
+
+  // ── PRIMARY: IV01 Accounting Documents API ──
+  const billingCycleNumber = String(settlementId).match(/(\d{4,})/)?.[1] ?? null;
+  console.log(`[verify-settlement] Extracted billing cycle number: ${billingCycleNumber} from ${settlementId}`);
+
+  if (billingCycleNumber) {
+    const iv01Result = await tryIV01(baseUrl, authCandidates, billingCycleNumber);
+
+    if (iv01Result.ok && iv01Result.invoice) {
+      const invoice = iv01Result.invoice;
+      console.log(`[verify-settlement] IV01 matched invoice: doc=${invoice.accounting_document_number}, amount_due=${invoice.amount_due_to_seller}, total=${invoice.total_amount}`);
+
+      const apiPayoutAmount = parseFloat(
+        invoice.amount_due_to_seller ?? invoice.total_amount ?? invoice.amount_transferred ?? "0"
+      );
+
+      const apiTotals = {
+        sales: parseFloat(invoice.total_order_amount ?? "0"),
+        shipping: parseFloat(invoice.total_shipping_amount ?? "0"),
+        fees: parseFloat(invoice.total_commission_amount ?? invoice.total_subscription_amount ?? "0"),
+        refunds: parseFloat(invoice.total_refund_amount ?? "0"),
+        payment: apiPayoutAmount,
+        sales_tax: parseFloat(invoice.total_order_tax_amount ?? "0"),
+      };
+
+      const discrepancies = buildDiscrepancies(stored, [
+        ["bank_deposit", stored.bank_deposit, apiTotals.payment],
+      ]);
+
+      // If IV01 gives us detailed breakdowns, compare more fields
+      if (apiTotals.sales !== 0) {
+        const salesPrincipalDisc = buildDiscrepancies(stored, [
+          ["sales_principal", stored.sales_principal, apiTotals.sales],
+        ]);
+        discrepancies.push(...salesPrincipalDisc);
+      }
+
+      let verdict: StandardResponse["verdict"] = discrepancies.length > 0 ? "discrepancy" : "match";
+
+      return {
+        settlement_id: settlementId,
+        marketplace: settlement.marketplace,
+        source,
+        verdict,
+        filter_method: "iv01_invoice",
+        transaction_count: 1,
+        api_transactions: [{ transaction_type: "BILLING_CYCLE_DOCUMENT", count: 1, total_amount: apiPayoutAmount }],
+        api_totals: apiTotals,
+        stored_settlement: stored,
+        discrepancies,
+        missing_transaction_types: [],
+      };
+    }
+    // IV01 returned no invoice or errored — fall through to transaction logs
+    console.log(`[verify-settlement] IV01 did not return invoice, falling back to transaction logs. Error: ${iv01Result.error ?? "none"}`);
+  }
+
+  // ── FALLBACK: Transaction Logs API ──
+  // Build date range with 1-day buffer — fixed format (no milliseconds)
+  let dateFromStr: string | null = null;
+  let dateToStr: string | null = null;
+
+  if (settlement.period_start) {
+    const df = new Date(`${settlement.period_start}T00:00:00Z`);
+    df.setUTCDate(df.getUTCDate() - 1);
+    dateFromStr = df.toISOString().split("T")[0];
+  }
+  if (settlement.period_end) {
+    const dt = new Date(`${settlement.period_end}T00:00:00Z`);
+    dt.setUTCDate(dt.getUTCDate() + 1);
+    dateToStr = dt.toISOString().split("T")[0];
+  }
+
+  const params = new URLSearchParams();
+  if (dateFromStr) params.set("start_date", `${dateFromStr}T00:00:00Z`);
+  if (dateToStr) params.set("end_date", `${dateToStr}T23:59:59Z`);
+  params.set("paginate", "false");
+  if (miraklRow.seller_company_id && miraklRow.seller_company_id !== "default") {
+    params.set("shop", miraklRow.seller_company_id);
+  }
+
+  const apiUrl = `${baseUrl}/api/sellerpayment/transactions_logs?${params.toString()}`;
+  console.log(`[verify-settlement] Mirakl txn logs fetch: ${apiUrl}`);
 
   let apiRes: Response | null = null;
   let last401Body = "";
@@ -216,7 +322,7 @@ async function verifyMirakl(
       marketplace: settlement.marketplace,
       source,
       verdict: "api_error",
-      filter_method: "none",
+      filter_method: "transaction_logs_fallback",
       transaction_count: 0,
       api_transactions: [],
       api_totals: { sales: 0, shipping: 0, fees: 0, refunds: 0, payment: 0, sales_tax: 0 },
@@ -229,16 +335,18 @@ async function verifyMirakl(
   }
 
   const apiData = await apiRes.json();
+  console.log(`[verify-settlement] Txn logs response keys: ${Object.keys(apiData).join(", ")}`);
   const rawTransactions: any[] = apiData.transactions || apiData.transaction_logs || apiData.data || apiData.lines || [];
+  console.log(`[verify-settlement] Raw transaction count: ${rawTransactions.length}`);
+  if (rawTransactions.length === 0) {
+    console.log(`[verify-settlement] ZERO raw transactions. Response sample: ${JSON.stringify(apiData).slice(0, 500)}`);
+  }
 
   // ── FILTER LOGIC — source-aware ──
-  // For csv_upload/manual: date range only (no doc number matching — these have no Mirakl-native ref)
-  // For mirakl_api: match by payout reference from raw_payload or settlement_id pattern
   const useDateRangeOnly = source === "csv_upload" || source === "manual";
 
   let payoutRef: string | null = null;
   if (!useDateRangeOnly) {
-    // Extract payout reference from raw_payload or settlement_id
     const rawPayload = settlement.raw_payload && typeof settlement.raw_payload === "object"
       ? settlement.raw_payload : null;
     payoutRef = rawPayload?.payment_reference
@@ -246,7 +354,6 @@ async function verifyMirakl(
       || rawPayload?.payout_id
       || null;
 
-    // Fallback: extract from mirakl-{marketplace}-{ref} pattern
     if (!payoutRef) {
       const match = String(settlementId).match(/^mirakl-[^-]+-(.+)$/i);
       if (match) payoutRef = match[1];
@@ -256,11 +363,13 @@ async function verifyMirakl(
   const filterMethod = useDateRangeOnly ? "date_range_only" : (payoutRef ? "payout_reference" : "date_range_only");
   console.log(`[verify-settlement] Filter: ${filterMethod}, payoutRef=${payoutRef ?? "none"}, source=${source}, raw txns: ${rawTransactions.length}`);
 
-  // Log sample transaction references for diagnostics
   if (rawTransactions.length > 0) {
     const sample = rawTransactions[0];
-    console.log(`[verify-settlement] Sample tx refs: accounting_document_number=${sample.accounting_document_number}, payment_reference=${sample.payment_reference}, payout_id=${sample.payout_id}`);
+    console.log(`[verify-settlement] Sample tx refs: accounting_document_number=${sample.accounting_document_number}, payment_reference=${sample.payment_reference}`);
   }
+
+  const dateFrom = dateFromStr ? new Date(`${dateFromStr}T00:00:00Z`) : null;
+  const dateTo = dateToStr ? new Date(`${dateToStr}T23:59:59Z`) : null;
 
   const transactions = rawTransactions.filter((tx: any) => {
     const txDateRaw = tx.date_created || tx.date || tx.creation_date || tx.accounting_document_creation_date || null;
@@ -269,11 +378,8 @@ async function verifyMirakl(
 
     if (!inRange) return false;
 
-    if (filterMethod === "date_range_only") {
-      return true;
-    }
+    if (filterMethod === "date_range_only") return true;
 
-    // Match by payout reference
     const txDocNumber = String(
       tx.accounting_document_number || tx.payment_voucher || tx.payment_reference || tx.payout_id || ""
     ).trim();
@@ -342,7 +448,7 @@ async function verifyMirakl(
     marketplace: settlement.marketplace,
     source,
     verdict,
-    filter_method: filterMethod,
+    filter_method: `transaction_logs_fallback(${filterMethod})`,
     transaction_count: transactions.length,
     api_transactions: apiTransactions,
     api_totals: apiTotals,
