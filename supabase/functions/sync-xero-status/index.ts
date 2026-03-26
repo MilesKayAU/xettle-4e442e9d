@@ -685,11 +685,18 @@ serve(async (req) => {
     const shopifyFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.Contains("Shopify")', modifiedAfter);
     const payoutFormatInvoices = await queryXeroInvoicesPaginated(token, 'Reference.Contains("Payout")', modifiedAfter);
     const shopifyContactInvoices = await queryXeroInvoicesPaginated(token, 'Contact.Name.Contains("Shopify")', modifiedAfter);
+    // Non-LMB marketplace invoices (Bunnings, Kogan, MyDeal, eBay — matched by contact)
+    const bunningsContactInvoices = await queryXeroInvoicesPaginated(token, 'Contact.Name.Contains("Bunnings")', modifiedAfter);
+    const koganContactInvoices = await queryXeroInvoicesPaginated(token, 'Contact.Name.Contains("Kogan")', modifiedAfter);
+    const mydealContactInvoices = await queryXeroInvoicesPaginated(token, 'Contact.Name.Contains("MyDeal")', modifiedAfter);
+    const ebayContactInvoices = await queryXeroInvoicesPaginated(token, 'Contact.Name.Contains("eBay")', modifiedAfter);
 
     const allInvoices = [
       ...newFormatInvoices, ...oldFormatInvoices, ...amznFormatInvoices,
       ...lmbFormatInvoices, ...shopifyFormatInvoices, ...payoutFormatInvoices,
       ...shopifyContactInvoices,
+      ...bunningsContactInvoices, ...koganContactInvoices, ...mydealContactInvoices,
+      ...ebayContactInvoices,
     ];
     // Deduplicate by InvoiceID
     const invoiceMap = new Map<string, any>();
