@@ -31,6 +31,10 @@ function extractSettlementId(reference: string | null): string | null {
   // LMB-{marketplace}-{id}-{seq}
   const lmbMatch = reference.match(/^LMB-\w+-(\d+)-\d+$/);
   if (lmbMatch) return lmbMatch[1];
+  // Kogan: AUMKA:KOG:AU:YYYYMMDD — return null (matched via amount+date)
+  if (/^AUMKA:KOG:AU:\d{8}/.test(reference)) return null;
+  // Bunnings: 6-digit or zero-padded numeric — return null (matched via amount+date)
+  if (/^0*\d{5,6}$/.test(reference)) return null;
   return null;
 }
 
