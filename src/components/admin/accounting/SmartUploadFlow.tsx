@@ -1407,7 +1407,16 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                     amount_type: 'order',
                     amount_description: Object.values(rawRow).filter(v => v && v.length < 60).slice(0, 2).join(' — ') || null,
                     transaction_type: 'Order',
-                    posted_date: dateCol ? (rawRow[dateCol] || null) : null,
+                    posted_date: dateCol && rawRow[dateCol] ? (() => {
+                      const raw = rawRow[dateCol];
+                      // Try to parse various date formats to ISO YYYY-MM-DD
+                      const isoMatch = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+                      if (isoMatch) return `${isoMatch[1]}-${isoMatch[2].padStart(2,'0')}-${isoMatch[3].padStart(2,'0')}`;
+                      // US format M/D/YYYY or DD/MM/YYYY — assume M/D/YYYY for Kogan
+                      const slashMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+                      if (slashMatch) return `${slashMatch[3]}-${slashMatch[1].padStart(2,'0')}-${slashMatch[2].padStart(2,'0')}`;
+                      return null; // unparseable — skip rather than 400
+                    })() : null,
                     marketplace_name: MARKETPLACE_LABELS[marketplace] || marketplace,
                     accounting_category: 'revenue',
                   });

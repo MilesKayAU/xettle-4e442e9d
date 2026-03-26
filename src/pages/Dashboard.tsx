@@ -701,7 +701,7 @@ export default function Dashboard() {
     }
   }, [user, loadMarketplaces]);
 
-  // Check for Kogan settlements saved without PDF (missingPdf=true)
+  // Check for Kogan settlements saved without PDF (missingPdf flag in raw_payload)
   useEffect(() => {
     if (!user) return;
     (async () => {
@@ -710,7 +710,7 @@ export default function Dashboard() {
           .from('settlements')
           .select('id', { count: 'exact', head: true })
           .ilike('marketplace', '%kogan%')
-          .eq('metadata->>missingPdf', 'true');
+          .eq('raw_payload->>missingPdf', 'true');
         setKoganMissingPdfCount(count ?? 0);
       } catch { /* silent */ }
     })();
