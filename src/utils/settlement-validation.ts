@@ -112,6 +112,7 @@ export function validateAndNormaliseSettlement(
     const computedNet =
       s.sales_principal +
       s.sales_shipping +
+      (s.gst_on_income || 0) +
       (s.seller_fees || 0) +
       (s.other_fees || 0) +
       (s.fba_fees || 0) +
