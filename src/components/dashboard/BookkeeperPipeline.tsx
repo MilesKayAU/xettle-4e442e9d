@@ -532,11 +532,13 @@ function PipelineRow({
             </div>
           )}
         </div>
-        {item.amount != null && (
+        {item.amount != null && item.amount !== 0 ? (
           <span className="text-sm font-semibold tabular-nums shrink-0 ml-2">
             {formatAUD(item.amount)}
           </span>
-        )}
+        ) : item.bucket !== 'blocked' ? (
+          <span className="text-sm text-muted-foreground shrink-0 ml-2">—</span>
+        ) : null}
       </div>
       <div className="shrink-0 ml-3">
         {actionButton()}
