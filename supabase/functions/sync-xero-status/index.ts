@@ -56,6 +56,7 @@ async function refreshToken(supabase: any, token: XeroToken): Promise<XeroToken>
 
 // ─── Paginated Xero invoice query with optional ModifiedAfter ───
 // GOVERNOR (P2): 0 retries on 429. On 429: set shared cooldown, stop immediately.
+// Pagination: fetches until Xero returns < 100 invoices (last page) or safety ceiling.
 async function queryXeroInvoicesPaginated(
   token: XeroToken,
   whereClause: string,
@@ -65,9 +66,9 @@ async function queryXeroInvoicesPaginated(
 ): Promise<any[]> {
   const allInvoices: any[] = [];
   let page = 1;
-  const maxPages = 10;
+  const MAX_PAGES = 100; // Safety ceiling — 10,000 invoices max per query path
 
-  while (page <= maxPages) {
+  while (page <= MAX_PAGES) {
     const url = `https://api.xero.com/api.xro/2.0/Invoices?where=${encodeURIComponent(whereClause)}&Statuses=DRAFT,SUBMITTED,AUTHORISED,PAID&page=${page}`;
     const headers: Record<string, string> = {
       'Authorization': `Bearer ${token.access_token}`,
@@ -120,9 +121,34 @@ async function queryXeroInvoicesPaginated(
     const result = await resp.json();
     const invoices = result.Invoices || [];
     allInvoices.push(...invoices);
+
+    // Xero returns exactly 100 per page when more exist.
+    // If fewer than 100 returned, we've reached the last page.
     if (invoices.length < 100) break;
     page++;
+
+    // Rate limit protection — Xero allows 60 calls/minute.
+    // Pause 1s every 10 pages to stay well within limits.
+    if (page % 10 === 0) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
   }
+
+  // Log warning if safety ceiling reached — should never happen in normal operation
+  if (page >= MAX_PAGES && supabaseAdmin && userId) {
+    console.warn(`[queryXeroInvoicesPaginated] Safety ceiling reached: ${MAX_PAGES} pages, ${allInvoices.length} invoices`);
+    await supabaseAdmin.from('system_events').insert({
+      user_id: userId,
+      event_type: 'xero_pagination_limit_reached',
+      severity: 'warning',
+      details: {
+        query_path: whereClause.substring(0, 200),
+        pages_fetched: page,
+        invoices_fetched: allInvoices.length,
+      },
+    });
+  }
+
   return allInvoices;
 }
 
