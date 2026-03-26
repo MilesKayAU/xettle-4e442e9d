@@ -1141,8 +1141,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                     refundsInclGst: -totalReturns,
                     refundsExGst: -round2(totalReturns / 1.1),
                     // Keep CSV data for reference
-                    csvSalesTotal: s.metadata?.csvSalesTotal || 0,
-                    csvCommissionTotal: s.metadata?.csvCommissionTotal || 0,
+                    csvSalesTotal,
+                    csvCommissionTotal,
                     gstModel: 'inclusive',
                   };
 
