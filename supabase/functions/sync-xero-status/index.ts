@@ -548,11 +548,7 @@ serve(async (req) => {
         // Only filter status for non-external invoices (seeding outstanding)
         if (!isExternalInvoice && !['DRAFT', 'SUBMITTED', 'AUTHORISED'].includes(inv.Status || '')) continue;
 
-        const contactName = inv.Contact?.Name || '';
-        const detectedMarketplace = detectMarketplaceFromContact(contactName);
-
-        // Skip marketplace assignment if contact cannot be classified — avoids
-        // polluting Amazon connector expectations with unrelated Xero invoices
+        // detectedMarketplace already resolved above (before marketplace-specific matching)
         if (!detectedMarketplace) {
           console.log(`[step-3b] Skipping unclassified contact "${contactName}" for invoice ${inv.InvoiceNumber || inv.InvoiceID}`);
           continue;
