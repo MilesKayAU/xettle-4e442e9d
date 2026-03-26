@@ -229,6 +229,11 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
         <ErrorBoundary><FulfilmentMethodsPanel /></ErrorBoundary>
       </SettingsAccordion>
     ),
+    upload_preferences: (
+      <SettingsAccordion title="Upload Preferences" description="Control re-upload and duplicate settlement behaviour" defaultOpen={false} status={getStatus('upload_preferences')} helpText={SETTINGS_HELP.upload_preferences}>
+        <ErrorBoundary><UploadPreferencesPanel /></ErrorBoundary>
+      </SettingsAccordion>
+    ),
     data_quality: (
       <SettingsAccordion title="Data Quality" description="Re-sync marketplace labels and fix historical misclassifications" defaultOpen={sortedSections[0] === 'data_quality'} status={getStatus('data_quality')} helpText={SETTINGS_HELP.data_quality}>
         <ErrorBoundary><DataQualityPanel /></ErrorBoundary>
