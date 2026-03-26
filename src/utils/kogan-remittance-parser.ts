@@ -49,18 +49,26 @@ export interface KoganRemittanceResult {
 }
 
 async function extractPdfText(file: File): Promise<string> {
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  console.log('[Kogan PDF] extractPdfText called', { name: file.name, size: file.size, type: file.type });
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    console.log('[Kogan PDF] arrayBuffer obtained, byteLength:', arrayBuffer.byteLength);
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    console.log('[Kogan PDF] getDocument resolved, numPages:', pdf.numPages);
 
-  let fullText = '';
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    // Join items with spaces — pdfjs text items represent individual text spans
-    const pageText = content.items.map((item: any) => item.str).join(' ');
-    fullText += pageText + '\n';
+    let fullText = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const pageText = content.items.map((item: any) => item.str).join(' ');
+      fullText += pageText + '\n';
+    }
+    console.log('[Kogan PDF] extracted text length:', fullText.length);
+    return fullText;
+  } catch (e: any) {
+    console.error('[Kogan PDF] extractPdfText FAILED:', e?.message, e?.stack);
+    throw e;
   }
-  return fullText;
 }
 
 function parseAmount(raw: string): number {

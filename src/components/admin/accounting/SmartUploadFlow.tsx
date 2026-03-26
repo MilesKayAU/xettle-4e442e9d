@@ -370,8 +370,15 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
       // Kogan PDF — parse remittance, extract doc numbers, store for later merge
       if (marketplace === 'kogan' && file.name.toLowerCase().endsWith('.pdf')) {
-        const result = await parseKoganRemittancePdf(file);
-        if (!result.success) return [];
+        console.log('[SmartUpload] Kogan PDF detected, calling parseKoganRemittancePdf', { name: file.name, size: file.size });
+        try {
+          const result = await parseKoganRemittancePdf(file);
+          console.log('[SmartUpload] Kogan PDF parse result:', { success: result.success, error: result.error, totalPaidAmount: result.totalPaidAmount });
+          if (!result.success) return [];
+        } catch (pdfErr: any) {
+          console.error('[SmartUpload] Kogan PDF parse threw:', pdfErr?.message, pdfErr?.stack);
+          return [];
+        }
         // Doc numbers and result are stored via detection callback (see below)
         // Return empty settlements; the merge happens on save
         return [];
