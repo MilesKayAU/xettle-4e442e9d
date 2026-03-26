@@ -31,8 +31,10 @@ export interface KoganRemittanceResult {
   remittanceNumber?: string;       // e.g. '3599603'
   transferDate?: string;           // ISO date
   paymentDate?: string;            // ISO date
-  /** Period month derived from transfer date or line item dates, e.g. "2026-02" */
+  /** Period month derived from A/P Invoice reference, e.g. "2026-02" */
   periodMonth?: string;
+  /** Exact A/P Invoice date from reference code, e.g. "2026-02-28" */
+  invoiceDate?: string;
   lineItems: KoganRemittanceLineItem[];
   totalPaidAmount?: number;        // Bank deposit amount (THIS IS THE AUTHORITATIVE BANK DEPOSIT)
   /** Breakdown of adjustments */
@@ -114,22 +116,30 @@ export async function extractKoganPdfInfo(file: File): Promise<KoganPdfDocInfo> 
       if (!docNumbers.includes(m[1])) docNumbers.push(m[1]);
     }
 
-    // Extract period month from Transfer Date (DD/MM/YYYY) or line item dates (M/D/YYYY)
+    // Extract period month — use A/P Invoice reference (AUMKA:KOG:AU:YYYYMMDD) as primary
+    // source, NOT the Transfer Date (which is the payment date and may fall in a different month)
     const norm = rawText.replace(/\s+/g, ' ');
     let periodMonth: string | undefined;
 
-    // Try Transfer Date first (DD/MM/YYYY)
-    const transferMatch = norm.match(/Transfer\s+Date:\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/i);
-    if (transferMatch) {
-      periodMonth = `${transferMatch[3]}-${transferMatch[2].padStart(2, '0')}`;
+    // Priority 1: A/P Invoice reference code (e.g. AUMKA:KOG:AU:20260228 → 2026-02)
+    const refMatch = norm.match(/AUMKA:KOG:AU:(\d{4})(\d{2})\d{2}/i);
+    if (refMatch) {
+      periodMonth = `${refMatch[1]}-${refMatch[2]}`;
     }
 
-    // Fallback: use first line item date (M/D/YYYY — US format in table)
+    // Priority 2: A/P Invoice date (M/D/YYYY — US format in table)
     if (!periodMonth) {
-      const dateMatch = norm.match(/(?:A\/P\s+(?:Invoice|Credit\s+note)|Journal\s+Entry)\s+\d+\s+(\d{1,2})\/(\d{1,2})\/(\d{4})/i);
-      if (dateMatch) {
-        // In table dates, month is first field (US format)
-        periodMonth = `${dateMatch[3]}-${dateMatch[1].padStart(2, '0')}`;
+      const invoiceDateMatch = norm.match(/A\/P\s+Invoice\s+\d+\s+(\d{1,2})\/(\d{1,2})\/(\d{4})/i);
+      if (invoiceDateMatch) {
+        periodMonth = `${invoiceDateMatch[3]}-${invoiceDateMatch[1].padStart(2, '0')}`;
+      }
+    }
+
+    // Priority 3: Transfer Date (DD/MM/YYYY) as last resort
+    if (!periodMonth) {
+      const transferMatch = norm.match(/Transfer\s+Date:\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/i);
+      if (transferMatch) {
+        periodMonth = `${transferMatch[3]}-${transferMatch[2].padStart(2, '0')}`;
       }
     }
 
@@ -608,12 +618,42 @@ export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittan
       'Monthly seller fee:', monthlySellerFee, 'Monthly fee/order:', monthlyFeePerOrder,
       'Returns:', returnsCreditNotes, 'AP Invoice ref:', apInvoiceRef);
 
-    // Derive periodMonth from transferDate or first line item date
+    // Derive periodMonth from A/P Invoice reference (AUMKA:KOG:AU:YYYYMMDD) — this is the
+    // canonical period identifier, NOT the Transfer Date (which is the payment date and may
+    // fall in a different month than the actual settlement period).
     let periodMonth: string | undefined;
-    if (transferDate) {
-      // transferDate is ISO: YYYY-MM-DD
+
+    // Priority 1: Extract from A/P Invoice reference code (e.g. AUMKA:KOG:AU:20260228 → 2026-02)
+    let invoiceDate: string | undefined;
+    for (const item of lineItems) {
+      if (item.type.toLowerCase().includes('invoice') && item.reference) {
+        const refDateMatch = item.reference.match(/(\d{4})(\d{2})(\d{2})/);
+        if (refDateMatch) {
+          periodMonth = `${refDateMatch[1]}-${refDateMatch[2]}`;
+          invoiceDate = `${refDateMatch[1]}-${refDateMatch[2]}-${refDateMatch[3]}`;
+          break;
+        }
+      }
+    }
+
+    // Priority 2: Use the A/P Invoice's own date field (M/D/YYYY in PDF table)
+    if (!periodMonth) {
+      for (const item of lineItems) {
+        if (item.type.toLowerCase().includes('invoice') && item.date) {
+          const isoDate = parseDateToISO(item.date);
+          if (isoDate) {
+            periodMonth = isoDate.substring(0, 7);
+            invoiceDate = isoDate;
+            break;
+          }
+        }
+      }
+    }
+
+    // Priority 3: Fall back to transferDate only if nothing else available
+    if (!periodMonth && transferDate) {
       periodMonth = transferDate.substring(0, 7);
-    } else if (lineItems.length > 0 && lineItems[0].date) {
+    } else if (!periodMonth && lineItems.length > 0 && lineItems[0].date) {
       const isoDate = parseDateToISO(lineItems[0].date);
       if (isoDate) periodMonth = isoDate.substring(0, 7);
     }
@@ -624,6 +664,7 @@ export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittan
       transferDate,
       paymentDate,
       periodMonth,
+      invoiceDate,
       lineItems,
       totalPaidAmount,
       invoiceTotal,

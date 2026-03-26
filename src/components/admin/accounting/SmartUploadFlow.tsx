@@ -980,13 +980,17 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           const totalMonthlyFees = pdfResult.monthlySellerFee + pdfResult.monthlyFeePerOrder;
           const totalAdFees = Math.abs(pdfResult.advertisingFees);
           const totalReturns = pdfResult.returnsCreditNotes;
-          // Derive period from PDF dates
+          // Derive period from A/P Invoice date (exact date from reference code)
+          // Use invoiceDate for period_end (the actual settlement cut-off date)
+          // and 1st of that month for period_start
           const pdfPeriodMonth = pdfResult.periodMonth || '';
+          const invoiceDate = pdfResult.invoiceDate; // e.g. "2026-02-28"
           const periodYear = pdfPeriodMonth ? parseInt(pdfPeriodMonth.split('-')[0]) : new Date().getFullYear();
           const periodMon = pdfPeriodMonth ? parseInt(pdfPeriodMonth.split('-')[1]) - 1 : new Date().getMonth();
           const periodStart = `${periodYear}-${String(periodMon + 1).padStart(2, '0')}-01`;
+          // Use exact invoice date as period_end to distinguish multiple Kogan settlements in same month
           const lastDay = new Date(periodYear, periodMon + 1, 0).getDate();
-          const periodEnd = `${periodYear}-${String(periodMon + 1).padStart(2, '0')}-${lastDay}`;
+          const periodEnd = invoiceDate || `${periodYear}-${String(periodMon + 1).padStart(2, '0')}-${lastDay}`;
           const apRef = pdfResult.apInvoiceRef || pdfResult.remittanceNumber || 'pdf';
           
           settlements = [{
