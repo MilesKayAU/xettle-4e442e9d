@@ -1957,25 +1957,36 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
     const groups: KoganPair[] = [];
     const usedPdfIndices = new Set<number>();
+    const seenDocNumbers = new Map<string, number>(); // docNumber → index in groups[]
 
     for (const csv of csvFiles) {
       const settlementId = csv.settlements?.[0]?.settlement_id || '';
-      // Extract AP invoice doc number: try kogan_NNNN format first, then digit groups, then filename extraction
       const koganIdMatch = settlementId.match(/^kogan_(\d+)$/);
       const lastDigitMatch = settlementId.match(/_(\d{5,})(?:\s|$)/);
       const firstDigitMatch = settlementId.match(/(\d{5,})/);
-      // Filename fallback: extract invoice number from patterns like KGN-..._362490_2.csv
       const filenameMatch = csv.file.name.match(/_(\d{5,})_/);
       const docNumber = koganIdMatch?.[1] || lastDigitMatch?.[1] || firstDigitMatch?.[1] || filenameMatch?.[1] || csv.file.name.replace(/\.[^.]+$/, '');
+      
+      // Deduplicate: if we already have a group for this docNumber, skip this CSV
+      // (keep the first one — or replace if this one is saved and the previous wasn't)
+      if (seenDocNumbers.has(docNumber)) {
+        const existingIdx = seenDocNumbers.get(docNumber)!;
+        const existingGroup = groups[existingIdx];
+        // Only replace if the new CSV is saved and the existing one isn't
+        if (csv.status === 'saved' && existingGroup.csvFile?.status !== 'saved') {
+          existingGroup.csvFile = csv;
+          existingGroup.csvIdx = csv.originalIdx;
+        }
+        continue;
+      }
+      
       let csvMonth = getCsvPeriodMonth(csv) || csv.settlements?.[0]?.metadata?.periodMonth;
-      // Fallback: extract month from filename like KGN-AUMKAKOGAU20260315_362490_2.csv
       if (!csvMonth) {
         const fnDateMatch = csv.file.name.match(/(\d{4})(\d{2})\d{2}/);
         if (fnDateMatch) csvMonth = `${fnDateMatch[1]}-${fnDateMatch[2]}`;
       }
 
-      // Match PDF by AP Invoice doc number ONLY — period-based matching causes
-      // cross-contamination when multiple Kogan invoices share the same period month.
+      // Match PDF by AP Invoice doc number ONLY
       let matchedPdf: (typeof pdfFiles)[0] | null = null;
       
       for (const pdf of pdfFiles) {
@@ -1992,6 +2003,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         ?? csv.settlements?.[0]?.net_payout
         ?? null;
 
+      seenDocNumbers.set(docNumber, groups.length);
       groups.push({
         docNumber,
         periodMonth: csvMonth,
