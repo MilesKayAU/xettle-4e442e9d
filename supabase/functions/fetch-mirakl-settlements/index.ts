@@ -286,19 +286,26 @@ async function fetchSettlementsForConnection(
       }
 
       // Extract authoritative payout amount from IV01
+      // Bunnings IV01 actual fields: total_charged_amount, total_amount_excl_taxes,
+      // total_amount_incl_taxes, total_taxes, payment (nested), summary (nested)
       const rawPayoutField =
+        invoice.total_charged_amount ??
         invoice.amount_due_to_seller ??
         invoice.total_amount_due_to_seller ??
         invoice.seller_amount ??
+        invoice.total_amount_incl_taxes ??
         invoice.net_amount ??
         invoice.amount_transferred ??
         invoice.total_amount ??
         invoice.amount ??
+        // Check nested payment object
+        (invoice.payment && typeof invoice.payment === "object" ? invoice.payment.amount : null) ??
         null;
       const bankDeposit = rawPayoutField !== null ? parseFloat(String(rawPayoutField)) : NaN;
 
       if (isNaN(bankDeposit)) {
         console.warn(`[fetch-mirakl-settlements] ⚠️ Invoice ${cycleNumber} has no parseable payout amount — skipping`);
+        // Log the FULL invoice for diagnostics so we can see nested field values
         await adminClient.from("system_events").insert({
           user_id: userId,
           event_type: "mirakl_iv01_no_payout_amount",
@@ -308,6 +315,7 @@ async function fetchSettlementsForConnection(
             cycle_number: cycleNumber,
             invoice_keys: Object.keys(invoice),
             marketplace: connection.marketplace_label,
+            invoice_sample: JSON.stringify(invoice).slice(0, 2000),
           },
         });
         skipped++;
@@ -320,13 +328,15 @@ async function fetchSettlementsForConnection(
         continue;
       }
 
-      // Extract dates
-      const periodStart = invoice.start_date?.split("T")[0]
+      // Extract dates — Bunnings uses start_time/end_time, not start_date/end_date
+      const periodStart = invoice.start_time?.split("T")[0]
+        || invoice.start_date?.split("T")[0]
         || invoice.date_created?.split("T")[0]
         || dateFrom;
-      const periodEnd = invoice.end_date?.split("T")[0]
-        || invoice.date_updated?.split("T")[0]
-        || invoice.payment_date?.split("T")[0]
+      const periodEnd = invoice.end_time?.split("T")[0]
+        || invoice.end_date?.split("T")[0]
+        || invoice.due_date?.split("T")[0]
+        || invoice.issue_date?.split("T")[0]
         || new Date().toISOString().split("T")[0];
 
       // Extract component amounts if available from IV01
