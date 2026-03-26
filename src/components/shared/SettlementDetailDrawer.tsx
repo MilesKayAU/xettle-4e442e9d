@@ -1091,6 +1091,7 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose, au
               onClose={onClose}
             />
 
+            {events.length > 0 && (
               <>
                 <Separator />
                 <div>
