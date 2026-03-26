@@ -1,0 +1,2 @@
+DELETE FROM marketplace_validation WHERE settlement_id IN ('kogan_355530', 'kogan_357889', 'kogan_360140');
+DELETE FROM settlements WHERE settlement_id IN ('kogan_355530', 'kogan_357889', 'kogan_360140') AND status NOT IN ('pushed_to_xero', 'already_recorded');

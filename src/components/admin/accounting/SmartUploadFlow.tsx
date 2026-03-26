@@ -1048,9 +1048,9 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
             period_start: periodStart,
             period_end: periodEnd,
             sales_ex_gst: pdfResult.invoiceTotal,
-            gst_on_sales: round2(pdfResult.invoiceTotal - (pdfResult.invoiceTotal / 1.1)),
+            gst_on_sales: 0,  // All Kogan PDF values are GST-inclusive, no separate GST
             fees_ex_gst: -totalMonthlyFees,
-            gst_on_fees: round2(totalMonthlyFees - (totalMonthlyFees / 1.1)),
+            gst_on_fees: 0,
             net_payout: pdfResult.totalPaidAmount,
             source: 'csv_upload',
             reconciles: Math.abs(round2(pdfResult.invoiceTotal - totalMonthlyFees - totalAdFees - totalReturns) - pdfResult.totalPaidAmount) <= 1,
@@ -1065,9 +1065,6 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               koganReturnsCreditNotes: pdfResult.returnsCreditNotes,
               koganPdfBankDeposit: pdfResult.totalPaidAmount,
               koganPdfInvoiceTotal: pdfResult.invoiceTotal,
-              otherChargesInclGst: totalAdFees,
-              refundsInclGst: -totalReturns,
-              refundsExGst: -round2(totalReturns / 1.1),
               gstModel: 'inclusive',
             },
           }];
