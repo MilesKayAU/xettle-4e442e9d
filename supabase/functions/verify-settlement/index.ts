@@ -126,7 +126,13 @@ async function verifyMirakl(
     };
   }
 
-  const miraklRow = miraklRows[0];
+  // FIX 4: Marketplace-aware Mirakl token matching
+  const miraklRow = miraklRows.find(r => {
+    const label = (r.marketplace_label ?? '').toLowerCase();
+    const mkt = (settlement.marketplace ?? '').toLowerCase();
+    return mkt.includes(label) || label.includes(mkt);
+  }) ?? miraklRows[0];
+  console.log(`[verify-settlement] Matched Mirakl token: label=${miraklRow.marketplace_label}, base_url=${miraklRow.base_url}`);
 
   // Auth
   let authResult;

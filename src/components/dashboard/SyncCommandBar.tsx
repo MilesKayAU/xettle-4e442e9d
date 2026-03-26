@@ -13,6 +13,13 @@ interface SyncCommandBarProps {
   onNavigateToMismatches: () => void;
 }
 
+interface ResolveResult {
+  resolved: number;
+  corrected: number;
+  manual: number;
+  unchanged: number;
+}
+
 export default function SyncCommandBar({ onOpenPushPreview, onNavigateToMismatches }: SyncCommandBarProps) {
   const [syncing, setSyncing] = useState(false);
   const [syncDone, setSyncDone] = useState(false);
@@ -21,7 +28,7 @@ export default function SyncCommandBar({ onOpenPushPreview, onNavigateToMismatch
 
   const [resolving, setResolving] = useState(false);
   const [gapCount, setGapCount] = useState<number | null>(null);
-  const [resolveResult, setResolveResult] = useState<{ fixed: number; manual: number; unchanged: number } | null>(null);
+  const [resolveResult, setResolveResult] = useState<ResolveResult | null>(null);
 
   const [readyCount, setReadyCount] = useState(0);
   const [readySettlements, setReadySettlements] = useState<Array<{ settlementId: string; marketplace: string }>>([]);
@@ -103,6 +110,13 @@ export default function SyncCommandBar({ onOpenPushPreview, onNavigateToMismatch
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
+      // FIX 1: Record gap count BEFORE resolution
+      const { count: gapsBefore } = await supabase
+        .from('marketplace_validation')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', session.user.id)
+        .eq('overall_status', 'gap_detected');
+
       // Get all gap_detected settlements
       const { data: gaps } = await supabase
         .from('marketplace_validation')
@@ -119,7 +133,7 @@ export default function SyncCommandBar({ onOpenPushPreview, onNavigateToMismatch
 
       toast.info(`Resolving ${gaps.length} gap${gaps.length !== 1 ? 's' : ''}...`);
 
-      let fixed = 0;
+      let corrected = 0;
       let manual = 0;
       let unchanged = 0;
 
@@ -127,31 +141,73 @@ export default function SyncCommandBar({ onOpenPushPreview, onNavigateToMismatch
         if (!gap.settlement_id) { manual++; continue; }
 
         try {
-          const { data } = await supabase.functions.invoke('verify-settlement', {
-            body: { settlement_id: gap.settlement_id, auto_correct: true },
+          // FIX 5: Check error from supabase.functions.invoke
+          const { data, error } = await supabase.functions.invoke('verify-settlement', {
+            body: {
+              settlement_id: gap.settlement_id,
+              auto_correct: true,
+              triggered_by: 'resolve_gaps_button',
+            },
           });
 
-          if (data?.auto_corrected) {
-            fixed++;
-          } else if (data?.verdict === 'no_api_connection') {
+          if (error) {
+            console.error(`[resolve-gaps] Edge function error for ${gap.settlement_id}:`, error.message);
             manual++;
-          } else {
-            unchanged++;
+            continue;
           }
-        } catch {
-          unchanged++;
+
+          // FIX 2: Handle all verdict types correctly
+          const verdict = data?.verdict;
+          const autoCorrected = data?.auto_corrected === true;
+
+          if (autoCorrected) {
+            corrected++; // fields updated, gap may or may not be resolved
+          } else if (verdict === 'match') {
+            unchanged++; // no discrepancy — gap may be data staleness
+          } else if (verdict === 'no_api_connection') {
+            manual++;
+          } else if (verdict === 'no_data') {
+            manual++; // tried but API returned nothing
+          } else if (verdict === 'api_error') {
+            manual++;
+          } else if (verdict === 'discrepancy') {
+            unchanged++; // discrepancy found but below $1 threshold or pushed
+          } else {
+            manual++; // unknown verdict — safer to flag for review
+          }
+        } catch (err: any) {
+          console.error(`[resolve-gaps] Failed for ${gap.settlement_id}:`, err.message);
+          manual++;
         }
       }
 
       // Trigger validation sweep to recalculate all statuses
       await callEdgeFunctionSafe('run-validation-sweep', session.access_token, {});
 
-      setResolveResult({ fixed, manual, unchanged });
+      // FIX 1: Record gap count AFTER sweep for truthful measurement
+      const { count: gapsAfter } = await supabase
+        .from('marketplace_validation')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', session.user.id)
+        .eq('overall_status', 'gap_detected');
 
-      if (fixed > 0) {
-        toast.success(`Fixed ${fixed} gap${fixed !== 1 ? 's' : ''}${manual > 0 ? ` · ${manual} need manual review` : ''}`);
-      } else if (manual > 0) {
-        toast.warning(`${manual} gap${manual !== 1 ? 's' : ''} need manual review — no API connection available`);
+      const resolved = (gapsBefore ?? 0) - (gapsAfter ?? 0);
+
+      setResolveResult({ resolved, corrected, manual, unchanged });
+
+      // Build honest toast message
+      const parts: string[] = [];
+      if (resolved > 0) parts.push(`Resolved ${resolved} gap${resolved !== 1 ? 's' : ''}`);
+      if (corrected > 0) parts.push(`${corrected} fields corrected`);
+      if (manual > 0) parts.push(`${manual} need review`);
+      if (unchanged > 0) parts.push(`${unchanged} unchanged`);
+
+      if (resolved > 0) {
+        toast.success(parts.join(' · '));
+      } else if (manual > 0 && corrected === 0) {
+        toast.warning(parts.join(' · '));
+      } else if (corrected > 0) {
+        toast.info(parts.join(' · '));
       } else {
         toast.info('No gaps could be auto-resolved');
       }
@@ -167,6 +223,15 @@ export default function SyncCommandBar({ onOpenPushPreview, onNavigateToMismatch
   const handlePushReady = () => {
     if (readySettlements.length === 0) return;
     onOpenPushPreview(readySettlements);
+  };
+
+  const formatResolveLabel = (r: ResolveResult): string => {
+    const parts: string[] = [];
+    if (r.resolved > 0) parts.push(`${r.resolved} resolved`);
+    if (r.corrected > 0) parts.push(`${r.corrected} corrected`);
+    if (r.manual > 0) parts.push(`${r.manual} manual`);
+    if (r.unchanged > 0) parts.push(`${r.unchanged} unchanged`);
+    return parts.join(' · ') || 'No changes';
   };
 
   return (
@@ -222,7 +287,7 @@ export default function SyncCommandBar({ onOpenPushPreview, onNavigateToMismatch
           </Button>
           <span className="text-[10px] text-muted-foreground pl-1">
             {resolveResult
-              ? `${resolveResult.fixed} fixed · ${resolveResult.manual} manual · ${resolveResult.unchanged} unchanged`
+              ? formatResolveLabel(resolveResult)
               : gapCount === null ? '—' : gapCount === 0 ? 'All clear' : `${gapCount} gap${gapCount !== 1 ? 's' : ''} detected`}
           </span>
         </div>
