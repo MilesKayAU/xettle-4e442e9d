@@ -1033,44 +1033,65 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                   li => li.type === 'A/P Invoice' && s.settlement_id.includes(li.docNumber)
                 );
                 if (matchingInvoice || settlements.length === 1) {
-                  // Augment settlement with PDF deductions
-                  const refundsExGst = Math.round(pdfResult.returnsCreditNotes / 1.1 * 100) / 100;
-                  const refundsGst = Math.round((pdfResult.returnsCreditNotes - refundsExGst) * 100) / 100;
+                  // ── AUTHORITATIVE PDF MERGE ──
+                  // The PDF is the ground truth. The formula that ALWAYS works:
+                  // PDF invoiceTotal - deductions = totalPaidAmount (bank_deposit)
+                  //
+                  // sales_principal = PDF invoiceTotal (gross pre-deduction amount)
+                  // This is NOT the CSV Total column — it's the amount Kogan invoiced
+                  // after their commission, representing what they owe the seller.
+                  //
+                  // seller_fees = -(monthly fees from PDF) — stored as negative
+                  // other_fees = -(advertising from PDF) — stored as negative
+                  // refunds = -(returns from PDF) — stored as negative
+                  // bank_deposit = PDF totalPaidAmount
+
+                  const totalMonthlyFees = pdfResult.monthlySellerFee + pdfResult.monthlyFeePerOrder;
+                  const totalAdFees = Math.abs(pdfResult.advertisingFees);
+                  const totalReturns = pdfResult.returnsCreditNotes;
+
+                  // Override with PDF authoritative values
+                  s.net_payout = pdfResult.totalPaidAmount;
                   
-                  // Add refunds (from credit notes)
+                  // Use PDF invoiceTotal as sales_principal (GST-inclusive gross)
+                  // This ensures: invoiceTotal - monthly_fees - ad_fees - returns = bank_deposit
+                  s.sales_ex_gst = pdfResult.invoiceTotal;
+                  
+                  // GST breakdown (all values are GST-inclusive, extract GST component)
+                  s.gst_on_sales = round2(pdfResult.invoiceTotal - (pdfResult.invoiceTotal / 1.1));
+                  
+                  // seller_fees = -(monthly fees from PDF) — negative expense
+                  s.fees_ex_gst = -totalMonthlyFees;
+                  s.gst_on_fees = round2(totalMonthlyFees - (totalMonthlyFees / 1.1));
+                  
+                  // Store PDF breakdown in metadata
                   s.metadata = {
                     ...s.metadata,
                     koganPdfMerged: true,
                     koganRemittanceNumber: pdfResult.remittanceNumber,
+                    koganApInvoiceRef: pdfResult.apInvoiceRef,
                     koganAdvertisingFees: pdfResult.advertisingFees,
                     koganMonthlySellerFee: pdfResult.monthlySellerFee,
+                    koganMonthlyFeePerOrder: pdfResult.monthlyFeePerOrder,
                     koganReturnsCreditNotes: pdfResult.returnsCreditNotes,
                     koganPdfBankDeposit: pdfResult.totalPaidAmount,
-                    refundsInclGst: -pdfResult.returnsCreditNotes,
-                    refundsExGst: -refundsExGst,
+                    koganPdfInvoiceTotal: pdfResult.invoiceTotal,
+                    // These metadata keys are picked up by settlement engine's save function
+                    otherChargesInclGst: totalAdFees,
+                    refundsInclGst: -totalReturns,
+                    refundsExGst: -round2(totalReturns / 1.1),
+                    // Keep CSV data for reference
+                    csvSalesTotal: s.metadata?.csvSalesTotal || 0,
+                    csvCommissionTotal: s.metadata?.csvCommissionTotal || 0,
+                    gstModel: 'inclusive',
                   };
 
-                  // Override net_payout with the actual bank deposit from PDF
-                  s.net_payout = pdfResult.totalPaidAmount;
-
-                  // Add advertising fees and monthly seller fee to fees
-                  const adSpendExGst = Math.round(Math.abs(pdfResult.advertisingFees) / 1.1 * 100) / 100;
-                  const sellerFeeExGst = Math.round(pdfResult.monthlySellerFee / 1.1 * 100) / 100;
-                  s.fees_ex_gst = Math.round((s.fees_ex_gst - adSpendExGst - sellerFeeExGst) * 100) / 100;
-
-                  // Recalculate GST on fees 
-                  const totalFeesInclGst = Math.abs(s.fees_ex_gst) * 1.1;
-                  s.gst_on_fees = Math.round((totalFeesInclGst - Math.abs(s.fees_ex_gst)) * 100) / 100;
-
                   // Recalculate reconciliation
-                  const calculatedNet = Math.round((
-                    s.sales_ex_gst + s.gst_on_sales +
-                    s.fees_ex_gst - s.gst_on_fees +
-                    (-pdfResult.returnsCreditNotes)
-                  ) * 100) / 100;
-                  s.reconciles = Math.abs(calculatedNet - s.net_payout) <= 5;
+                  // Formula: invoiceTotal - monthlyFees - adFees - returns = bank_deposit
+                  const calculatedNet = round2(pdfResult.invoiceTotal - totalMonthlyFees - totalAdFees - totalReturns);
+                  s.reconciles = Math.abs(calculatedNet - pdfResult.totalPaidAmount) <= 1;
                   s.metadata.calculatedNet = calculatedNet;
-                  s.metadata.reconciliationDiff = Math.round((calculatedNet - s.net_payout) * 100) / 100;
+                  s.metadata.reconciliationDiff = round2(calculatedNet - pdfResult.totalPaidAmount);
                 }
               }
               // Mark PDF as processed
