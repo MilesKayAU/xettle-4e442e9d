@@ -510,8 +510,13 @@ export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittan
       return `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
     })() : '';
 
-    // Extract total paid amount — may or may not have colon
-    const totalMatch = norm.match(/Total\s+paid\s+amount:?\s*([\d,]+\.?\d*)\s*AUD/i);
+    // Extract total paid amount — try "Total paid amount ... AUD" first,
+    // then fallback to "NNN AUD Total paid amount" (amount appears before the label)
+    let totalMatch = norm.match(/Total\s+paid\s+amount:?\s*([\d,]+\.?\d*)\s*AUD/i);
+    if (!totalMatch) {
+      // Fallback: amount appears BEFORE the phrase
+      totalMatch = norm.match(/([\d,]+\.?\d*)\s*AUD\s*Total\s+paid\s+amount/i);
+    }
     const totalPaidAmount = totalMatch ? parseAmount(totalMatch[1]) : undefined;
     console.log('[Kogan PDF] Total paid amount match:', totalMatch?.[0], '→', totalPaidAmount);
 
