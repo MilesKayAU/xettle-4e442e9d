@@ -114,22 +114,30 @@ export async function extractKoganPdfInfo(file: File): Promise<KoganPdfDocInfo> 
       if (!docNumbers.includes(m[1])) docNumbers.push(m[1]);
     }
 
-    // Extract period month from Transfer Date (DD/MM/YYYY) or line item dates (M/D/YYYY)
+    // Extract period month — use A/P Invoice reference (AUMKA:KOG:AU:YYYYMMDD) as primary
+    // source, NOT the Transfer Date (which is the payment date and may fall in a different month)
     const norm = rawText.replace(/\s+/g, ' ');
     let periodMonth: string | undefined;
 
-    // Try Transfer Date first (DD/MM/YYYY)
-    const transferMatch = norm.match(/Transfer\s+Date:\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/i);
-    if (transferMatch) {
-      periodMonth = `${transferMatch[3]}-${transferMatch[2].padStart(2, '0')}`;
+    // Priority 1: A/P Invoice reference code (e.g. AUMKA:KOG:AU:20260228 → 2026-02)
+    const refMatch = norm.match(/AUMKA:KOG:AU:(\d{4})(\d{2})\d{2}/i);
+    if (refMatch) {
+      periodMonth = `${refMatch[1]}-${refMatch[2]}`;
     }
 
-    // Fallback: use first line item date (M/D/YYYY — US format in table)
+    // Priority 2: A/P Invoice date (M/D/YYYY — US format in table)
     if (!periodMonth) {
-      const dateMatch = norm.match(/(?:A\/P\s+(?:Invoice|Credit\s+note)|Journal\s+Entry)\s+\d+\s+(\d{1,2})\/(\d{1,2})\/(\d{4})/i);
-      if (dateMatch) {
-        // In table dates, month is first field (US format)
-        periodMonth = `${dateMatch[3]}-${dateMatch[1].padStart(2, '0')}`;
+      const invoiceDateMatch = norm.match(/A\/P\s+Invoice\s+\d+\s+(\d{1,2})\/(\d{1,2})\/(\d{4})/i);
+      if (invoiceDateMatch) {
+        periodMonth = `${invoiceDateMatch[3]}-${invoiceDateMatch[1].padStart(2, '0')}`;
+      }
+    }
+
+    // Priority 3: Transfer Date (DD/MM/YYYY) as last resort
+    if (!periodMonth) {
+      const transferMatch = norm.match(/Transfer\s+Date:\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/i);
+      if (transferMatch) {
+        periodMonth = `${transferMatch[3]}-${transferMatch[2].padStart(2, '0')}`;
       }
     }
 
