@@ -51,10 +51,11 @@ export async function refreshXeroCOA(): Promise<RefreshCoaResult> {
   }
 
   if (data?.error === 'rate_limited') {
-    const waitSec = data.retry_after || 60;
+    const rawWait = data.retry_after || 60;
+    const waitSec = Math.min(rawWait, 120); // Cap display to 2 minutes
     return {
       success: false,
-      error: `Xero rate limit reached — please wait ${waitSec}s and try again.`,
+      error: `Xero rate limit reached — please wait ~${waitSec}s and try again.`,
     };
   }
 
