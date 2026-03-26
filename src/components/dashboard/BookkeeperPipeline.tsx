@@ -426,10 +426,12 @@ export default function BookkeeperPipeline({
                         {formatPeriod(item.period_start, item.period_end)}
                       </span>
                     </div>
-                    {item.amount != null && (
+                    {item.amount != null && item.amount !== 0 ? (
                       <span className="text-xs font-medium text-muted-foreground shrink-0 ml-2">
                         {formatAUD(item.amount)}
                       </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground shrink-0 ml-2">—</span>
                     )}
                   </div>
                 ))}
