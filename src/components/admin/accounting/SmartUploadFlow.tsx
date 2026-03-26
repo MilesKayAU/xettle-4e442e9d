@@ -721,6 +721,14 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               const firstDupeStatus = existingStatuses[dbDupeIds[0]] || '';
               existingSettlementStatus = firstDupeStatus;
 
+              // Check if a Kogan PDF companion is present in this upload batch
+              const hasKoganPdfCompanion = result?.marketplace === 'kogan' && 
+                !uniqueFiles[idx].name.toLowerCase().endsWith('.pdf') &&
+                uniqueFiles.some(f => 
+                  f.name.toLowerCase().endsWith('.pdf') && 
+                  f.name.toLowerCase().includes('kogan')
+                );
+
               if (firstDupeStatus === 'pushed_to_xero') {
                 // BLOCK — already pushed to Xero
                 status = 'error';
@@ -733,6 +741,15 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                 status = 'detected';
                 forceOverwrite = true;
                 toast.info('Settlement will be re-parsed with updated data.', { duration: 4000 });
+              } else if (
+                !alwaysConfirmReparse &&
+                hasKoganPdfCompanion &&
+                ['ready_to_push'].includes(firstDupeStatus)
+              ) {
+                // AUTO re-parse — Kogan PDF provides corrected bank_deposit values
+                status = 'detected';
+                forceOverwrite = true;
+                toast.info('Kogan PDF detected — settlement will be re-parsed with corrected deposit values.', { duration: 5000 });
               } else if (['ready_to_push', 'already_recorded'].includes(firstDupeStatus) || alwaysConfirmReparse) {
                 // ASK — settlement is clean, confirm before overwriting
                 status = 'reparse_confirm';
