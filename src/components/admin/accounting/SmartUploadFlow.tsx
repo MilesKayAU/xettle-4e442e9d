@@ -1202,25 +1202,13 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           }
         }
         
-        // Extract doc number from this CSV's settlement (fallback)
+        // Extract doc number from this CSV's settlement — AP Invoice is the ONLY pairing key
         const csvSettlementId = settlements[0]?.settlement_id || '';
         const csvDocMatch = csvSettlementId.match(/(\d{5,})/);
         const csvDocNumber = csvDocMatch?.[1] || '';
         
-        // Pass 1: period-based match
-        if (csvPeriodMonth) {
-          for (const f of filesRef.current) {
-            if (f.detection?.marketplace !== 'kogan' || !f.file.name.toLowerCase().endsWith('.pdf')) continue;
-            const pdfMonth = f.koganPdfPeriodMonth || f.koganRemittanceResult?.periodMonth;
-            if (pdfMonth && pdfMonth === csvPeriodMonth) {
-              koganPdfFile = f;
-              break;
-            }
-          }
-        }
-        
-        // Pass 2: doc number match (fallback)
-        if (!koganPdfFile && csvDocNumber) {
+        // Match PDF by AP Invoice doc number ONLY — no period-based matching
+        if (csvDocNumber) {
           for (const f of filesRef.current) {
             if (f.detection?.marketplace !== 'kogan' || !f.file.name.toLowerCase().endsWith('.pdf')) continue;
             const pdfDocNums = f.koganDocNumbers || [];
@@ -1986,10 +1974,10 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         if (fnDateMatch) csvMonth = `${fnDateMatch[1]}-${fnDateMatch[2]}`;
       }
 
-      // Try matching PDF: first by doc number, then by period month
+      // Match PDF by AP Invoice doc number ONLY — period-based matching causes
+      // cross-contamination when multiple Kogan invoices share the same period month.
       let matchedPdf: (typeof pdfFiles)[0] | null = null;
       
-      // Pass 1: doc number match (legacy, still works for exact matches)
       for (const pdf of pdfFiles) {
         if (usedPdfIndices.has(pdf.originalIdx)) continue;
         const pdfDocNums = pdf.koganDocNumbers || [];
@@ -1997,19 +1985,6 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           matchedPdf = pdf;
           usedPdfIndices.add(pdf.originalIdx);
           break;
-        }
-      }
-
-      // Pass 2: period-based match (primary strategy)
-      if (!matchedPdf && csvMonth) {
-        for (const pdf of pdfFiles) {
-          if (usedPdfIndices.has(pdf.originalIdx)) continue;
-          const pdfMonth = pdf.koganPdfPeriodMonth || pdf.koganRemittanceResult?.periodMonth;
-          if (pdfMonth && pdfMonth === csvMonth) {
-            matchedPdf = pdf;
-            usedPdfIndices.add(pdf.originalIdx);
-            break;
-          }
         }
       }
 
@@ -2036,21 +2011,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       const docNumber = docNums[0] || pdf.file.name.replace(/\.[^.]+$/, '');
       const pdfMonth = pdf.koganPdfPeriodMonth || pdf.koganRemittanceResult?.periodMonth;
       
-      // Try DB match by doc number first, then by period month
+      // Match DB settlement by AP Invoice doc number ONLY
       let dbMatch = existingKoganSettlements[docNumber] || null;
-      if (!dbMatch && pdfMonth) {
-        // Search existing settlements by period overlap
-        for (const key of Object.keys(existingKoganSettlements)) {
-          const s = existingKoganSettlements[key];
-          if (s.metadata?.period_start) {
-            const sMonth = s.metadata.period_start.substring(0, 7);
-            if (sMonth === pdfMonth) {
-              dbMatch = s;
-              break;
-            }
-          }
-        }
-      }
       
       groups.push({
         docNumber,
