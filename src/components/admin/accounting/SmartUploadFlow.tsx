@@ -3076,7 +3076,24 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
               {status === 'error' && df.error && (
                 <div className="flex items-start gap-2">
                   <XCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-destructive">{df.error}</p>
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-destructive">{df.error}</p>
+                    {df.error.includes('Already saved') && df.settlements && df.settlements.length > 0 && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs gap-1.5"
+                        onClick={() => {
+                          onSetStatus(idx, 'detected');
+                          // Mark for overwrite via a custom event — parent will set forceOverwrite
+                          (window as any).__smartUploadForceOverwrite?.(idx);
+                        }}
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        Re-parse &amp; Overwrite
+                      </Button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
