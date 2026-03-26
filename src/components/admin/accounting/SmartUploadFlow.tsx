@@ -2835,6 +2835,7 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
     <Card className={`transition-all ${
       status === 'wrong_file' ? 'border-amber-400/50 bg-amber-50/30 dark:bg-amber-950/10' :
       status === 'error' ? 'border-destructive/30 bg-destructive/5' :
+      status === 'reparse_confirm' ? 'border-amber-400/50 bg-amber-50/30 dark:bg-amber-950/10' :
       status === 'saved' ? 'border-green-400/50 bg-green-50/30 dark:bg-green-950/10' :
       isReviewing ? 'border-primary/40 bg-primary/[0.03] ring-1 ring-primary/20' :
       status === 'detected' && previewData ? 'border-primary/30 bg-primary/[0.02]' :
