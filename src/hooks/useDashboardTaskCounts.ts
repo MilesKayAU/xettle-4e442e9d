@@ -63,6 +63,7 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
       .select('id, status, xero_status, reconciliation_status, marketplace, is_hidden, is_pre_boundary')
       .eq('is_hidden', false)
       .eq('is_pre_boundary', false)
+      .gte('period_end', '2026-01-01')
       .order('created_at', { ascending: false })
       .limit(1000),
 
