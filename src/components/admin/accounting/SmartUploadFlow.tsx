@@ -284,10 +284,14 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           setHasShopifyConnection(true);
           setShopifyTokenInvalid(false);
         }
-      } catch {
-        // If validation fails, still show connected but mark as potentially invalid
+      } catch (e: any) {
+        // FunctionsHttpError for 429 — treat as valid token, just on cooldown
+        const status = e?.context?.status ?? e?.status;
+        let body = '';
+        try { body = await e?.context?.text?.() ?? ''; } catch {}
+        const is429 = status === 429 || /cooldown|already in progress/i.test(body) || /cooldown|already in progress/i.test(e?.message ?? '');
         setHasShopifyConnection(true);
-        setShopifyTokenInvalid(true);
+        setShopifyTokenInvalid(is429 ? false : true);
       }
     })();
   }, []);
