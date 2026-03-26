@@ -27,7 +27,7 @@ export const MARKETPLACE_CONTACTS: Record<string, string> = {
   bigw: 'Big W Marketplace',
   catch: 'Catch Marketplace',
   mydeal: 'MyDeal Marketplace',
-  kogan: 'Kogan Marketplace',
+  kogan: 'Kogan Australia Pty Ltd',
   woolworths: 'Woolworths Marketplace',
   woolworths_marketplus: 'Woolworths MarketPlus',
   ebay_au: 'eBay Australia',
