@@ -157,10 +157,27 @@ export function parseKoganPayoutCSV(csvText: string): KoganCsvParseResult {
   const lines = csvText.split(/\r?\n/);
   if (lines.length < 2) return { success: false, settlements: [], error: 'Empty CSV' };
 
-  // Find header row (skip preamble)
+  // ── Split CSV into Section 1 (order rows) and Section 2 (fee rows) ──
+  // Section 2 starts after a "Claim details below" marker or dashed separator
+  let section1Lines: string[] = [];
+  let section2Lines: string[] = [];
+  let inSection2 = false;
+  for (const line of lines) {
+    if (!inSection2 && /claim\s+details\s+below/i.test(line)) {
+      inSection2 = true;
+      continue;
+    }
+    if (inSection2) {
+      section2Lines.push(line);
+    } else {
+      section1Lines.push(line);
+    }
+  }
+
+  // ── Section 1: Order rows ──
   let headerIdx = -1;
-  for (let i = 0; i < Math.min(30, lines.length); i++) {
-    const lower = lines[i].toLowerCase();
+  for (let i = 0; i < Math.min(30, section1Lines.length); i++) {
+    const lower = section1Lines[i].toLowerCase();
     if (lower.includes('apinvoice') || lower.includes('ap invoice') || lower.includes('invoicedate')) {
       headerIdx = i;
       break;
@@ -168,7 +185,7 @@ export function parseKoganPayoutCSV(csvText: string): KoganCsvParseResult {
   }
   if (headerIdx < 0) return { success: false, settlements: [], error: 'Could not find Kogan CSV header row' };
 
-  const headers = parseCSVLine(lines[headerIdx]);
+  const headers = parseCSVLine(section1Lines[headerIdx]);
   const colIdx = (name: string) => headers.findIndex(h => h.trim().toLowerCase().replace(/\s+/g, '') === name.toLowerCase().replace(/\s+/g, ''));
 
   const iAPInvoice = colIdx('APInvoice');
@@ -182,7 +199,6 @@ export function parseKoganPayoutCSV(csvText: string): KoganCsvParseResult {
 
   if (iAPInvoice < 0) return { success: false, settlements: [], error: 'APInvoice column not found' };
 
-  // Parse all data rows, filtering junk
   interface KoganRow {
     apInvoice: string;
     invoiceDate: string;
@@ -197,16 +213,16 @@ export function parseKoganPayoutCSV(csvText: string): KoganCsvParseResult {
   const JUNK_PATTERNS = [/^-{3,}/, /^apcreditnote$/i, /^monthly\s+marketplace/i, /^monthly\s+seller/i, /^ungrouped$/i, /^$/];
 
   const rows: KoganRow[] = [];
-  for (let i = headerIdx + 1; i < lines.length; i++) {
-    const line = lines[i].trim();
+  for (let i = headerIdx + 1; i < section1Lines.length; i++) {
+    const line = section1Lines[i].trim();
     if (!line) continue;
+    // Stop at dashed separator (boundary before section 2 if no "Claim details" marker)
+    if (/^-{3,}/.test(line)) break;
 
     const cols = parseCSVLine(line);
     const apVal = (cols[iAPInvoice] || '').trim();
 
-    // Filter junk rows
     if (JUNK_PATTERNS.some(p => p.test(apVal))) continue;
-    // Must be a numeric AP Invoice number
     if (!/^\d{3,}$/.test(apVal)) continue;
 
     const getNum = (idx: number) => {
@@ -230,7 +246,64 @@ export function parseKoganPayoutCSV(csvText: string): KoganCsvParseResult {
 
   if (rows.length === 0) return { success: false, settlements: [], error: 'No valid Kogan data rows found' };
 
-  // Group by APInvoice
+  // ── Section 2: Transaction fee rows (APCreditNote) ──
+  let totalTransactionFees = 0;
+  let transactionFeeCount = 0;
+  let creditNoteNumber = '';
+  if (section2Lines.length > 0) {
+    // Find header row in section 2
+    let feeHeaderIdx = -1;
+    for (let i = 0; i < Math.min(10, section2Lines.length); i++) {
+      const lower = section2Lines[i].toLowerCase();
+      if (lower.includes('apcreditnote') || lower.includes('creditnoteref') || lower.includes('price')) {
+        feeHeaderIdx = i;
+        break;
+      }
+    }
+    if (feeHeaderIdx >= 0) {
+      const feeHeaders = parseCSVLine(section2Lines[feeHeaderIdx]);
+      const feeColIdx = (name: string) => feeHeaders.findIndex(h =>
+        h.trim().toLowerCase().replace(/\s+/g, '') === name.toLowerCase().replace(/\s+/g, ''));
+
+      const iCreditNote = feeColIdx('APCreditNote');
+      const iPrice = feeHeaders.findIndex(h => /^price$/i.test(h.trim()));
+      const iGstAmount = feeHeaders.findIndex(h => /gst\s*amount/i.test(h.trim()));
+      const iFeeTotal = feeHeaders.findIndex(h => /^total$/i.test(h.trim()));
+
+      for (let i = feeHeaderIdx + 1; i < section2Lines.length; i++) {
+        const line = section2Lines[i].trim();
+        if (!line) continue;
+        if (/^-{3,}/.test(line)) continue;
+
+        const cols = parseCSVLine(line);
+        // Capture credit note number
+        if (iCreditNote >= 0 && !creditNoteNumber) {
+          const cn = (cols[iCreditNote] || '').trim();
+          if (/^\d{3,}$/.test(cn)) creditNoteNumber = cn;
+        }
+
+        // Sum fee amounts — prefer Total column, fallback to Price + GST Amount
+        let feeAmount = 0;
+        if (iFeeTotal >= 0 && cols[iFeeTotal]) {
+          const v = parseFloat((cols[iFeeTotal] || '').replace(/[^0-9.\-]/g, ''));
+          if (!isNaN(v)) feeAmount = Math.abs(v);
+        } else {
+          const price = iPrice >= 0 ? parseFloat((cols[iPrice] || '').replace(/[^0-9.\-]/g, '')) : 0;
+          const gst = iGstAmount >= 0 ? parseFloat((cols[iGstAmount] || '').replace(/[^0-9.\-]/g, '')) : 0;
+          feeAmount = Math.abs(isNaN(price) ? 0 : price) + Math.abs(isNaN(gst) ? 0 : gst);
+        }
+        if (feeAmount > 0) {
+          totalTransactionFees += feeAmount;
+          transactionFeeCount++;
+        }
+      }
+    }
+  }
+  totalTransactionFees = round2(totalTransactionFees);
+
+  console.log(`[Kogan CSV] Parsed ${rows.length} order rows, ${transactionFeeCount} fee rows. Transaction fees: $${totalTransactionFees}`);
+
+  // ── Group order rows by APInvoice ──
   const groups = new Map<string, KoganRow[]>();
   for (const r of rows) {
     const existing = groups.get(r.apInvoice) || [];
@@ -240,8 +313,13 @@ export function parseKoganPayoutCSV(csvText: string): KoganCsvParseResult {
 
   const settlements: import('@/utils/settlement-engine').StandardSettlement[] = [];
 
+  // Distribute transaction fees proportionally across AP Invoice groups
+  let grandTotalRemitted = 0;
+  for (const gRows of groups.values()) {
+    for (const r of gRows) grandTotalRemitted += r.remitted;
+  }
+
   for (const [apInvoice, gRows] of groups) {
-    // Extract date — try InvoiceDate, DateManifested, DateRemitted in order
     let periodDate: Date | null = null;
     for (const r of gRows) {
       for (const dateStr of [r.invoiceDate, r.dateManifested, r.dateRemitted]) {
@@ -257,59 +335,79 @@ export function parseKoganPayoutCSV(csvText: string): KoganCsvParseResult {
       continue;
     }
 
-    // Period = the month of the date
     const year = periodDate.getFullYear();
-    const month = periodDate.getMonth(); // 0-indexed
+    const month = periodDate.getMonth();
     const periodStart = `${year}-${String(month + 1).padStart(2, '0')}-01`;
     const lastDay = new Date(year, month + 1, 0).getDate();
     const periodEnd = `${year}-${String(month + 1).padStart(2, '0')}-${lastDay}`;
     const periodLabel = `Kogan ${new Date(year, month).toLocaleString('en-AU', { month: 'short', year: 'numeric' })}`;
 
-    // Sum financials
-    let totalSales = 0;
-    let totalCommission = 0;
+    // Sum financials — ALL GST-inclusive to match bank deposit
+    let totalSalesInclGst = 0;
+    let totalCommissionInclGst = 0;
     let totalRemitted = 0;
-    let totalGst = 0;
+    let totalGstOnSales = 0;
     for (const r of gRows) {
-      totalSales += r.total;
-      totalCommission += Math.abs(r.commission);
+      totalSalesInclGst += r.total;
+      totalCommissionInclGst += Math.abs(r.commission);
       totalRemitted += r.remitted;
-      totalGst += r.gst;
+      totalGstOnSales += r.gst;
     }
 
-    // Commission is inclusive of GST — split
-    const commissionExGst = Math.round(totalCommission / 1.1 * 100) / 100;
-    const commissionGst = Math.round((totalCommission - commissionExGst) * 100) / 100;
+    // Proportional share of transaction fees for this AP Invoice group
+    const feeShare = grandTotalRemitted > 0
+      ? round2(totalTransactionFees * (totalRemitted / grandTotalRemitted))
+      : 0;
 
-    // Sales ex GST
-    const salesExGst = Math.round((totalSales - totalGst) * 100) / 100;
-    const gstOnSales = Math.round(totalGst * 100) / 100;
+    // bank_deposit = Remitted - proportional transaction fees
+    const bankDeposit = round2(totalRemitted - feeShare);
 
-    const netPayout = Math.round(totalRemitted * 100) / 100;
+    // Store GST-inclusive values so reconciliation formula works:
+    // sales_principal(incl GST) - abs(seller_fees incl GST) - abs(other_fees) = bank_deposit
+    // 784.10 - 103.37 - 17.58 = 663.15 ✅
+    const salesPrincipal = round2(totalSalesInclGst);
+    const sellerFees = round2(totalCommissionInclGst);
+
+    // GST breakdown for BAS (informational, not in reconciliation formula)
+    const gstOnSales = round2(totalGstOnSales);
+    const commissionGst = round2(totalCommissionInclGst - (totalCommissionInclGst / 1.1));
 
     settlements.push({
       marketplace: 'kogan',
       settlement_id: `kogan_${apInvoice}`,
       period_start: periodStart,
       period_end: periodEnd,
-      sales_ex_gst: salesExGst,
+      // sales_ex_gst maps to sales_principal in DB — store GST-inclusive
+      // so reconciliation formula (sales_principal - fees - other_fees) = bank_deposit
+      sales_ex_gst: salesPrincipal,
       gst_on_sales: gstOnSales,
-      fees_ex_gst: -commissionExGst,
+      fees_ex_gst: -sellerFees,
       gst_on_fees: commissionGst,
-      net_payout: netPayout,
+      net_payout: bankDeposit,
       source: 'csv_upload',
-      reconciles: Math.abs((salesExGst + gstOnSales - commissionExGst - commissionGst) - netPayout) <= 5,
+      reconciles: Math.abs((salesPrincipal - sellerFees - feeShare) - bankDeposit) <= 1,
       metadata: {
         apInvoiceNumber: apInvoice,
         orderCount: gRows.length,
         periodMonth: `${year}-${String(month + 1).padStart(2, '0')}`,
         periodLabel,
         currency: 'AUD',
+        // Transaction fees stored here for settlement engine to pick up as other_fees
+        otherChargesInclGst: feeShare,
+        transactionFeeTotal: totalTransactionFees,
+        transactionFeeCount,
+        creditNoteNumber: creditNoteNumber || undefined,
+        // GST note: sales_principal is GST-inclusive for Kogan reconciliation
+        gstModel: 'inclusive',
       },
     });
   }
 
   return { success: settlements.length > 0, settlements, error: settlements.length === 0 ? 'No valid settlement groups parsed' : undefined };
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
 }
 
 /** Parse a single CSV line handling quoted fields */
