@@ -1690,35 +1690,42 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       
-      // Calculate deductions from PDF
-      const refundsExGst = Math.round(pdfResult.returnsCreditNotes / 1.1 * 100) / 100;
-      const adSpendExGst = Math.round(Math.abs(pdfResult.advertisingFees) / 1.1 * 100) / 100;
-      const sellerFeeExGst = Math.round(pdfResult.monthlySellerFee / 1.1 * 100) / 100;
+      // ── Authoritative PDF merge ──
+      // Use PDF values directly — invoiceTotal is the gross, deductions produce bank_deposit
+      const totalMonthlyFees = pdfResult.monthlySellerFee + pdfResult.monthlyFeePerOrder;
+      const totalAdFees = Math.abs(pdfResult.advertisingFees);
+      const totalReturns = pdfResult.returnsCreditNotes;
       
-      // Update the existing settlement with PDF data
+      // Update the existing settlement with PDF authoritative data
       const updatedMetadata = {
         ...(existing.metadata || {}),
         koganPdfMerged: true,
         koganRemittanceNumber: pdfResult.remittanceNumber,
+        koganApInvoiceRef: pdfResult.apInvoiceRef,
         koganAdvertisingFees: pdfResult.advertisingFees,
         koganMonthlySellerFee: pdfResult.monthlySellerFee,
+        koganMonthlyFeePerOrder: pdfResult.monthlyFeePerOrder,
         koganReturnsCreditNotes: pdfResult.returnsCreditNotes,
         koganPdfBankDeposit: pdfResult.totalPaidAmount,
+        koganPdfInvoiceTotal: pdfResult.invoiceTotal,
         missingPdf: false,
-        refundsInclGst: -pdfResult.returnsCreditNotes,
-        refundsExGst: -refundsExGst,
+        otherChargesInclGst: totalAdFees,
+        refundsInclGst: -totalReturns,
+        refundsExGst: -round2(totalReturns / 1.1),
+        gstModel: 'inclusive',
       };
       
-      // Update ALL financial fields from PDF — not just bank_deposit
-      // Without this, the reconciliation formula sees the old CSV-only figures
-      // while bank_deposit reflects the PDF total, creating a gap.
+      // Update ALL financial fields from PDF — invoiceTotal as sales_principal
       const { error } = await supabase
         .from('settlements')
         .update({
+          sales_principal: pdfResult.invoiceTotal,
+          seller_fees: -totalMonthlyFees,
+          other_fees: -totalAdFees,
+          refunds: -round2(totalReturns / 1.1),
           bank_deposit: pdfResult.totalPaidAmount,
-          advertising_costs: adSpendExGst > 0 ? -adSpendExGst : 0,
-          other_fees: -(Math.abs((existing.metadata?.subscriptionAmount || 0)) + sellerFeeExGst),
-          refunds: -refundsExGst,
+          gst_on_income: round2(pdfResult.invoiceTotal - (pdfResult.invoiceTotal / 1.1)),
+          gst_on_expenses: -round2(totalMonthlyFees - (totalMonthlyFees / 1.1)),
           metadata: updatedMetadata,
         } as any)
         .eq('id', existing.id)
