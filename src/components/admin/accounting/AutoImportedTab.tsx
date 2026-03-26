@@ -246,6 +246,7 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
           .select('*')
           .eq('source', 'api')
           .like('marketplace', 'amazon_%')
+          .gte('period_end', '2026-01-01')
           .order('period_end', { ascending: false }),
         supabase
           .from('marketplace_validation')
