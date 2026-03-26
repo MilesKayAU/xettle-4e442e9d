@@ -429,7 +429,7 @@ function buildSettlementFromPayout(
         break
       }
       case 'REFUND':
-        refundsTotal += amount // already negative from eBay
+        refundsTotal -= Math.abs(amount) // Force negative sign regardless of eBay API
         break
       case 'CREDIT': {
         // Same as SALE: eBay returns net amount, reconstruct gross

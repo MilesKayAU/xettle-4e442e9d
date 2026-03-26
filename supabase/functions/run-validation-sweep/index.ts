@@ -703,7 +703,7 @@ async function sweepUser(adminSupabase: any, userId: string) {
             - Math.abs(parseFloat(settlement.storage_fees) || 0)
             - Math.abs(parseFloat(settlement.advertising_costs) || 0)
             - Math.abs(parseFloat(settlement.other_fees) || 0)
-            + (parseFloat(settlement.refunds) || 0)
+            - Math.abs(parseFloat(settlement.refunds) || 0)
             + (parseFloat(settlement.reimbursements) || 0)
           const gap = Math.round((bankDeposit - computedNet) * 100) / 100
           record.reconciliation_difference = gap
