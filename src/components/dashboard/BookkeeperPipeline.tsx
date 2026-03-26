@@ -323,6 +323,9 @@ export default function BookkeeperPipeline({
               <>{actionableCount} item{actionableCount !== 1 ? 's' : ''} need{actionableCount === 1 ? 's' : ''} attention · Last synced: {lastSyncLabel || 'unknown'}</>
             )}
           </p>
+          <p className="text-xs text-muted-foreground/70 mt-0.5">
+            Showing settlements from {format(new Date(boundaryDate), 'd MMM yyyy')} · Pre-2026 periods reconciled via Link My Books
+          </p>
         </div>
         <Button
           size="sm"
