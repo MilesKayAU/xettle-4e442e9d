@@ -1202,25 +1202,13 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           }
         }
         
-        // Extract doc number from this CSV's settlement (fallback)
+        // Extract doc number from this CSV's settlement — AP Invoice is the ONLY pairing key
         const csvSettlementId = settlements[0]?.settlement_id || '';
         const csvDocMatch = csvSettlementId.match(/(\d{5,})/);
         const csvDocNumber = csvDocMatch?.[1] || '';
         
-        // Pass 1: period-based match
-        if (csvPeriodMonth) {
-          for (const f of filesRef.current) {
-            if (f.detection?.marketplace !== 'kogan' || !f.file.name.toLowerCase().endsWith('.pdf')) continue;
-            const pdfMonth = f.koganPdfPeriodMonth || f.koganRemittanceResult?.periodMonth;
-            if (pdfMonth && pdfMonth === csvPeriodMonth) {
-              koganPdfFile = f;
-              break;
-            }
-          }
-        }
-        
-        // Pass 2: doc number match (fallback)
-        if (!koganPdfFile && csvDocNumber) {
+        // Match PDF by AP Invoice doc number ONLY — no period-based matching
+        if (csvDocNumber) {
           for (const f of filesRef.current) {
             if (f.detection?.marketplace !== 'kogan' || !f.file.name.toLowerCase().endsWith('.pdf')) continue;
             const pdfDocNums = f.koganDocNumbers || [];
