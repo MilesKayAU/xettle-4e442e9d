@@ -561,18 +561,23 @@ export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittan
     let creditNoteTotal = 0;
     let advertisingFees = 0;
     let monthlySellerFee = 0;
+    let monthlyFeePerOrder = 0;
     let returnsCreditNotes = 0;
+    let apInvoiceRef: string | undefined;
 
     for (const item of lineItems) {
       if (item.type.toLowerCase().includes('invoice')) {
         invoiceTotal += item.amount;
+        if (!apInvoiceRef) apInvoiceRef = item.docNumber; // First A/P Invoice doc number
       } else if (item.type.toLowerCase().includes('journal')) {
         advertisingFees += item.amount; // negative
       } else if (item.type.toLowerCase().includes('credit note')) {
         creditNoteTotal += item.amount; // negative
-        if (item.reference.toLowerCase().includes('monthly seller fee') || 
-            item.reference.toLowerCase().includes('monthly fee')) {
+        const ref = item.reference.toLowerCase();
+        if (ref.includes('monthly seller fee')) {
           monthlySellerFee += Math.abs(item.amount);
+        } else if (ref.includes('monthly fee per order')) {
+          monthlyFeePerOrder += Math.abs(item.amount);
         } else {
           returnsCreditNotes += Math.abs(item.amount);
         }
@@ -580,7 +585,9 @@ export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittan
     }
 
     console.log('[Kogan PDF] Parsed', lineItems.length, 'line items. Total paid:', totalPaidAmount, 
-      'Invoice total:', invoiceTotal, 'Credits:', creditNoteTotal, 'Ad fees:', advertisingFees);
+      'Invoice total:', invoiceTotal, 'Credits:', creditNoteTotal, 'Ad fees:', advertisingFees,
+      'Monthly seller fee:', monthlySellerFee, 'Monthly fee/order:', monthlyFeePerOrder,
+      'Returns:', returnsCreditNotes, 'AP Invoice ref:', apInvoiceRef);
 
     // Derive periodMonth from transferDate or first line item date
     let periodMonth: string | undefined;
