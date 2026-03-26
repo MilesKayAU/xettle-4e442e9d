@@ -624,11 +624,13 @@ export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittan
     let periodMonth: string | undefined;
 
     // Priority 1: Extract from A/P Invoice reference code (e.g. AUMKA:KOG:AU:20260228 → 2026-02)
+    let invoiceDate: string | undefined;
     for (const item of lineItems) {
       if (item.type.toLowerCase().includes('invoice') && item.reference) {
-        const refDateMatch = item.reference.match(/(\d{4})(\d{2})\d{2}/);
+        const refDateMatch = item.reference.match(/(\d{4})(\d{2})(\d{2})/);
         if (refDateMatch) {
           periodMonth = `${refDateMatch[1]}-${refDateMatch[2]}`;
+          invoiceDate = `${refDateMatch[1]}-${refDateMatch[2]}-${refDateMatch[3]}`;
           break;
         }
       }
@@ -641,6 +643,7 @@ export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittan
           const isoDate = parseDateToISO(item.date);
           if (isoDate) {
             periodMonth = isoDate.substring(0, 7);
+            invoiceDate = isoDate;
             break;
           }
         }
