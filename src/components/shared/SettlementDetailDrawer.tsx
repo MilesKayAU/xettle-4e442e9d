@@ -1083,7 +1083,14 @@ export default function SettlementDetailDrawer({ settlementId, open, onClose, au
                 </Button>
               </div>
             )}
-            {events.length > 0 && (
+            {/* Admin: Correct Data section (re-parse / delete) */}
+            <SettlementCorrectDataSection
+              settlement={settlement}
+              isAdmin={isAdmin}
+              onSettlementUpdated={(updated) => setSettlement(updated)}
+              onClose={onClose}
+            />
+
               <>
                 <Separator />
                 <div>
