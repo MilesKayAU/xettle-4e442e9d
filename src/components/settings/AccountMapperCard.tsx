@@ -961,19 +961,21 @@ export default function AccountMapperCard() {
 
       const finalCodes = buildFinalCodes();
 
-      // ─── Pre-validate all codes against live Xero COA ────────────────
-      toast.info('Verifying accounts against live Xero data…');
-      const refreshResult = await refreshXeroCOA();
-      if (!refreshResult.success) {
-        toast.error(`Cannot verify with Xero: ${refreshResult.error}. Please try again.`);
-        return;
-      }
+      // ─── Pre-validate codes against cached Xero COA ────────────────
+      // Use cached COA to avoid hitting Xero API rate limits on every save.
+      // The COA is refreshed separately via the Refresh button or Scan & Match.
+      toast.info('Validating account codes…');
       const [freshAccounts, freshSyncedAt] = await Promise.all([
         getCachedXeroAccounts(),
         getCoaLastSyncedAt(),
       ]);
       setCoaAccounts(freshAccounts);
       setCoaLastSynced(freshSyncedAt);
+
+      if (freshAccounts.length === 0) {
+        toast.error('No cached Chart of Accounts found. Please refresh COA first.');
+        return;
+      }
 
       const freshCoaSet = new Set(freshAccounts.map(a => a.account_code).filter(Boolean));
       const invalidCodes: string[] = [];
