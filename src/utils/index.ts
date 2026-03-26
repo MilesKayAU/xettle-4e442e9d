@@ -120,3 +120,6 @@ export { sanitizeText, sanitizeEmail } from './input-sanitization';
 
 // ─── Logger (structured logging utility) ───
 export { logger } from './logger';
+
+// ─── Settlement Ingestion Validation (sign enforcement, variance checks at ingestion time) ───
+export { validateAndNormaliseSettlement } from './settlement-validation';
