@@ -622,6 +622,7 @@ export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittan
       rawText,
     };
   } catch (err: any) {
+    console.error('[Kogan PDF] Parse exception:', err);
     return {
       ...empty,
       success: false,

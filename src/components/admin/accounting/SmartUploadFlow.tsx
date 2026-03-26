@@ -1700,8 +1700,9 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
     setMergingPdfDoc(docNumber);
     try {
       const pdfResult = await parseKoganRemittancePdf(pdfFile.file);
+      console.log('[Kogan merge] PDF parse result:', { success: pdfResult.success, error: pdfResult.error, totalPaidAmount: pdfResult.totalPaidAmount, lineItems: pdfResult.lineItems?.length, rawTextLen: pdfResult.rawText?.length });
       if (!pdfResult.success || pdfResult.totalPaidAmount === undefined) {
-        toast.error('Could not parse Kogan PDF. Please check the file.');
+        toast.error(pdfResult.error || 'Could not parse Kogan PDF. Please check the file.');
         return;
       }
       
