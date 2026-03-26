@@ -83,7 +83,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fetch active accounts from Xero
+    // Fetch active accounts from Xero — fall back to cached COA on 429
+    let xeroAccounts: any[] = []
+    let usedCache = false
+
     const accountsResp = await fetch(
       'https://api.xero.com/api.xro/2.0/Accounts?where=Status%3D%3D%22ACTIVE%22',
       {
@@ -95,65 +98,91 @@ Deno.serve(async (req) => {
       }
     )
 
-    if (!accountsResp.ok) {
-      const errText = await accountsResp.text()
-      logger.error('Xero accounts error:', accountsResp.status, errText)
-      return new Response(JSON.stringify({ error: `Xero API error: ${accountsResp.status}` }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
+    if (accountsResp.ok) {
+      const accountsData = await accountsResp.json()
+      xeroAccounts = (accountsData.Accounts || []).map((a: any) => ({
+        code: a.Code,
+        name: a.Name,
+        type: a.Type,
+        taxType: a.TaxType,
+        description: a.Description || '',
+      }))
 
-    const accountsData = await accountsResp.json()
-    const xeroAccounts = (accountsData.Accounts || []).map((a: any) => ({
-      code: a.Code,
-      name: a.Name,
-      type: a.Type,
-      taxType: a.TaxType,
-      description: a.Description || '',
-    }))
+      // Cache COA
+      try {
+        const xeroAccountRows = (accountsData.Accounts || [])
+          .filter((a: any) => a.AccountID)
+          .map((a: any) => ({
+            user_id: userId,
+            xero_account_id: a.AccountID,
+            account_code: a.Code || null,
+            account_name: a.Name,
+            account_type: a.Type || null,
+            tax_type: a.TaxType || null,
+            description: a.Description || null,
+            is_active: true,
+            synced_at: new Date().toISOString(),
+          }))
 
-    // ─── Cache CoA in xero_chart_of_accounts ──────────────────────
-    // Soft-delete: mark missing accounts as inactive, don't hard-delete
-    // (protects against partial Xero API responses)
-    try {
-      const xeroAccountRows = (accountsData.Accounts || [])
-        .filter((a: any) => a.AccountID)
-        .map((a: any) => ({
-          user_id: userId,
-          xero_account_id: a.AccountID,
-          account_code: a.Code || null,
-          account_name: a.Name,
-          account_type: a.Type || null,
-          tax_type: a.TaxType || null,
-          description: a.Description || null,
-          is_active: true,
-          synced_at: new Date().toISOString(),
-        }));
+        if (xeroAccountRows.length > 0) {
+          await supabase.from('xero_chart_of_accounts').upsert(
+            xeroAccountRows,
+            { onConflict: 'user_id,xero_account_id' }
+          )
+          const currentIds = xeroAccountRows.map((r: any) => r.xero_account_id)
+          await supabase
+            .from('xero_chart_of_accounts')
+            .update({ is_active: false })
+            .eq('user_id', userId)
+            .eq('is_active', true)
+            .not('xero_account_id', 'in', `(${currentIds.join(',')})`)
+          logger.debug(`[ai-account-mapper] Cached ${xeroAccountRows.length} CoA accounts`)
+        }
+      } catch (coaErr: any) {
+        logger.warn('[ai-account-mapper] CoA cache failed (non-fatal):', coaErr.message)
+      }
+    } else {
+      // Consume body to prevent resource leak
+      await accountsResp.text()
 
-      // GUARD: Never soft-delete if Xero returns empty (API timeout, token issue, etc.)
-      if (xeroAccountRows.length === 0) {
-        logger.warn('[ai-account-mapper] No accounts returned from Xero — skipping soft delete');
-        return;
+      if (accountsResp.status === 429) {
+        logger.warn('[ai-account-mapper] Xero 429 — falling back to cached COA')
+      } else {
+        logger.error('[ai-account-mapper] Xero error:', accountsResp.status)
       }
 
-      // Upsert current accounts
-      await supabase.from('xero_chart_of_accounts').upsert(
-        xeroAccountRows,
-        { onConflict: 'user_id,xero_account_id' }
-      );
-
-      // Mark accounts not in current fetch as inactive (soft-delete)
-      const currentIds = xeroAccountRows.map((r: any) => r.xero_account_id);
-      await supabase
+      // Fall back to cached COA
+      const { data: cached } = await supabase
         .from('xero_chart_of_accounts')
-        .update({ is_active: false })
+        .select('account_code, account_name, account_type, tax_type, description')
         .eq('user_id', userId)
         .eq('is_active', true)
-        .not('xero_account_id', 'in', `(${currentIds.join(',')})`);
 
-      logger.debug(`[ai-account-mapper] Cached ${xeroAccountRows.length} CoA accounts for user ${userId}`);
-    } catch (coaErr: any) {
-      logger.warn('[ai-account-mapper] CoA cache failed (non-fatal):', coaErr.message);
+      if (!cached || cached.length === 0) {
+        const retryAfter = accountsResp.status === 429
+          ? parseInt(accountsResp.headers.get('Retry-After') || '60', 10)
+          : 0
+        return new Response(JSON.stringify({
+          error: accountsResp.status === 429 ? 'rate_limited' : `Xero API error: ${accountsResp.status}`,
+          retry_after: retryAfter || undefined,
+          message: accountsResp.status === 429
+            ? `Xero rate limit reached. No cached accounts available. Wait ${retryAfter}s and try again.`
+            : `Xero API error ${accountsResp.status} and no cached accounts available.`,
+        }), {
+          status: accountsResp.status === 429 ? 200 : 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      xeroAccounts = cached.map((a: any) => ({
+        code: a.account_code,
+        name: a.account_name,
+        type: a.account_type,
+        taxType: a.tax_type,
+        description: a.description || '',
+      }))
+      usedCache = true
+      logger.debug(`[ai-account-mapper] Using ${xeroAccounts.length} cached COA accounts`)
     }
 
     // If action is scan_only, just return the accounts
