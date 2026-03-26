@@ -135,6 +135,8 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [hasAutoAudited, setHasAutoAudited] = useState(false);
 
   const [hasAutoExpanded, setHasAutoExpanded] = useState(false);
+
+  useEffect(() => {
     if (hasLoadedOnce && settlements.length > 0 && !hasAutoAudited && !refreshingXero) {
       setHasAutoAudited(true);
       // Session-level cooldown: only auto-audit Xero once per 10 minutes per marketplace
