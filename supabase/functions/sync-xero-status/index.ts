@@ -703,7 +703,41 @@ serve(async (req) => {
     // Group ALL invoices by settlement ID to find the best match (prefer PAID, then Xettle-)
     const allBySid = new Map<string, any[]>();
     for (const inv of dedupedInvoices) {
-      const sid = extractSettlementId(inv.Reference || '');
+      let sid = extractSettlementId(inv.Reference || '');
+
+      // ─── Marketplace-specific fallback (same logic as Step 3b) ──────
+      if (!sid && inv.Total != null) {
+        const contactName = inv.Contact?.Name || '';
+        const detectedMkt = detectMarketplaceFromContact(contactName);
+        if (detectedMkt) {
+          const invAmount = Math.abs(inv.Total);
+          const invDate = parseXeroDate(inv.Date);
+          const matchedSettlement = (allSettlements || []).find(s => {
+            if (s.marketplace !== detectedMkt) return false;
+            if (cacheBySettlement.has(s.settlement_id)) return false;
+            if (allBySid.has(s.settlement_id)) return false; // already matched
+            const sAmount = Math.abs(s.bank_deposit || 0);
+            if (sAmount === 0) return false;
+            const amountDiff = Math.abs(sAmount - invAmount);
+            const pctDiff = sAmount > 0 ? (amountDiff / sAmount) * 100 : 100;
+            if (amountDiff > 5 && pctDiff > 5) return false;
+            if (invDate) {
+              const invD = new Date(invDate + 'T00:00:00Z');
+              const pStart = new Date(s.period_start + 'T00:00:00Z');
+              const pEnd = new Date(s.period_end + 'T00:00:00Z');
+              pStart.setUTCDate(pStart.getUTCDate() - 14);
+              pEnd.setUTCDate(pEnd.getUTCDate() + 14);
+              if (invD < pStart || invD > pEnd) return false;
+            }
+            return true;
+          });
+          if (matchedSettlement) {
+            sid = matchedSettlement.settlement_id;
+            console.log(`[step-4] Marketplace-specific match: ${detectedMkt} invoice ${inv.InvoiceNumber || inv.InvoiceID} ref="${inv.Reference}" → ${sid}`);
+          }
+        }
+      }
+
       if (!sid) continue;
       if (!allBySid.has(sid)) allBySid.set(sid, []);
       allBySid.get(sid)!.push(inv);
