@@ -2371,6 +2371,13 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                 onProcess={processFile}
                 onSetStatus={setFileStatus}
                 onFirstContact={(i) => setFirstContactIdx(i)}
+                onForceOverwrite={(i) => {
+                  setFiles(prev => {
+                    const updated = [...prev];
+                    updated[i] = { ...updated[i], forceOverwrite: true, status: 'detected', error: undefined };
+                    return updated;
+                  });
+                }}
               />
             )
           ))}
