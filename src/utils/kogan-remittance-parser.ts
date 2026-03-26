@@ -549,13 +549,14 @@ export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittan
         : norm.indexOf('Total paid amount', startIdx);
       const segment = (endIdx > startIdx ? norm.substring(startIdx, endIdx) : norm.substring(startIdx)).trim();
       
-      // Extract amount from the segment — it's the last number (possibly with AUD)
-      const amountMatch = segment.match(/(-?[\d,]+\.?\d*)\s*(?:AUD)?\s*$/);
+      // Extract amount from the segment — it's the FIRST "number AUD" pattern
+      // (not the last number, which could be a reference like AUMKA:KOG:AU:20260315)
+      const amountMatch = segment.match(/([\d,]+\.?\d*)\s*AUD/i);
       const rawAmount = amountMatch ? parseAmount(amountMatch[1]) : 0;
       
-      // Reference is everything before the amount
+      // Reference is everything after the amount match up to the end (or next marker)
       let reference = amountMatch 
-        ? segment.substring(0, segment.lastIndexOf(amountMatch[0])).trim()
+        ? segment.substring(segment.indexOf(amountMatch[0]) + amountMatch[0].length).trim()
         : segment.trim();
       
       // Clean up reference
