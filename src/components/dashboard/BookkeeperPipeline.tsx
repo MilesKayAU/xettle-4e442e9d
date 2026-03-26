@@ -98,6 +98,7 @@ export default function BookkeeperPipeline({
   const [syncing, setSyncing] = useState(false);
   const [lastSyncLabel, setLastSyncLabel] = useState<string | null>(null);
   const [showComplete, setShowComplete] = useState(false);
+  const { boundaryDate } = useAccountingBoundaryDate();
 
   // ─── Data fetch ─────────────────────────────────────────────────
 
