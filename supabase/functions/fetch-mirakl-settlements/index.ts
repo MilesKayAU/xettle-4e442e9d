@@ -197,29 +197,59 @@ Deno.serve(async (req) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// CORE FETCH — HYBRID: IV01 billing cycle calendar + TL05 transactions
+// CORE FETCH — IV01 PRIMARY
 //
-// IV01 (/api/invoices) returns COMMISSION invoices — operator fees
-// charged TO the seller. These give us authoritative billing cycle
-// date ranges and fee breakdowns.
+// IV01 (/api/invoices) returns AUTO_INVOICE billing cycles with a
+// rich `summary` block containing ALL the data we need:
+//   - amount_transferred = bank_deposit (net payout to seller)
+//   - total_payable_orders_incl_tax = gross sales
+//   - total_refund_orders_incl_tax = refunds (negative)
+//   - total_commissions_incl_tax = seller fees (negative)
+//   - total_subscription_incl_tax = subscription fees (negative)
+//   - payment.transaction_date = payment date
+//   - payment.state = PAID / PENDING
 //
-// TL05 (/api/sellerpayment/transactions_logs) returns individual
-// order transactions — sales, refunds, payments. These give us
-// the full settlement data including bank_deposit (payout amount).
+// PA11 endpoints do NOT exist on Bunnings. TL05 only has unfunded
+// pending transactions. IV01 is the single source of truth.
 //
-// Hybrid approach:
-//   1. IV01 → discover billing cycle date ranges + fee amounts
-//   2. TL05 → fetch all transactions, group by IV01 cycle dates
-//   3. Sum TL05 transactions per cycle for authoritative totals
+// Pagination: IV01 returns max 50 per page. We paginate with offset
+// to fetch ALL invoices (Bunnings has 105+ as of Mar 2026).
 // ═══════════════════════════════════════════════════════════════
 
-interface BillingCycle {
-  cycleNumber: string;
-  periodStart: string;
-  periodEnd: string;
-  iv01Commission: number;
-  iv01Tax: number;
-  iv01Subscription: number;
+interface IV01Invoice {
+  invoice_id: number;
+  date_created: string;
+  start_time: string;
+  end_time: string;
+  state: string;
+  type: string;
+  payment?: {
+    reference?: string;
+    state?: string;
+    transaction_date?: string;
+  };
+  summary?: {
+    amount_transferred?: number;
+    amount_transferred_to_operator?: number;
+    total_payable_orders_incl_tax?: number;
+    total_refund_orders_incl_tax?: number;
+    total_commissions_incl_tax?: number;
+    total_commissions_excl_tax?: number;
+    total_subscription_incl_tax?: number;
+    total_subscription_excl_tax?: number;
+    total_other_credits_incl_tax?: number;
+    total_other_invoices_incl_tax?: number;
+    total_seller_fees_on_orders_incl_tax?: number;
+    total_seller_penalty_fees_incl_tax?: number;
+    total_operator_remitted_taxes?: number;
+    total_refund_commissions_incl_tax?: number;
+    total_refund_commissions_excl_tax?: number;
+  };
+  details?: Array<{
+    amount_excl_taxes?: number;
+    description?: string;
+    taxes?: Array<{ amount: number; code: string }>;
+  }>;
 }
 
 async function fetchSettlementsForConnection(
@@ -241,21 +271,23 @@ async function fetchSettlementsForConnection(
   const dateFrom = syncFrom || defaultFrom.toISOString().split("T")[0];
 
   // ═══════════════════════════════════════════════════════════════
-  // STEP 1: Fetch billing cycles from IV01 (Accounting Documents)
-  // These are COMMISSION invoices, not payouts.
-  // We use them to discover billing cycle date ranges.
+  // STEP 1: Paginate through ALL IV01 invoices
+  // IV01 is the ONLY source of truth for Bunnings payouts.
   // ═══════════════════════════════════════════════════════════════
 
-  let billingCycles: BillingCycle[] = [];
+  const allInvoices: IV01Invoice[] = [];
+  let offset = 0;
+  const pageSize = 50;
+  let totalCount = 0;
 
-  try {
+  while (true) {
     const iv01Url = `${baseUrl}/api/invoices?${new URLSearchParams({
       type: "ALL",
-      limit: "50",
-      start_date: `${dateFrom}T00:00:00Z`,
+      limit: String(pageSize),
+      offset: String(offset),
     })}`;
 
-    console.log(`[fetch-mirakl-settlements] 🌐 IV01 URL: ${iv01Url}`);
+    console.log(`[fetch-mirakl-settlements] 🌐 IV01 page offset=${offset}: ${iv01Url}`);
 
     const iv01Res = await fetch(iv01Url, {
       headers: {
@@ -264,255 +296,120 @@ async function fetchSettlementsForConnection(
       },
     });
 
-    console.log(`[fetch-mirakl-settlements] 📡 IV01 Response status: ${iv01Res.status}`);
-
-    if (iv01Res.ok) {
-      const iv01Data = await iv01Res.json();
-      const invoices = iv01Data.invoices || iv01Data.data || [];
-      console.log(`[fetch-mirakl-settlements] 📦 IV01 invoices count: ${Array.isArray(invoices) ? invoices.length : 0}`);
-
-      if (Array.isArray(invoices)) {
-        for (const inv of invoices) {
-          const cycleNumber = inv.invoice_id || inv.accounting_document_number || inv.id;
-          if (!cycleNumber) continue;
-
-          // Bunnings uses start_time/end_time
-          const periodStart = inv.start_time?.split("T")[0] || inv.start_date?.split("T")[0] || dateFrom;
-          const periodEnd = inv.end_time?.split("T")[0] || inv.end_date?.split("T")[0]
-            || inv.issue_date?.split("T")[0] || new Date().toISOString().split("T")[0];
-
-          // Extract fee breakdown from IV01 detail lines
-          let commission = 0;
-          let subscription = 0;
-          let tax = 0;
-          if (Array.isArray(inv.details)) {
-            for (const detail of inv.details) {
-              const desc = (detail.description || "").toLowerCase();
-              const amount = parseFloat(String(detail.amount_excl_taxes || detail.amount || 0)) || 0;
-              const detailTax = Array.isArray(detail.taxes)
-                ? detail.taxes.reduce((s: number, t: any) => s + (parseFloat(String(t.amount)) || 0), 0)
-                : 0;
-
-              if (desc.includes("commission")) {
-                commission += amount;
-              } else if (desc.includes("subscription")) {
-                subscription += amount;
-              } else {
-                commission += amount;
-              }
-              tax += detailTax;
-            }
-          } else {
-            commission = parseFloat(String(inv.total_amount_excl_taxes || 0)) || 0;
-            tax = parseFloat(String(inv.total_taxes || 0)) || 0;
-          }
-
-          billingCycles.push({
-            cycleNumber: String(cycleNumber),
-            periodStart,
-            periodEnd,
-            iv01Commission: round2(commission),
-            iv01Tax: round2(tax),
-            iv01Subscription: round2(subscription),
-          });
-
-          console.log(`[fetch-mirakl-settlements] 📊 IV01 cycle ${cycleNumber}: ${periodStart}→${periodEnd}, commission=${round2(commission)}, sub=${round2(subscription)}, tax=${round2(tax)}`);
-        }
+    if (!iv01Res.ok) {
+      const errText = await iv01Res.text().catch(() => "");
+      if (offset === 0) {
+        throw new Error(`Mirakl IV01 API error ${iv01Res.status}: ${errText.slice(0, 200)}`);
       }
-    } else {
-      console.warn(`[fetch-mirakl-settlements] ⚠️ IV01 returned ${iv01Res.status} — will use TL05-only mode`);
-    }
-  } catch (iv01Err: any) {
-    console.warn(`[fetch-mirakl-settlements] ⚠️ IV01 fetch failed: ${iv01Err.message} — will use TL05-only mode`);
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  // STEP 2: Fetch ALL TL05 transactions for the full date range
-  // TL05 returns order-level transactions — sales, refunds, payouts
-  // ═══════════════════════════════════════════════════════════════
-
-  let apiUrl = `${baseUrl}/api/sellerpayment/transactions_logs?start_date=${dateFrom}T00:00:00Z&paginate=false`;
-  if (shopId) apiUrl += `&shop=${shopId}`;
-
-  console.log(`[fetch-mirakl-settlements] 🌐 TL05 URL: ${apiUrl}`);
-
-  const tl05Res = await fetch(apiUrl, {
-    headers: {
-      [authResult.headerName]: authResult.headerValue,
-      Accept: "application/json",
-    },
-  });
-
-  if (!tl05Res.ok) {
-    const errorText = await tl05Res.text().catch(() => "");
-    throw new Error(`Mirakl TL05 API error ${tl05Res.status}: ${errorText.slice(0, 200)}`);
-  }
-
-  const tl05Data = await tl05Res.json();
-  const transactions = tl05Data.transactions || tl05Data.transaction_logs || tl05Data.data || [];
-  console.log(`[fetch-mirakl-settlements] 📦 TL05 transactions count: ${Array.isArray(transactions) ? transactions.length : 0}`);
-
-  if (Array.isArray(transactions) && transactions.length > 0) {
-    console.log(`[fetch-mirakl-settlements] 📦 TL05 txn[0] keys: ${Object.keys(transactions[0]).join(", ")}`);
-    console.log(`[fetch-mirakl-settlements] 📦 TL05 txn[0] sample: ${JSON.stringify(transactions[0]).slice(0, 300)}`);
-  }
-
-  if (!Array.isArray(transactions) || transactions.length === 0) {
-    console.log(`[fetch-mirakl-settlements] ⚠️ TL05 returned no transactions`);
-    return { imported: 0, skipped: 0, empty_skipped: 0, message: "No transactions found" };
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  // STEP 3: Group TL05 transactions by billing cycle date ranges
-  // If IV01 gave us cycles, use those. Otherwise use payment_reference.
-  // ═══════════════════════════════════════════════════════════════
-
-  type GroupedTxns = { cycle: BillingCycle | null; txns: any[] };
-  const groups = new Map<string, GroupedTxns>();
-
-  if (billingCycles.length > 0) {
-    // Sort cycles by periodStart ascending
-    billingCycles.sort((a, b) => a.periodStart.localeCompare(b.periodStart));
-
-    // Initialize groups for each cycle
-    for (const cycle of billingCycles) {
-      groups.set(cycle.cycleNumber, { cycle, txns: [] });
+      console.warn(`[fetch-mirakl-settlements] ⚠️ IV01 page at offset=${offset} failed: ${iv01Res.status}`);
+      break;
     }
 
-    // Assign each TL05 transaction to the matching billing cycle
-    for (const txn of transactions) {
-      const txnDate = (txn.date_created || txn.transaction_date || txn.created_date || "").split("T")[0];
-      if (!txnDate) continue;
+    const pageData = await iv01Res.json();
+    totalCount = pageData.total_count || 0;
+    const invoices: IV01Invoice[] = pageData.invoices || [];
 
-      let matched = false;
-      for (const cycle of billingCycles) {
-        if (txnDate >= cycle.periodStart && txnDate <= cycle.periodEnd) {
-          groups.get(cycle.cycleNumber)!.txns.push(txn);
-          matched = true;
-          break;
-        }
-      }
-      if (!matched) {
-        // Transaction outside any known cycle — overflow bucket
-        if (!groups.has("overflow")) {
-          groups.set("overflow", { cycle: null, txns: [] });
-        }
-        groups.get("overflow")!.txns.push(txn);
-      }
-    }
-  } else {
-    // No IV01 data — fall back to payment_reference grouping
-    for (const txn of transactions) {
-      const key = txn.payment_reference || txn.payout_id || txn.accounting_document_number || "ungrouped";
-      if (!groups.has(key)) groups.set(key, { cycle: null, txns: [] });
-      groups.get(key)!.txns.push(txn);
-    }
+    if (invoices.length === 0) break;
+    allInvoices.push(...invoices);
+
+    offset += invoices.length;
+    if (offset >= totalCount) break;
+
+    // Rate limit: 1 req/sec
+    await new Promise(r => setTimeout(r, 1100));
   }
 
-  console.log(`[fetch-mirakl-settlements] 📊 Grouped into ${groups.size} settlement groups (IV01 cycles: ${billingCycles.length})`);
+  console.log(`[fetch-mirakl-settlements] 📦 IV01 total: ${totalCount}, fetched: ${allInvoices.length}`);
+
+  if (allInvoices.length === 0) {
+    return { imported: 0, skipped: 0, empty_skipped: 0, message: "No IV01 invoices found" };
+  }
 
   // ═══════════════════════════════════════════════════════════════
-  // STEP 4: Process each group into a settlement
+  // STEP 2: Filter to invoices within date range and process each
   // ═══════════════════════════════════════════════════════════════
 
   let imported = 0;
   let skipped = 0;
   let emptySkipped = 0;
 
-  for (const [groupKey, { cycle, txns }] of groups) {
-    if (groupKey === "overflow" || txns.length === 0) continue;
-
-    // Accumulate TL05 transactions using MIRAKL_TYPE_MAP
-    const totals: Record<string, number> = {
-      sales_principal: 0, sales_shipping: 0, seller_fees: 0, refunds: 0,
-      reimbursements: 0, other_fees: 0, gst_on_income: 0, gst_on_expenses: 0, bank_deposit: 0,
-    };
-    let periodStart = cycle?.periodStart || "";
-    let periodEnd = cycle?.periodEnd || "";
-    const lineRows: any[] = [];
-
-    for (const txn of txns) {
-      const amount = Number(txn.amount) || 0;
-      const type = (txn.transaction_type || txn.type || "").toUpperCase();
-      const txnDate = (txn.date_created || txn.transaction_date || txn.created_date || "").split("T")[0];
-
-      // Track date range if no cycle dates
-      if (txnDate && !cycle) {
-        if (!periodStart || txnDate < periodStart) periodStart = txnDate;
-        if (!periodEnd || txnDate > periodEnd) periodEnd = txnDate;
-      }
-
-      let accountingCategory = "adjustment";
-      if (type.includes("PAYMENT") || type.includes("PAYOUT") || type.includes("TRANSFER")) {
-        totals.bank_deposit += amount;
-      } else if (MIRAKL_TYPE_MAP[type]) {
-        const mapping = MIRAKL_TYPE_MAP[type];
-        totals[mapping.field] += amount * mapping.sign;
-        accountingCategory = mapping.accountingCategory;
-      } else {
-        totals.other_fees += amount;
-      }
-
-      lineRows.push({
-        user_id: userId,
-        settlement_id: "", // Set below
-        order_id: txn.order_id || txn.order_commercial_id || null,
-        sku: null,
-        amount: round2(amount),
-        amount_description: type,
-        transaction_type: txn.transaction_type || txn.type || "Unknown",
-        amount_type: type,
-        accounting_category: accountingCategory,
-        marketplace_name: connection.marketplace_label || "Mirakl",
-        posted_date: txnDate || null,
-        source: "mirakl_api",
-      });
+  for (const inv of allInvoices) {
+    // Only process COMPLETE invoices
+    if (inv.state !== "COMPLETE") {
+      console.log(`[fetch-mirakl-settlements] ⏭️ Skipping ${inv.invoice_id}: state=${inv.state}`);
+      skipped++;
+      continue;
     }
 
-    // Skip empty settlements
-    const hasActivity = Object.values(totals).some(v => Math.abs(v) > 0.001);
-    if (!hasActivity) { emptySkipped++; continue; }
+    const periodStart = inv.start_time?.split("T")[0] || dateFrom;
+    const periodEnd = inv.end_time?.split("T")[0] || new Date().toISOString().split("T")[0];
+    const paymentDate = inv.payment?.transaction_date?.split("T")[0] || periodEnd;
 
-    // Build settlement ID
-    const effectivePeriodEnd = periodEnd || new Date().toISOString().split("T")[0];
-    let settlementId: string;
-    if (cycle) {
-      // Match CSV convention: BUN-{shop_id}-{end_date}
-      const shopPrefix = shopId || "2301";
-      settlementId = `BUN-${shopPrefix}-${effectivePeriodEnd}`;
-    } else if (groupKey === "ungrouped") {
-      const dateBucket = (periodStart || dateFrom).replace(/-/g, "");
-      settlementId = `mirakl-${marketplaceCode}-${dateBucket}`;
-    } else {
-      settlementId = `mirakl-${marketplaceCode}-${groupKey}`;
+    // Date range filter: only process invoices where payment_date >= dateFrom
+    if (paymentDate < dateFrom) {
+      skipped++;
+      continue;
     }
 
-    for (const row of lineRows) { row.settlement_id = settlementId; }
+    const summary = inv.summary || {};
+    const bankDeposit = round2(summary.amount_transferred || 0);
 
-    // If IV01 gave us fee data, use it as authoritative for seller_fees
-    // IV01 commission is what operator charges — should be negative in settlement convention
-    if (cycle && (cycle.iv01Commission > 0 || cycle.iv01Subscription > 0)) {
-      const iv01TotalFees = -(cycle.iv01Commission + cycle.iv01Subscription);
-      const iv01TotalTax = -(cycle.iv01Tax);
-      // Only override if TL05 didn't capture fees
-      if (Math.abs(totals.seller_fees) < 0.01) {
-        totals.seller_fees = iv01TotalFees;
-        totals.gst_on_expenses = iv01TotalTax;
-      }
+    // Skip zero-amount invoices
+    if (Math.abs(bankDeposit) < 0.01 && Math.abs(summary.total_payable_orders_incl_tax || 0) < 0.01) {
+      emptySkipped++;
+      continue;
     }
+
+    // Build settlement ID matching CSV convention: BUN-{shop_id}-{end_date}
+    const shopPrefix = shopId || (inv as any).shop_id || "2301";
+    const settlementId = `BUN-${shopPrefix}-${periodEnd}`;
+
+    // Extract financial data directly from IV01 summary
+    // All amounts are from the seller's perspective:
+    //   total_payable_orders_incl_tax = gross sales (positive)
+    //   total_refund_orders_incl_tax = refunds (negative)
+    //   total_commissions_incl_tax = commission fees (negative)
+    //   amount_transferred = net payout (positive)
+    const grossSales = round2(summary.total_payable_orders_incl_tax || 0);
+    const refunds = round2(summary.total_refund_orders_incl_tax || 0); // Already negative
+    const commissionInclTax = round2(summary.total_commissions_incl_tax || 0); // Already negative
+    const commissionExclTax = round2(summary.total_commissions_excl_tax || 0); // Already negative
+    const subscriptionInclTax = round2(summary.total_subscription_incl_tax || 0);
+    const subscriptionExclTax = round2(summary.total_subscription_excl_tax || 0);
+    const refundCommissionInclTax = round2(summary.total_refund_commissions_incl_tax || 0);
+    const refundCommissionExclTax = round2(summary.total_refund_commissions_excl_tax || 0);
+    const otherCreditsInclTax = round2(summary.total_other_credits_incl_tax || 0);
+    const otherInvoicesInclTax = round2(summary.total_other_invoices_incl_tax || 0);
+    const sellerFeesOnOrders = round2(summary.total_seller_fees_on_orders_incl_tax || 0);
+    const sellerPenaltyFees = round2(summary.total_seller_penalty_fees_incl_tax || 0);
+
+    // GST on fees = difference between incl and excl tax amounts
+    const commissionGst = round2(commissionInclTax - commissionExclTax);
+    const subscriptionGst = round2(subscriptionInclTax - subscriptionExclTax);
+    const refundCommissionGst = round2(refundCommissionInclTax - refundCommissionExclTax);
+
+    // For Australian GST: sales are GST-inclusive, so GST on income = sales / 11
+    const gstOnIncome = round2(grossSales / 11);
+    const salesExGst = round2(grossSales - gstOnIncome);
+
+    // Total seller fees (excl tax) — all negative values
+    const totalFeesExclTax = round2(
+      commissionExclTax + subscriptionExclTax + refundCommissionExclTax +
+      sellerFeesOnOrders + sellerPenaltyFees
+    );
+    const totalFeesGst = round2(commissionGst + subscriptionGst + refundCommissionGst);
 
     // Boundary check
     let isPreBoundary = false;
-    if (accountingBoundary && effectivePeriodEnd < accountingBoundary) {
+    if (accountingBoundary && periodEnd < accountingBoundary) {
       isPreBoundary = true;
     }
 
-    // Reconciliation check
-    const calculatedSum = round2(
-      totals.sales_principal + totals.sales_shipping + totals.seller_fees + totals.refunds +
-      totals.reimbursements + totals.other_fees + totals.gst_on_income + totals.gst_on_expenses,
-    );
-    const reconDiff = Math.abs(calculatedSum - totals.bank_deposit);
+    // Reconciliation: verify bank_deposit ≈ gross_sales + refunds + fees + other
+    const calculatedPayout = round2(grossSales + refunds + commissionInclTax +
+      subscriptionInclTax + refundCommissionInclTax + otherCreditsInclTax +
+      otherInvoicesInclTax + sellerFeesOnOrders + sellerPenaltyFees);
+    const reconDiff = round2(Math.abs(calculatedPayout - bankDeposit));
     let reconStatus = "reconciled";
     if (reconDiff >= 1.0) {
       reconStatus = "recon_warning";
@@ -523,11 +420,11 @@ async function fetchSettlementsForConnection(
         marketplace_code: marketplaceCode,
         details: {
           settlement_id: settlementId,
-          calculated_sum: calculatedSum,
-          bank_deposit: totals.bank_deposit,
-          difference: round2(reconDiff),
-          cycle_number: cycle?.cycleNumber,
-          source: cycle ? "iv01_tl05_hybrid" : "tl05_only",
+          invoice_id: inv.invoice_id,
+          calculated_payout: calculatedPayout,
+          bank_deposit: bankDeposit,
+          difference: reconDiff,
+          source: "iv01_primary",
         },
       });
     }
@@ -535,26 +432,27 @@ async function fetchSettlementsForConnection(
     const settlementStatus = isPreBoundary ? "pre_boundary"
       : reconStatus === "recon_warning" ? "recon_warning" : "saved";
 
-    console.log(`[fetch-mirakl-settlements] 📊 Settlement ${settlementId}: bank_deposit=${round2(totals.bank_deposit)}, sales=${round2(totals.sales_principal)}, fees=${round2(totals.seller_fees)}, txns=${txns.length}`);
+    console.log(`[fetch-mirakl-settlements] 📊 ${settlementId}: bank_deposit=${bankDeposit}, gross=${grossSales}, refunds=${refunds}, fees=${totalFeesExclTax}, payment=${paymentDate}`);
 
-    // Upsert — unique constraint is (user_id, marketplace, settlement_id)
+    // Upsert settlement
     const { error: upsertErr } = await adminClient.from("settlements").upsert({
       user_id: userId,
       settlement_id: settlementId,
       marketplace: marketplaceCode,
-      period_start: periodStart || dateFrom,
-      period_end: effectivePeriodEnd,
-      bank_deposit: round2(totals.bank_deposit),
-      sales_principal: round2(totals.sales_principal),
-      sales_shipping: round2(totals.sales_shipping),
-      seller_fees: round2(totals.seller_fees),
-      refunds: round2(totals.refunds),
-      reimbursements: round2(totals.reimbursements),
-      other_fees: round2(totals.other_fees),
-      gst_on_income: round2(totals.gst_on_income),
-      gst_on_expenses: round2(totals.gst_on_expenses),
+      period_start: periodStart,
+      period_end: periodEnd,
+      bank_deposit: bankDeposit,
+      sales_principal: salesExGst,
+      sales_shipping: 0, // IV01 doesn't break out shipping separately
+      seller_fees: totalFeesExclTax,
+      refunds: refunds,
+      reimbursements: round2(otherCreditsInclTax),
+      other_fees: round2(otherInvoicesInclTax + sellerFeesOnOrders + sellerPenaltyFees),
+      gst_on_income: gstOnIncome,
+      gst_on_expenses: totalFeesGst,
       status: settlementStatus,
       source: "mirakl_api",
+      source_reference: `iv01_invoice_${inv.invoice_id}`,
       is_pre_boundary: isPreBoundary,
     }, { onConflict: "user_id,marketplace,settlement_id" });
 
@@ -563,32 +461,20 @@ async function fetchSettlementsForConnection(
       continue;
     }
 
-    // Write settlement_lines (delete-then-insert for idempotency)
-    try {
-      await adminClient.from("settlement_lines").delete().eq("user_id", userId).eq("settlement_id", settlementId);
-      for (let i = 0; i < lineRows.length; i += 500) {
-        const { error: lineErr } = await adminClient.from("settlement_lines").insert(lineRows.slice(i, i + 500));
-        if (lineErr) console.error(`[fetch-mirakl-settlements] Lines insert failed:`, lineErr);
-      }
-      console.log(`[fetch-mirakl-settlements] 📝 Wrote ${lineRows.length} settlement_lines for ${settlementId}`);
-    } catch (e: any) {
-      console.error(`[fetch-mirakl-settlements] Lines write failed:`, e);
-    }
-
     // Source priority check — self-suppress if CSV already exists
     try {
-      await serverSideSourcePriority(adminClient, userId, marketplaceCode, periodStart || dateFrom, effectivePeriodEnd, settlementId);
+      await serverSideSourcePriority(adminClient, userId, marketplaceCode, periodStart, periodEnd, settlementId);
     } catch (e: any) { /* ignore */ }
 
     // CSV mismatch detection
     try {
-      await detectAndCorrectCsvMismatch(adminClient, userId, marketplaceCode, periodStart || dateFrom, effectivePeriodEnd, round2(totals.bank_deposit), settlementId);
+      await detectAndCorrectCsvMismatch(adminClient, userId, marketplaceCode, periodStart, periodEnd, bankDeposit, settlementId);
     } catch (e: any) { /* ignore */ }
 
     imported++;
   }
 
-  return { imported, skipped, empty_skipped: emptySkipped, source: billingCycles.length > 0 ? "iv01_tl05_hybrid" : "tl05_only" };
+  return { imported, skipped, empty_skipped: emptySkipped, source: "iv01_primary", total_iv01: allInvoices.length };
 }
 
 // ═══════════════════════════════════════════════════════════════
