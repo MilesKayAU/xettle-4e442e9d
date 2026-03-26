@@ -127,6 +127,9 @@ async function tryIV01(
       const invoices = data.invoices || data.data || [];
       console.log(`[verify-settlement] IV01 invoice count: ${invoices.length}`);
       if (invoices.length > 0) {
+        // Log first invoice's actual keys so we can see the real field names
+        console.log(`[verify-settlement] IV01 invoice[0] keys: ${Object.keys(invoices[0]).join(", ")}`);
+        console.log(`[verify-settlement] IV01 invoice[0] sample: ${JSON.stringify(invoices[0]).slice(0, 800)}`);
         return { ok: true, invoice: invoices[0] };
       }
       return { ok: true }; // API worked but no matching invoice
@@ -228,51 +231,65 @@ async function verifyMirakl(
 
     if (iv01Result.ok && iv01Result.invoice) {
       const invoice = iv01Result.invoice;
-      console.log(`[verify-settlement] IV01 matched invoice: doc=${invoice.accounting_document_number}, amount_due=${invoice.amount_due_to_seller}, total=${invoice.total_amount}`);
+      // Bug 1 fix: Log full invoice for diagnostics
+      console.log(`[verify-settlement] IV01 full invoice: ${JSON.stringify(invoice).slice(0, 1500)}`);
 
-      const apiPayoutAmount = parseFloat(
-        invoice.amount_due_to_seller ?? invoice.total_amount ?? invoice.amount_transferred ?? "0"
-      );
+      // Try ALL possible Mirakl field names — instances vary
+      const rawPayoutField =
+        invoice.amount_due_to_seller ??
+        invoice.total_amount_due_to_seller ??
+        invoice.seller_amount ??
+        invoice.net_amount ??
+        invoice.amount_transferred ??
+        invoice.total_amount ??
+        invoice.amount ??
+        null;
+      const apiPayoutAmount = rawPayoutField !== null ? parseFloat(String(rawPayoutField)) : NaN;
+      console.log(`[verify-settlement] IV01 extracted payout: rawField=${rawPayoutField}, parsed=${apiPayoutAmount}`);
 
-      const apiTotals = {
-        sales: parseFloat(invoice.total_order_amount ?? "0"),
-        shipping: parseFloat(invoice.total_shipping_amount ?? "0"),
-        fees: parseFloat(invoice.total_commission_amount ?? invoice.total_subscription_amount ?? "0"),
-        refunds: parseFloat(invoice.total_refund_amount ?? "0"),
-        payment: apiPayoutAmount,
-        sales_tax: parseFloat(invoice.total_order_tax_amount ?? "0"),
-      };
+      // CRITICAL GUARD: Never return zero/NaN as a valid payout — fall through to txn logs instead
+      if (!isNaN(apiPayoutAmount) && apiPayoutAmount !== 0) {
+        const apiTotals = {
+          sales: parseFloat(invoice.total_order_amount ?? "0"),
+          shipping: parseFloat(invoice.total_shipping_amount ?? "0"),
+          fees: parseFloat(invoice.total_commission_amount ?? invoice.total_subscription_amount ?? "0"),
+          refunds: parseFloat(invoice.total_refund_amount ?? "0"),
+          payment: Math.round(apiPayoutAmount * 100) / 100,
+          sales_tax: parseFloat(invoice.total_order_tax_amount ?? "0"),
+        };
 
-      const discrepancies = buildDiscrepancies(stored, [
-        ["bank_deposit", stored.bank_deposit, apiTotals.payment],
-      ]);
-
-      // If IV01 gives us detailed breakdowns, compare more fields
-      if (apiTotals.sales !== 0) {
-        const salesPrincipalDisc = buildDiscrepancies(stored, [
-          ["sales_principal", stored.sales_principal, apiTotals.sales],
+        const discrepancies = buildDiscrepancies(stored, [
+          ["bank_deposit", stored.bank_deposit, apiTotals.payment],
         ]);
-        discrepancies.push(...salesPrincipalDisc);
+
+        if (apiTotals.sales !== 0) {
+          const salesDisc = buildDiscrepancies(stored, [
+            ["sales_principal", stored.sales_principal, apiTotals.sales],
+          ]);
+          discrepancies.push(...salesDisc);
+        }
+
+        const verdict: StandardResponse["verdict"] = discrepancies.length > 0 ? "discrepancy" : "match";
+
+        return {
+          settlement_id: settlementId,
+          marketplace: settlement.marketplace,
+          source,
+          verdict,
+          filter_method: "iv01_invoice",
+          transaction_count: 1,
+          api_transactions: [{ transaction_type: "BILLING_CYCLE_DOCUMENT", count: 1, total_amount: apiTotals.payment }],
+          api_totals: apiTotals,
+          stored_settlement: stored,
+          discrepancies,
+          missing_transaction_types: [],
+        };
+      } else {
+        console.warn(`[verify-settlement] IV01 returned zero/NaN payout (rawField=${rawPayoutField}) — refusing to use, falling through to txn logs`);
       }
-
-      let verdict: StandardResponse["verdict"] = discrepancies.length > 0 ? "discrepancy" : "match";
-
-      return {
-        settlement_id: settlementId,
-        marketplace: settlement.marketplace,
-        source,
-        verdict,
-        filter_method: "iv01_invoice",
-        transaction_count: 1,
-        api_transactions: [{ transaction_type: "BILLING_CYCLE_DOCUMENT", count: 1, total_amount: apiPayoutAmount }],
-        api_totals: apiTotals,
-        stored_settlement: stored,
-        discrepancies,
-        missing_transaction_types: [],
-      };
     }
-    // IV01 returned no invoice or errored — fall through to transaction logs
-    console.log(`[verify-settlement] IV01 did not return invoice, falling back to transaction logs. Error: ${iv01Result.error ?? "none"}`);
+    // IV01 returned no invoice, zero amount, or errored — fall through to transaction logs
+    console.log(`[verify-settlement] IV01 unusable, falling back to txn logs. Error: ${iv01Result.error ?? "none"}`);
   }
 
   // ── FALLBACK: Transaction Logs API ──
@@ -755,22 +772,27 @@ Deno.serve(async (req) => {
 
       for (const d of result.discrepancies) {
         const dbField = FIELD_MAP[d.field];
-        if (dbField && Math.abs(d.difference) > 1.00) {
+        if (dbField && Math.abs(d.difference) > 1.00 && d.api_value !== 0 && !isNaN(d.api_value)) {
           corrections[dbField] = { old: d.stored_value, new: d.api_value };
           updatePayload[dbField] = d.api_value;
         }
       }
 
       if (Object.keys(updatePayload).length > 0) {
-        // Log BEFORE writing correction
+        // Bug 2 fix: Log with flat keys that match diagnostic queries
         await adminClient.from("system_events").insert({
           user_id: userId,
           event_type: "gap_auto_corrected",
           severity: "info",
+          marketplace_code: settlement.marketplace,
+          settlement_id: settlement_id,
           details: {
             settlement_id,
             marketplace: settlement.marketplace,
             corrections,
+            old_bank_deposit: corrections.bank_deposit?.old ?? null,
+            new_bank_deposit: corrections.bank_deposit?.new ?? null,
+            verification_method: result.filter_method ?? "unknown",
             triggered_by: "resolve_gaps_button",
             corrected_at: new Date().toISOString(),
           },
@@ -812,6 +834,9 @@ Deno.serve(async (req) => {
           auto_corrected: autoCorrected,
           transaction_count: result.transaction_count,
           discrepancy_count: result.discrepancies.length,
+          discrepancies: result.discrepancies,
+          api_totals: result.api_totals,
+          stored_settlement: result.stored_settlement,
           filter_method: result.filter_method,
           error_message: result.error ?? null,
           triggered_by: body.triggered_by ?? 'unknown',
