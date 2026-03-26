@@ -96,6 +96,8 @@ interface DetectedFile {
   koganPdfPeriodMonth?: string;
   /** Kogan remittance parse result (cached for merge) */
   koganRemittanceResult?: KoganRemittanceResult;
+  /** When true, bypass duplicate detection and overwrite existing settlement */
+  forceOverwrite?: boolean;
 }
 
 interface SmartUploadFlowProps {

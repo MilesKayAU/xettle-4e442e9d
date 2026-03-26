@@ -574,6 +574,94 @@ export interface SaveResult {
   sanityFailed?: boolean;
   /** Gates that blocked save (for draft fingerprints) */
   blockedGates?: string[];
+  /** Whether the settlement was overwritten (re-parsed) */
+  overwritten?: boolean;
+}
+
+/**
+ * Overwrite an existing settlement's financial fields with freshly parsed data.
+ * Bypasses duplicate detection — used for re-parsing incorrectly parsed files.
+ * Logs old vs new values to system_events for auditability.
+ */
+export async function overwriteSettlement(settlement: StandardSettlement): Promise<SaveResult> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: 'Not authenticated' };
+
+    // Fetch existing settlement for audit log
+    const { data: existing } = await supabase
+      .from('settlements')
+      .select('id, sales_principal, sales_shipping, seller_fees, refunds, reimbursements, other_fees, gst_on_income, gst_on_expenses, bank_deposit, status')
+      .eq('settlement_id', settlement.settlement_id)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (!existing) {
+      return { success: false, error: `Settlement ${settlement.settlement_id} not found — cannot overwrite.` };
+    }
+
+    // Block overwrite of pushed settlements
+    if (existing.status === 'pushed_to_xero' || existing.status === 'already_recorded') {
+      return { success: false, error: 'Cannot overwrite a settlement that has been pushed to Xero.' };
+    }
+
+    const meta = settlement.metadata || {};
+    const newFields = {
+      sales_principal: settlement.sales_ex_gst,
+      sales_shipping: meta.shippingExGst || 0,
+      seller_fees: -(Math.abs(settlement.fees_ex_gst)),
+      refunds: meta.refundsExGst || 0,
+      reimbursements: (meta.refundCommissionExGst || 0) + (meta.manualCreditInclGst || 0),
+      other_fees: -Math.abs((meta.subscriptionAmount || 0) + (meta.manualDebitInclGst || 0) + (meta.otherChargesInclGst || 0)),
+      gst_on_income: settlement.gst_on_sales,
+      gst_on_expenses: -Math.abs(settlement.gst_on_fees),
+      bank_deposit: settlement.net_payout,
+      period_start: settlement.period_start,
+      period_end: settlement.period_end,
+      reconciliation_status: settlement.reconciles ? 'reconciled' : 'warning',
+    };
+
+    const oldValues = {
+      sales_principal: existing.sales_principal,
+      sales_shipping: existing.sales_shipping,
+      seller_fees: existing.seller_fees,
+      refunds: existing.refunds,
+      reimbursements: existing.reimbursements,
+      other_fees: existing.other_fees,
+      gst_on_income: existing.gst_on_income,
+      gst_on_expenses: existing.gst_on_expenses,
+      bank_deposit: existing.bank_deposit,
+    };
+
+    // Update settlement row
+    const { error: updateErr } = await supabase
+      .from('settlements')
+      .update(newFields as any)
+      .eq('id', existing.id);
+
+    if (updateErr) return { success: false, error: `Update failed: ${updateErr.message}` };
+
+    // Log the re-parse event
+    await supabase.from('system_events' as any).insert({
+      user_id: user.id,
+      event_type: 'settlement_reparsed',
+      severity: 'info',
+      marketplace_code: settlement.marketplace,
+      settlement_id: settlement.settlement_id,
+      details: {
+        old_values: oldValues,
+        new_values: newFields,
+        triggered_by: 'smart_upload_reparse',
+      },
+    } as any);
+
+    // Trigger validation sweep
+    triggerValidationSweep();
+
+    return { success: true, overwritten: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Overwrite failed' };
+  }
 }
 
 /**
