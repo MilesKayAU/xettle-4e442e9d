@@ -469,7 +469,7 @@ function tryParseDate(s: string): Date | null {
 export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittanceResult> {
   const empty: Omit<KoganRemittanceResult, 'success' | 'error'> = {
     lineItems: [], invoiceTotal: 0, creditNoteTotal: 0,
-    advertisingFees: 0, monthlySellerFee: 0, returnsCreditNotes: 0,
+    advertisingFees: 0, monthlySellerFee: 0, monthlyFeePerOrder: 0, returnsCreditNotes: 0,
   };
 
   try {
