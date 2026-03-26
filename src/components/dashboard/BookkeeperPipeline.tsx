@@ -242,7 +242,7 @@ export default function BookkeeperPipeline({
 
     setItems(pipeline);
     setLoading(false);
-  }, []);
+  }, [boundaryDate]);
 
   useEffect(() => { loadPipeline(); }, [loadPipeline]);
 
