@@ -63,6 +63,7 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
       .select('id, status, xero_status, reconciliation_status, marketplace, is_hidden, is_pre_boundary')
       .eq('is_hidden', false)
       .eq('is_pre_boundary', false)
+      .gte('period_end', '2026-01-01')
       .order('created_at', { ascending: false })
       .limit(1000),
 
@@ -82,7 +83,8 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
     supabase
       .from('marketplace_validation')
       .select('id', { count: 'exact', head: true })
-      .in('overall_status', ['missing', 'partial']),
+      .in('overall_status', ['missing', 'partial'])
+      .gte('period_end', '2026-01-01'),
 
     // Xero tokens — the actual source of truth for Xero connection
     supabase
@@ -99,7 +101,8 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
     // Validation pipeline counts — the canonical source of truth for stage counts
     supabase
       .from('marketplace_validation')
-      .select('overall_status'),
+      .select('overall_status')
+      .gte('period_end', '2026-01-01'),
   ]);
 
   const settlements = settlementsRes.data || [];

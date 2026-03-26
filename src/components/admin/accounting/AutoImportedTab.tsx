@@ -246,11 +246,13 @@ export default function AutoImportedTab({ onViewSettlement, onSyncToXero, existi
           .select('*')
           .eq('source', 'api')
           .like('marketplace', 'amazon_%')
+          .gte('period_end', '2026-01-01')
           .order('period_end', { ascending: false }),
         supabase
           .from('marketplace_validation')
           .select('settlement_id, overall_status')
-          .like('marketplace_code', 'amazon_%'),
+          .like('marketplace_code', 'amazon_%')
+          .gte('period_end', '2026-01-01'),
       ]);
       if (settRes.error) throw settRes.error;
       setSettlements((settRes.data || []) as unknown as AutoImportedSettlement[]);

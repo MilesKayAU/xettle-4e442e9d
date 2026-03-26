@@ -12,6 +12,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAccountingBoundaryDate } from '@/hooks/useAccountingBoundaryDate';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -97,6 +98,7 @@ export default function BookkeeperPipeline({
   const [syncing, setSyncing] = useState(false);
   const [lastSyncLabel, setLastSyncLabel] = useState<string | null>(null);
   const [showComplete, setShowComplete] = useState(false);
+  const { boundaryDate } = useAccountingBoundaryDate();
 
   // ─── Data fetch ─────────────────────────────────────────────────
 
@@ -129,7 +131,8 @@ export default function BookkeeperPipeline({
         .select('id, marketplace_code, period_label, period_start, period_end, settlement_id, settlement_net, overall_status, reconciliation_difference, gap_acknowledged, updated_at, bank_amount')
         .eq('user_id', userId)
         .not('overall_status', 'in', '("archived","already_recorded","duplicate_suppressed","complete","reconciled")')
-        .or('gap_acknowledged.is.null,gap_acknowledged.eq.false,overall_status.neq.gap_detected'),
+        .or('gap_acknowledged.is.null,gap_acknowledged.eq.false,overall_status.neq.gap_detected')
+        .gte('period_end', boundaryDate),
 
       // Awaiting: pushed but not paid
       supabase
@@ -137,6 +140,7 @@ export default function BookkeeperPipeline({
         .select('settlement_id, marketplace, period_start, period_end, bank_deposit, status, updated_at')
         .eq('status', 'pushed_to_xero')
         .neq('xero_status', 'PAID')
+        .gte('period_end', boundaryDate)
         .order('period_end', { ascending: false })
         .limit(50),
 
@@ -146,6 +150,7 @@ export default function BookkeeperPipeline({
         .select('settlement_id, marketplace, period_start, period_end, bank_deposit, status, xero_status, updated_at')
         .eq('status', 'pushed_to_xero')
         .eq('xero_status', 'PAID')
+        .gte('period_end', boundaryDate)
         .gte('period_end', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
         .order('period_end', { ascending: false })
         .limit(50),
@@ -237,7 +242,7 @@ export default function BookkeeperPipeline({
 
     setItems(pipeline);
     setLoading(false);
-  }, []);
+  }, [boundaryDate]);
 
   useEffect(() => { loadPipeline(); }, [loadPipeline]);
 
@@ -317,6 +322,9 @@ export default function BookkeeperPipeline({
             ) : (
               <>{actionableCount} item{actionableCount !== 1 ? 's' : ''} need{actionableCount === 1 ? 's' : ''} attention · Last synced: {lastSyncLabel || 'unknown'}</>
             )}
+          </p>
+          <p className="text-xs text-muted-foreground/70 mt-0.5">
+            Showing settlements from {format(new Date(boundaryDate), 'd MMM yyyy')} · Pre-2026 periods reconciled via Link My Books
           </p>
         </div>
         <Button
