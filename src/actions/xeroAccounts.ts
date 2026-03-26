@@ -50,6 +50,14 @@ export async function refreshXeroCOA(): Promise<RefreshCoaResult> {
     return { success: false, error: error.message };
   }
 
+  if (data?.error === 'rate_limited') {
+    const waitSec = data.retry_after || 60;
+    return {
+      success: false,
+      error: `Xero rate limit reached — please wait ${waitSec}s and try again.`,
+    };
+  }
+
   if (!data?.success) {
     return { success: false, error: data?.error || 'COA refresh failed' };
   }

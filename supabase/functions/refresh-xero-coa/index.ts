@@ -95,6 +95,18 @@ Deno.serve(async (req) => {
     if (!accountsResp.ok) {
       const errText = await accountsResp.text()
       logger.error('Xero accounts error:', accountsResp.status, errText)
+
+      if (accountsResp.status === 429) {
+        const retryAfter = parseInt(accountsResp.headers.get('Retry-After') || '60', 10)
+        return new Response(JSON.stringify({
+          error: 'rate_limited',
+          retry_after: retryAfter,
+          message: `Xero API rate limit reached. Please wait ${retryAfter} seconds and try again.`,
+        }), {
+          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
       return new Response(JSON.stringify({ error: `Xero API error: ${accountsResp.status}` }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
