@@ -613,6 +613,18 @@ export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittan
       }
     }
 
+    // ── Residual-based advertising fee derivation ──
+    // If journal entry regex didn't match but we have totalPaidAmount and invoiceTotal,
+    // derive advertising fees from the residual: invoiceTotal - monthlyFees - returns - totalPaid = adFees
+    if (advertisingFees === 0 && totalPaidAmount !== undefined && invoiceTotal > 0) {
+      const totalMonthlyFees = monthlySellerFee + monthlyFeePerOrder;
+      const residual = invoiceTotal - totalMonthlyFees - returnsCreditNotes - totalPaidAmount;
+      if (residual > 0.01) {
+        advertisingFees = -residual; // negative = deduction
+        console.log('[Kogan PDF] Derived advertising fees from residual:', advertisingFees);
+      }
+    }
+
     console.log('[Kogan PDF] Parsed', lineItems.length, 'line items. Total paid:', totalPaidAmount, 
       'Invoice total:', invoiceTotal, 'Credits:', creditNoteTotal, 'Ad fees:', advertisingFees,
       'Monthly seller fee:', monthlySellerFee, 'Monthly fee/order:', monthlyFeePerOrder,
