@@ -83,7 +83,8 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
     supabase
       .from('marketplace_validation')
       .select('id', { count: 'exact', head: true })
-      .in('overall_status', ['missing', 'partial']),
+      .in('overall_status', ['missing', 'partial'])
+      .gte('period_end', '2026-01-01'),
 
     // Xero tokens — the actual source of truth for Xero connection
     supabase
