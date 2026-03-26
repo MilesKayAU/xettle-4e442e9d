@@ -282,12 +282,26 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
     setShopifySyncing(true);
     try {
       const { data, error } = await supabase.functions.invoke('fetch-shopify-payouts', {});
-      if (error) throw error;
+      // supabase.functions.invoke puts non-2xx responses in error — check for 429 cooldown/lock
+      if (error) {
+        const errMsg = typeof error === 'object' && 'message' in error ? (error as any).message : String(error);
+        const is429 = errMsg.includes('429') || errMsg.includes('cooldown') || errMsg.includes('already in progress');
+        if (is429) {
+          toast.info('Shopify payouts were recently synced — please wait before syncing again.');
+          return;
+        }
+        throw error;
+      }
       if (data?.error) {
         // Handle invalid/expired token
         if (data.error === 'Shopify token invalid or expired') {
           setShopifyTokenInvalid(true);
           toast.error('Shopify token is invalid. Please reconnect via OAuth in Settings.');
+          return;
+        }
+        // Handle 429 in data response
+        if (data.error === 'Sync cooldown active' || data.error === 'Sync already in progress') {
+          toast.info(data.message || 'Shopify payouts were recently synced — please wait before syncing again.');
           return;
         }
         if (data.message) {
