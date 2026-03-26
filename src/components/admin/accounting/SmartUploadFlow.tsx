@@ -100,6 +100,8 @@ interface DetectedFile {
   koganRemittanceResult?: KoganRemittanceResult;
   /** When true, bypass duplicate detection and overwrite existing settlement */
   forceOverwrite?: boolean;
+  /** Status of the existing settlement in DB (for context-aware reparse) */
+  existingSettlementStatus?: string;
 }
 
 interface SmartUploadFlowProps {
