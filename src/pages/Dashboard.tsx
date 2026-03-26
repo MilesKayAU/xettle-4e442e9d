@@ -30,7 +30,7 @@ import ChannelAlertsBanner from '@/components/dashboard/ChannelAlertsBanner';
 import PostSetupBanner from '@/components/dashboard/PostSetupBanner';
 import WelcomeGuide from '@/components/dashboard/WelcomeGuide';
 import RecentUploads from '@/components/dashboard/RecentUploads';
-import GapTriageTable from '@/components/dashboard/GapTriageTable';
+// GapTriageTable replaced by BookkeeperPipeline
 import SettlementDetailDrawer from '@/components/shared/SettlementDetailDrawer';
 import SyncCommandBar from '@/components/dashboard/SyncCommandBar';
 import PushSafetyPreview from '@/components/admin/accounting/PushSafetyPreview';
