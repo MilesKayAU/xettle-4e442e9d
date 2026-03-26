@@ -121,6 +121,25 @@ export async function getApiCsvMismatchCount(): Promise<{
   return { total: seen.size, needsManualFix, autoCorrected };
 }
 
+/**
+ * Returns count of ingestion sign-correction warnings in the last 30 days.
+ * These are settlements where sign inversions were auto-corrected at ingestion.
+ */
+export async function getIngestionWarningCount(): Promise<number> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return 0;
+
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { count } = await supabase
+    .from('system_events')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', session.user.id)
+    .eq('event_type', 'settlement_ingestion_warning')
+    .gte('created_at', thirtyDaysAgo);
+
+  return count || 0;
+}
+
 export interface ScanResult {
   key: string;
   success: boolean;

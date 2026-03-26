@@ -97,10 +97,15 @@ export default function DataIntegrityScanner() {
   const [runningAll, setRunningAll] = useState(false);
   const [allProgress, setAllProgress] = useState(-1);
   const [showAuto, setShowAuto] = useState(false);
+  const [ingestionWarnings, setIngestionWarnings] = useState(0);
 
   const loadTimestamps = useCallback(async () => {
-    const ts = await getLastScanTimestamps();
+    const [ts, warnings] = await Promise.all([
+      getLastScanTimestamps(),
+      getIngestionWarningCount(),
+    ]);
     setTimestamps(ts);
+    setIngestionWarnings(warnings);
     // Clear failed states when we reload timestamps (fresh data)
     setFailedScans({});
   }, []);
