@@ -28,6 +28,7 @@ import { diagnoseGapReason } from '@/utils/diagnose-gap-reason';
 import ParserBugWarningBanner from './ParserBugWarningBanner';
 import SettlementCorrectionPanel from './SettlementCorrectionPanel';
 import ApiCsvMismatchBanner from './ApiCsvMismatchBanner';
+import SettlementCorrectDataSection from './SettlementCorrectDataSection';
 
 interface SettlementDetailDrawerProps {
   settlementId: string | null; // settlement_id (text), not DB uuid
