@@ -498,7 +498,43 @@ serve(async (req) => {
       let seededCount = 0;
 
       for (const inv of outstandingInvoices) {
-        const sid = extractSettlementId(inv.Reference || '');
+        let sid = extractSettlementId(inv.Reference || '');
+
+        const contactName = inv.Contact?.Name || '';
+        const detectedMarketplace = detectMarketplaceFromContact(contactName);
+
+        // ─── Marketplace-specific reference matching ──────────────────
+        // For marketplaces with non-standard refs (Bunnings 6-digit, Kogan AUMKA:,
+        // MyDeal month-name, eBay month-name), extractSettlementId returns null.
+        // Try amount+date matching against local settlements instead.
+        if (!sid && detectedMarketplace && inv.Total != null) {
+          const invAmount = Math.abs(inv.Total);
+          const invDate = parseXeroDate(inv.Date);
+          const matchedSettlement = (allSettlements || []).find(s => {
+            if (s.marketplace !== detectedMarketplace) return false;
+            if (cacheBySettlement.has(s.settlement_id)) return false;
+            const sAmount = Math.abs(s.bank_deposit || 0);
+            if (sAmount === 0) return false;
+            const amountDiff = Math.abs(sAmount - invAmount);
+            const pctDiff = sAmount > 0 ? (amountDiff / sAmount) * 100 : 100;
+            if (amountDiff > 5 && pctDiff > 5) return false;
+            // Date overlap check: invoice date should be near settlement period
+            if (invDate) {
+              const invD = new Date(invDate + 'T00:00:00Z');
+              const pStart = new Date(s.period_start + 'T00:00:00Z');
+              const pEnd = new Date(s.period_end + 'T00:00:00Z');
+              pStart.setUTCDate(pStart.getUTCDate() - 14);
+              pEnd.setUTCDate(pEnd.getUTCDate() + 14);
+              if (invD < pStart || invD > pEnd) return false;
+            }
+            return true;
+          });
+          if (matchedSettlement) {
+            sid = matchedSettlement.settlement_id;
+            console.log(`[step-3b] Marketplace-specific match: ${detectedMarketplace} invoice ${inv.InvoiceNumber || inv.InvoiceID} ref="${inv.Reference}" → ${sid} (amount: ${inv.Total} ≈ ${matchedSettlement.bank_deposit})`);
+          }
+        }
+
         if (!sid) continue;
         if (cacheBySettlement.has(sid)) continue;
 
