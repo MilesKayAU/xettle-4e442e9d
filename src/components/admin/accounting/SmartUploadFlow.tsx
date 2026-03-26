@@ -260,12 +260,26 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
       // Validate the token actually works by calling the edge function with a dry-run
       try {
-        const { data: result } = await supabase.functions.invoke('fetch-shopify-payouts', {
+        const { data: result, error: dryErr } = await supabase.functions.invoke('fetch-shopify-payouts', {
           body: { dryRun: true },
         });
-        if (result?.error === 'Shopify token invalid or expired') {
+        // 429 cooldown is expected — treat token as valid
+        if (dryErr) {
+          const msg = typeof dryErr === 'object' && 'message' in dryErr ? (dryErr as any).message : String(dryErr);
+          const isCooldown = msg.includes('429') || msg.includes('cooldown') || msg.includes('already in progress');
+          if (isCooldown) {
+            setHasShopifyConnection(true);
+            setShopifyTokenInvalid(false);
+          } else {
+            setHasShopifyConnection(true);
+            setShopifyTokenInvalid(true);
+          }
+        } else if (result?.error === 'Shopify token invalid or expired') {
           setHasShopifyConnection(true);
           setShopifyTokenInvalid(true);
+        } else if (result?.error === 'Sync cooldown active' || result?.error === 'Sync already in progress') {
+          setHasShopifyConnection(true);
+          setShopifyTokenInvalid(false);
         } else {
           setHasShopifyConnection(true);
           setShopifyTokenInvalid(false);
