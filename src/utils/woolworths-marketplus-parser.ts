@@ -455,8 +455,15 @@ function buildWoolworthsSettlements(
     const commissionExGst = round2(g.commission / divisor);
     const gstOnCommission = round2(g.commission - commissionExGst);
 
-    // Clearing amount = negative net (so invoice = $0.00)
-    const clearingAmount = -round2(g.netAmount + g.gst);
+    // ─── CRITICAL: Woolworths pays Net Amount ONLY ──────────────────────
+    // The bank deposit equals the sum of the "Net Amount" column.
+    // "GST on Net Amount" appears on the RCTI for BAS purposes but is
+    // NOT included in the cash payment. Confirmed from payment 293603:
+    //   Sum of Net Amount     = $923.76 ✅ matches bank deposit
+    //   Sum of Net Amount+GST = $1,007.80 ❌ does NOT match
+    // ────────────────────────────────────────────────────────────────────
+    const bankDeposit = round2(g.netAmount);
+    const clearingAmount = -bankDeposit;
 
     const settlementId = `${bankPaymentRef}_${g.orderSource}`;
     const marketplaceCode = g.marketplaceCode;
@@ -470,7 +477,7 @@ function buildWoolworthsSettlements(
       gst_on_sales: round2(gstOnSales + gstOnRefunds),
       fees_ex_gst: -Math.abs(commissionExGst),
       gst_on_fees: Math.abs(gstOnCommission),
-      net_payout: round2(g.netAmount + g.gst),
+      net_payout: bankDeposit,
       source: 'csv_upload' as const,
       reconciles: true,
       metadata: {
