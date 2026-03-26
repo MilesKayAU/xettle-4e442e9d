@@ -266,6 +266,7 @@ export function parseKoganPayoutCSV(csvText: string): KoganCsvParseResult {
         h.trim().toLowerCase().replace(/\s+/g, '') === name.toLowerCase().replace(/\s+/g, ''));
 
       const iCreditNote = feeColIdx('APCreditNote');
+      const iSku = feeColIdx('SKU');
       const iPrice = feeHeaders.findIndex(h => /^price$/i.test(h.trim()));
       const iGstAmount = feeHeaders.findIndex(h => /gst\s*amount/i.test(h.trim()));
       const iFeeTotal = feeHeaders.findIndex(h => /^total$/i.test(h.trim()));
@@ -281,6 +282,12 @@ export function parseKoganPayoutCSV(csvText: string): KoganCsvParseResult {
           const cn = (cols[iCreditNote] || '').trim();
           if (/^\d{3,}$/.test(cn)) creditNoteNumber = cn;
         }
+
+        // CRITICAL: Only sum rows with SKU = "MKT_FEE" (transaction fees).
+        // Section 2 can also contain return credit notes and commission refunds
+        // which are NOT transaction fees and must be excluded.
+        const sku = iSku >= 0 ? (cols[iSku] || '').trim() : '';
+        if (sku && !/^MKT_FEE$/i.test(sku)) continue;
 
         // Sum fee amounts — prefer Total column, fallback to Price + GST Amount
         let feeAmount = 0;
