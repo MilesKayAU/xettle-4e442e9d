@@ -615,8 +615,9 @@ export async function overwriteSettlement(settlement: StandardSettlement): Promi
     const koganAdFees = isKoganPdf ? Math.abs(meta.koganAdvertisingFees || 0) : 0;
     const koganReturns = isKoganPdf ? Math.abs(meta.koganReturnsCreditNotes || 0) : 0;
     const advertisingCosts = isKoganPdf ? -koganAdFees : 0;
+    // For Kogan PDF: other_fees = transaction fees (from CSV) + monthly fees (from PDF)
     const otherFees = isKoganPdf
-      ? 0
+      ? -Math.abs((meta.otherChargesInclGst || 0) + (meta.koganMonthlySellerFee || 0) + (meta.koganMonthlyFeePerOrder || 0))
       : -Math.abs((meta.subscriptionAmount || 0) + (meta.manualDebitInclGst || 0) + (meta.otherChargesInclGst || 0));
     const newFields = {
       sales_principal: settlement.sales_ex_gst,
@@ -1131,10 +1132,9 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
     // For non-Kogan: seller_fees = baseFees (all fees)
     const sellerFees = baseFees;
     const advertisingCosts = isKoganPdf ? -koganAdFees : 0;
-    // For Kogan PDF: other_fees = 0 (monthly fees already in seller_fees, ad fees in advertising_costs)
-    // For non-Kogan: standard other charges
+    // For Kogan PDF: other_fees = transaction fees (from CSV) + monthly fees (from PDF)
     const otherFees = isKoganPdf
-      ? 0
+      ? -Math.abs((meta.otherChargesInclGst || 0) + (meta.koganMonthlySellerFee || 0) + (meta.koganMonthlyFeePerOrder || 0))
       : -Math.abs((meta.subscriptionAmount || 0) + (meta.manualDebitInclGst || 0) + (meta.otherChargesInclGst || 0));
 
     const { saveSettlementCanonical } = await import('@/actions/settlements');
