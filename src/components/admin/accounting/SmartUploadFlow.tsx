@@ -696,9 +696,48 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
             }
 
             let error: string | undefined;
+            let forceOverwrite = false;
+            let existingSettlementStatus: string | undefined;
+
             if (allDupes) {
-              status = 'error';
-              error = `Already saved — ${dbDupeIds.length} settlement${dbDupeIds.length > 1 ? 's' : ''} from this file already exist in your account.`;
+              // Context-aware reparse based on existing settlement status
+              const firstDupeStatus = existingStatuses[dbDupeIds[0]] || '';
+              existingSettlementStatus = firstDupeStatus;
+
+              // Check user setting for always-confirm
+              let alwaysConfirm = false;
+              try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                  const { data: setting } = await supabase
+                    .from('app_settings')
+                    .select('value')
+                    .eq('user_id', user.id)
+                    .eq('key', 'always_confirm_reparse')
+                    .maybeSingle();
+                  alwaysConfirm = setting?.value === 'true';
+                }
+              } catch {}
+
+              if (firstDupeStatus === 'pushed_to_xero') {
+                // BLOCK — already pushed to Xero
+                status = 'error';
+                error = 'This settlement has already been pushed to Xero. To correct it, use the Correct & Repost option in the settlement drawer.';
+              } else if (
+                !alwaysConfirm && 
+                ['gap_detected', 'settlement_needed', 'upload_needed', 'missing', 'ingested'].includes(firstDupeStatus)
+              ) {
+                // AUTO re-parse — user is clearly fixing a problem
+                status = 'detected';
+                forceOverwrite = true;
+                toast.info('Settlement will be re-parsed with updated data.', { duration: 4000 });
+              } else if (['ready_to_push', 'already_recorded'].includes(firstDupeStatus) || alwaysConfirm) {
+                // ASK — settlement is clean, confirm before overwriting
+                status = 'reparse_confirm';
+              } else {
+                // Default for unknown statuses — ask
+                status = 'reparse_confirm';
+              }
             }
 
             updated[fileIdx] = {
