@@ -716,6 +716,7 @@ async function saveWithAtomicPromote(settlement: StandardSettlement, fingerprint
       source_reference: meta.sourceReference || null,
       status: 'saved',
       reconciliation_status: settlement.reconciles ? 'reconciled' : 'warning',
+      raw_payload: Object.keys(meta).length > 0 ? meta : null,
     };
 
     const systemEvent = {
