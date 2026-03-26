@@ -1224,6 +1224,10 @@ export type Database = {
           bank_matched_at: string | null
           bank_reference: string | null
           created_at: string | null
+          gap_acknowledged: boolean | null
+          gap_acknowledged_at: string | null
+          gap_acknowledged_by: string | null
+          gap_acknowledged_reason: string | null
           id: string
           last_checked_at: string | null
           marketplace_code: string
@@ -1261,6 +1265,10 @@ export type Database = {
           bank_matched_at?: string | null
           bank_reference?: string | null
           created_at?: string | null
+          gap_acknowledged?: boolean | null
+          gap_acknowledged_at?: string | null
+          gap_acknowledged_by?: string | null
+          gap_acknowledged_reason?: string | null
           id?: string
           last_checked_at?: string | null
           marketplace_code: string
@@ -1298,6 +1306,10 @@ export type Database = {
           bank_matched_at?: string | null
           bank_reference?: string | null
           created_at?: string | null
+          gap_acknowledged?: boolean | null
+          gap_acknowledged_at?: string | null
+          gap_acknowledged_by?: string | null
+          gap_acknowledged_reason?: string | null
           id?: string
           last_checked_at?: string | null
           marketplace_code?: string

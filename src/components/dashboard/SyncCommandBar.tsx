@@ -46,7 +46,8 @@ export default function SyncCommandBar({ onOpenPushPreview, onNavigateToMismatch
         .from('marketplace_validation')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', session.user.id)
-        .eq('overall_status', 'gap_detected'),
+        .eq('overall_status', 'gap_detected')
+        .or('gap_acknowledged.is.null,gap_acknowledged.eq.false'),
       supabase
         .from('marketplace_validation')
         .select('settlement_id, marketplace_code', { count: 'exact' })
@@ -115,14 +116,16 @@ export default function SyncCommandBar({ onOpenPushPreview, onNavigateToMismatch
         .from('marketplace_validation')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', session.user.id)
-        .eq('overall_status', 'gap_detected');
+        .eq('overall_status', 'gap_detected')
+        .or('gap_acknowledged.is.null,gap_acknowledged.eq.false');
 
       // Get all gap_detected settlements
       const { data: gaps } = await supabase
         .from('marketplace_validation')
         .select('settlement_id, marketplace_code')
         .eq('user_id', session.user.id)
-        .eq('overall_status', 'gap_detected');
+        .eq('overall_status', 'gap_detected')
+        .or('gap_acknowledged.is.null,gap_acknowledged.eq.false');
 
       if (!gaps || gaps.length === 0) {
         setGapCount(0);
@@ -189,7 +192,8 @@ export default function SyncCommandBar({ onOpenPushPreview, onNavigateToMismatch
         .from('marketplace_validation')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', session.user.id)
-        .eq('overall_status', 'gap_detected');
+        .eq('overall_status', 'gap_detected')
+        .or('gap_acknowledged.is.null,gap_acknowledged.eq.false');
 
       const resolved = (gapsBefore ?? 0) - (gapsAfter ?? 0);
 
