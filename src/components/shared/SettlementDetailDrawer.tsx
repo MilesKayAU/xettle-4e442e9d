@@ -1159,6 +1159,8 @@ function formatEventType(type: string): string {
     external_link_removed: 'External link removed (cleanup)',
     external_xero_detected: 'External Xero invoice detected',
     settlement_corrected: '⚠ Settlement corrected (parser bug fix)',
+    settlement_reparsed: '🔄 Settlement re-parsed (data corrected)',
+    settlement_deleted_for_reupload: '🗑 Settlement deleted for re-upload',
   };
   return labels[type] || type.replace(/_/g, ' ');
 }
