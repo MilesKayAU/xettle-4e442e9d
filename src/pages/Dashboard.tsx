@@ -1070,6 +1070,18 @@ export default function Dashboard() {
                 <DestinationAccountMapper />
               )}
 
+              {/* SyncCommandBar — Refresh / Resolve Gaps / Push Ready */}
+              <SyncCommandBar
+                onOpenPushPreview={(settlements) => {
+                  setPushPreviewSettlements(settlements);
+                  setPushPreviewOpen(true);
+                }}
+                onNavigateToMismatches={() => {
+                  switchView('settlements');
+                  setSettlementsSubTab('reconciliation');
+                }}
+              />
+
               {/* BookkeeperPipeline — unified priority task list */}
               <BookkeeperPipeline
                 onSwitchToUpload={(missing) => {
