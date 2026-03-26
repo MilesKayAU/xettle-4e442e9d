@@ -218,6 +218,25 @@ function extractSettlementId(reference: string): string | null {
   }
   const lmbMatch = reference.match(/LMB-\w+-(\d+)-\d+/);
   if (lmbMatch) return lmbMatch[1];
+
+  // Kogan: AUMKA:KOG:AU:YYYYMMDD or AUMKA:KOG:AU:YYYYMMDD-{APInvoice}
+  // Must come BEFORE generic numeric match to avoid extracting the date portion
+  const koganRef = reference.match(/^AUMKA:KOG:AU:(\d{8})(?:-(\d+))?$/);
+  if (koganRef) {
+    // Return null — Kogan refs don't map to settlement_ids deterministically.
+    // They'll be matched via marketplace-specific amount+date fallback.
+    // Returning null prevents the generic \d{8,} match from extracting the date as a false settlement_id.
+    return null;
+  }
+
+  // Bunnings: 6-digit or zero-padded 12-digit numeric refs (e.g. 265186, 000000264046)
+  // Must come BEFORE generic numeric match. Returns null because Bunnings refs are
+  // Mirakl billing IDs, not settlement_ids — matched via marketplace+amount+date fallback.
+  const bunningsRef = reference.match(/^0*(\d{5,6})$/);
+  if (bunningsRef) {
+    return null;
+  }
+
   const numericMatch = reference.match(/\b(\d{8,})\b/);
   if (numericMatch) return numericMatch[1];
   const shopifyMatch = reference.match(/(Shopify-[\w]+)/);
