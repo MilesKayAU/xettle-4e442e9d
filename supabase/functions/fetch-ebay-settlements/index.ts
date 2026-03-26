@@ -429,7 +429,7 @@ function buildSettlementFromPayout(
         break
       }
       case 'REFUND':
-        refundsTotal += amount // already negative from eBay
+        refundsTotal -= Math.abs(amount) // Force negative sign regardless of eBay API
         break
       case 'CREDIT': {
         // Same as SALE: eBay returns net amount, reconstruct gross
@@ -481,7 +481,7 @@ function buildSettlementFromPayout(
       sales_principal: round2(salesTotal),
       sales_shipping: round2(shippingTotal),
       seller_fees: round2(feesTotal),
-      refunds: round2(refundsTotal),
+      refunds: round2(-Math.abs(refundsTotal)),
       reimbursements: 0,
       fba_fees: 0,
       storage_fees: 0,
@@ -672,6 +672,37 @@ Deno.serve(async (req) => {
 
         // 5. Build settlement
         const { settlement, gst_mode } = buildSettlementFromPayout(payout, transactions, userId)
+
+        // 5b. Ingestion-time sign validation — catches & corrects sign inversions before DB write
+        const ingestionWarnings: string[] = []
+        const signChecks: Array<{ field: string; value: number; mustBeNegative: boolean }> = [
+          { field: 'seller_fees', value: settlement.seller_fees, mustBeNegative: true },
+          { field: 'other_fees', value: settlement.other_fees, mustBeNegative: true },
+          { field: 'fba_fees', value: settlement.fba_fees, mustBeNegative: true },
+          { field: 'refunds', value: settlement.refunds, mustBeNegative: true },
+          { field: 'gst_on_expenses', value: settlement.gst_on_expenses, mustBeNegative: true },
+        ]
+        for (const check of signChecks) {
+          if (check.mustBeNegative && check.value > 0) {
+            ingestionWarnings.push(`${check.field} is positive (${check.value}) — sign inverted`)
+            ;(settlement as any)[check.field] = -Math.abs(check.value)
+          }
+        }
+        if (settlement.sales_principal < 0) {
+          ingestionWarnings.push(`sales_principal is negative (${settlement.sales_principal}) — sign inverted`)
+          settlement.sales_principal = Math.abs(settlement.sales_principal)
+        }
+        if (ingestionWarnings.length > 0) {
+          logger.warn(`[fetch-ebay-settlements] Ingestion validation for ${settlementId}: ${ingestionWarnings.join('; ')}`)
+          await userAdminClient.from('system_events').insert({
+            user_id: userId,
+            event_type: 'settlement_ingestion_warning',
+            severity: 'warning',
+            marketplace_code: 'ebay_au',
+            settlement_id: settlementId,
+            details: { source: 'ebay_api', warnings: ingestionWarnings, normalised: true },
+          })
+        }
 
         // 6. Upsert — handles both new inserts and payout adjustments/corrections
         // Check if exists first to determine if this is an insert or update
