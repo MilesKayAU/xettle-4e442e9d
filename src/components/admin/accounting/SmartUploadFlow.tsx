@@ -647,7 +647,24 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           } catch { /* silent */ }
         }
 
-        return { idx, result, settlements, dbDupeIds, splitResult: undefined as MultiMarketplaceSplitResult | undefined, csvHeaders: fileHeaders, sampleRows, koganDocNumbers, koganPdfPeriodMonth, koganRemittanceResult };
+        // Check always-confirm setting (only if there are dupes)
+        let alwaysConfirmReparse = false;
+        if (dbDupeIds.length > 0) {
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              const { data: setting } = await supabase
+                .from('app_settings')
+                .select('value')
+                .eq('user_id', user.id)
+                .eq('key', 'always_confirm_reparse')
+                .maybeSingle();
+              alwaysConfirmReparse = setting?.value === 'true';
+            }
+          } catch {}
+        }
+
+        return { idx, result, settlements, dbDupeIds, existingStatuses, alwaysConfirmReparse, splitResult: undefined as MultiMarketplaceSplitResult | undefined, csvHeaders: fileHeaders, sampleRows, koganDocNumbers, koganPdfPeriodMonth, koganRemittanceResult };
       })
     );
 
