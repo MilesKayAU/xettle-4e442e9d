@@ -131,14 +131,22 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [accountingBoundary, setAccountingBoundary] = useState<string | null>(null);
   const [validationStatusMap, setValidationStatusMap] = useState<Record<string, string>>({});
 
-  // Auto-audit Xero status once settlements are loaded
+  // Auto-audit Xero status once settlements are loaded (with session-level cooldown)
   const [hasAutoAudited, setHasAutoAudited] = useState(false);
+
   const [hasAutoExpanded, setHasAutoExpanded] = useState(false);
 
   useEffect(() => {
     if (hasLoadedOnce && settlements.length > 0 && !hasAutoAudited && !refreshingXero) {
       setHasAutoAudited(true);
-      // Auto-audit Xero status on first load
+      // Session-level cooldown: only auto-audit Xero once per 10 minutes per marketplace
+      const cooldownKey = `xero_auto_audit_${code}`;
+      const lastAudit = sessionStorage.getItem(cooldownKey);
+      const now = Date.now();
+      if (lastAudit && now - parseInt(lastAudit, 10) < 10 * 60 * 1000) {
+        return; // Skip — already audited recently this session
+      }
+      sessionStorage.setItem(cooldownKey, String(now));
       handleRefreshXero();
     }
   }, [hasLoadedOnce, settlements.length, hasAutoAudited, refreshingXero, handleRefreshXero, code]);
