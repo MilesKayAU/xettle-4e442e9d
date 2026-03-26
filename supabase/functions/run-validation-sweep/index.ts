@@ -689,11 +689,8 @@ async function sweepUser(adminSupabase: any, userId: string) {
           }
         }
 
-        // Step 3: Reconciliation — compute gap from settlement financial fields
-        if (recon) {
-          record.reconciliation_status = recon.status || 'pending'
-          record.reconciliation_difference = recon.difference || 0
-        } else if (settlement) {
+        // Step 3: Reconciliation — always compute gap from settlement financial fields when available
+        if (settlement) {
           // Compute reconciliation gap from actual financial fields
           const bankDeposit = parseFloat(settlement.bank_deposit) || 0
           const computedNet = (parseFloat(settlement.sales_principal) || 0)
@@ -709,17 +706,18 @@ async function sweepUser(adminSupabase: any, userId: string) {
           const gap = Math.round((bankDeposit - computedNet) * 100) / 100
           record.reconciliation_difference = gap
 
-          // Gap is the canonical truth — legacy reconciliation_status is advisory only.
-          // NEVER override with 'matched' if the computed gap exceeds tolerance.
           if (Math.abs(gap) <= 1.00) {
             record.reconciliation_status = 'matched'
-            // Preserve orders_found if legacy status was reconciled
             if (settlement.reconciliation_status === 'reconciled') {
               record.orders_found = true
             }
           } else {
             record.reconciliation_status = 'warning'
           }
+        } else if (recon) {
+          // Fallback: no settlement record, use legacy reconciliation_checks
+          record.reconciliation_status = recon.status || 'pending'
+          record.reconciliation_difference = recon.difference || 0
         }
 
         // Step 4: Xero
