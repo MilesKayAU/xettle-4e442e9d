@@ -769,22 +769,27 @@ Deno.serve(async (req) => {
 
       for (const d of result.discrepancies) {
         const dbField = FIELD_MAP[d.field];
-        if (dbField && Math.abs(d.difference) > 1.00) {
+        if (dbField && Math.abs(d.difference) > 1.00 && d.api_value !== 0 && !isNaN(d.api_value)) {
           corrections[dbField] = { old: d.stored_value, new: d.api_value };
           updatePayload[dbField] = d.api_value;
         }
       }
 
       if (Object.keys(updatePayload).length > 0) {
-        // Log BEFORE writing correction
+        // Bug 2 fix: Log with flat keys that match diagnostic queries
         await adminClient.from("system_events").insert({
           user_id: userId,
           event_type: "gap_auto_corrected",
           severity: "info",
+          marketplace_code: settlement.marketplace,
+          settlement_id: settlement_id,
           details: {
             settlement_id,
             marketplace: settlement.marketplace,
             corrections,
+            old_bank_deposit: corrections.bank_deposit?.old ?? null,
+            new_bank_deposit: corrections.bank_deposit?.new ?? null,
+            verification_method: result.filter_method ?? "unknown",
             triggered_by: "resolve_gaps_button",
             corrected_at: new Date().toISOString(),
           },
@@ -826,6 +831,9 @@ Deno.serve(async (req) => {
           auto_corrected: autoCorrected,
           transaction_count: result.transaction_count,
           discrepancy_count: result.discrepancies.length,
+          discrepancies: result.discrepancies,
+          api_totals: result.api_totals,
+          stored_settlement: result.stored_settlement,
           filter_method: result.filter_method,
           error_message: result.error ?? null,
           triggered_by: body.triggered_by ?? 'unknown',
