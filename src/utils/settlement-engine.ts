@@ -1133,7 +1133,7 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
         sales_principal: settlement.sales_ex_gst,
         sales_shipping: meta.shippingExGst || 0,
         seller_fees: sellerFees,
-        refunds: meta.refundsExGst || 0,
+        refunds: isKoganPdf ? -koganReturns : (meta.refundsExGst || 0),
         reimbursements: (meta.refundCommissionExGst || 0) + (meta.manualCreditInclGst || 0),
         advertising_costs: advertisingCosts,
         other_fees: otherFees,

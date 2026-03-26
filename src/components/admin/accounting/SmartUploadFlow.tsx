@@ -1065,9 +1065,6 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               koganReturnsCreditNotes: pdfResult.returnsCreditNotes,
               koganPdfBankDeposit: pdfResult.totalPaidAmount,
               koganPdfInvoiceTotal: pdfResult.invoiceTotal,
-              otherChargesInclGst: totalAdFees,
-              refundsInclGst: -totalReturns,
-              refundsExGst: -round2(totalReturns / 1.1),
               gstModel: 'inclusive',
             },
           }];
