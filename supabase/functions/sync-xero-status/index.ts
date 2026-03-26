@@ -822,7 +822,11 @@ serve(async (req) => {
 
       const ref = inv.Reference || '';
       const contactName = inv.Contact?.Name || '';
-      const detectedMarketplace = detectMarketplaceFromContact(contactName) || 'amazon_au';
+      const detectedMarketplace = detectMarketplaceFromContact(contactName);
+      if (!detectedMarketplace) {
+        console.log(`[step-4b] Skipping unclassified contact "${contactName}" for invoice ${inv.InvoiceNumber || inv.InvoiceID}`);
+        continue;
+      }
 
       // ─── SAFETY: Only auto-link Xettle-created invoices ─────────────
       const isXettleCreated = ref.toLowerCase().startsWith('xettle-');
