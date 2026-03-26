@@ -53,6 +53,7 @@ import ApiConnectionsPanel from '@/components/settings/ApiConnectionsPanel';
 import DataQualityPanel from '@/components/settings/DataQualityPanel';
 import FulfilmentMethodsPanel from '@/components/settings/FulfilmentMethodsPanel';
 import MarketplaceManagerPanel from '@/components/settings/MarketplaceManagerPanel';
+import UploadPreferencesPanel from '@/components/settings/UploadPreferencesPanel';
 import InventoryDashboard from '@/components/inventory/InventoryDashboard';
 
 const SmartUploadFlow = lazy(() => import('@/components/admin/accounting/SmartUploadFlow'));
@@ -118,6 +119,7 @@ const SETTINGS_HELP: Record<string, string> = {
   fulfilment_methods: 'Tell Xettle how each marketplace fulfils orders — FBA (marketplace ships it), self-ship, or mixed. This affects profit calculations because shipping costs differ. If you self-ship, you can also enter your average postage cost per order.',
   data_quality: 'Tools to fix historical data issues — re-sync marketplace labels, correct misclassified settlements, and clean up any data that was imported incorrectly. Use this if you notice wrong marketplace names or categories on older records.',
   active_marketplaces: 'Toggle marketplaces on or off site-wide. Deactivated marketplaces are hidden from all scoring, syncs, posting, and reconciliation views across the entire app.',
+  upload_preferences: 'Control how re-uploads and duplicate settlements are handled. By default, Xettle uses smart context-aware behaviour — auto re-parsing problem settlements and asking before overwriting clean ones.',
 };
 
 function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConnected: boolean; onConnectXero: () => void; onGoToUpload: () => void }) {
@@ -138,6 +140,7 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
     fulfilment_methods: { completionWarnings: ['fulfilment_methods_incomplete'] },
     data_quality: { completionWarnings: [] },
     active_marketplaces: { completionWarnings: [] },
+    upload_preferences: { completionWarnings: [] },
   };
 
   const getStatus = (sectionKey: string): 'complete' | 'incomplete' | 'warning' | 'none' => {
@@ -152,7 +155,7 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
     return 'warning';
   };
 
-  const sectionOrder = ['api_connections', 'active_marketplaces', 'destination_accounts', 'account_mapper', 'posting_mode', 'accounting_boundary', 'payment_verification', 'fulfilment_methods', 'data_quality'] as const;
+  const sectionOrder = ['api_connections', 'active_marketplaces', 'destination_accounts', 'account_mapper', 'posting_mode', 'accounting_boundary', 'payment_verification', 'fulfilment_methods', 'upload_preferences', 'data_quality'] as const;
   const statusPriority: Record<'incomplete' | 'warning' | 'none' | 'complete', number> = {
     incomplete: 0,
     warning: 1,
@@ -224,6 +227,11 @@ function SettingsView({ xeroConnected, onConnectXero, onGoToUpload }: { xeroConn
     fulfilment_methods: (
       <SettingsAccordion id="fulfilment" title="Fulfilment Methods" description="Set how orders are fulfilled per marketplace — affects profit calculations" defaultOpen={sortedSections[0] === 'fulfilment_methods'} status={getStatus('fulfilment_methods')} helpText={SETTINGS_HELP.fulfilment_methods}>
         <ErrorBoundary><FulfilmentMethodsPanel /></ErrorBoundary>
+      </SettingsAccordion>
+    ),
+    upload_preferences: (
+      <SettingsAccordion title="Upload Preferences" description="Control re-upload and duplicate settlement behaviour" defaultOpen={false} status={getStatus('upload_preferences')} helpText={SETTINGS_HELP.upload_preferences}>
+        <ErrorBoundary><UploadPreferencesPanel /></ErrorBoundary>
       </SettingsAccordion>
     ),
     data_quality: (

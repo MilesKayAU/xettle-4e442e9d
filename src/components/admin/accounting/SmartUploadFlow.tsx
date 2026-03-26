@@ -64,7 +64,7 @@ function round2(n: number): number { return Math.round(n * 100) / 100; }
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type FileStatus = 'detecting' | 'detected' | 'reviewing' | 'wrong_file' | 'unknown' | 'first_contact' | 'ai_analyzing' | 'confirmed' | 'saving' | 'saved' | 'error' | 'multi_split';
+type FileStatus = 'detecting' | 'detected' | 'reviewing' | 'wrong_file' | 'unknown' | 'first_contact' | 'ai_analyzing' | 'confirmed' | 'saving' | 'saved' | 'error' | 'multi_split' | 'reparse_confirm';
 
 interface DetectedFile {
   file: File;
@@ -100,6 +100,8 @@ interface DetectedFile {
   koganRemittanceResult?: KoganRemittanceResult;
   /** When true, bypass duplicate detection and overwrite existing settlement */
   forceOverwrite?: boolean;
+  /** Status of the existing settlement in DB (for context-aware reparse) */
+  existingSettlementStatus?: string;
 }
 
 interface SmartUploadFlowProps {
@@ -600,8 +602,9 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           }
         }
 
-        // Dedup 2: check if any parsed settlement already exists in DB
+        // Dedup 2: check if any parsed settlement already exists in DB (with status for context-aware reparse)
         let dbDupeIds: string[] = [];
+        let existingStatuses: Record<string, string> = {};
         if (settlements.length > 0) {
           try {
             const { data: { user } } = await supabase.auth.getUser();
@@ -609,10 +612,13 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               const ids = settlements.map(s => s.settlement_id);
               const { data: existing } = await supabase
                 .from('settlements')
-                .select('settlement_id')
+                .select('settlement_id, status')
                 .eq('user_id', user.id)
                 .in('settlement_id', ids);
               dbDupeIds = (existing || []).map((e: any) => e.settlement_id);
+              for (const e of (existing || []) as any[]) {
+                existingStatuses[e.settlement_id] = e.status;
+              }
             }
           } catch {}
         }
@@ -641,7 +647,24 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           } catch { /* silent */ }
         }
 
-        return { idx, result, settlements, dbDupeIds, splitResult: undefined as MultiMarketplaceSplitResult | undefined, csvHeaders: fileHeaders, sampleRows, koganDocNumbers, koganPdfPeriodMonth, koganRemittanceResult };
+        // Check always-confirm setting (only if there are dupes)
+        let alwaysConfirmReparse = false;
+        if (dbDupeIds.length > 0) {
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              const { data: setting } = await supabase
+                .from('app_settings')
+                .select('value')
+                .eq('user_id', user.id)
+                .eq('key', 'always_confirm_reparse')
+                .maybeSingle();
+              alwaysConfirmReparse = setting?.value === 'true';
+            }
+          } catch {}
+        }
+
+        return { idx, result, settlements, dbDupeIds, existingStatuses, alwaysConfirmReparse, splitResult: undefined as MultiMarketplaceSplitResult | undefined, csvHeaders: fileHeaders, sampleRows, koganDocNumbers, koganPdfPeriodMonth, koganRemittanceResult };
       })
     );
 
@@ -650,7 +673,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       const offset = prev.length - uniqueFiles.length;
       for (const r of results) {
         if (r.status === 'fulfilled') {
-          const { idx, result, settlements, dbDupeIds, splitResult, csvHeaders, sampleRows, koganDocNumbers, koganPdfPeriodMonth, koganRemittanceResult } = r.value;
+          const { idx, result, settlements, dbDupeIds, existingStatuses, alwaysConfirmReparse, splitResult, csvHeaders, sampleRows, koganDocNumbers, koganPdfPeriodMonth, koganRemittanceResult } = r.value;
           const fileIdx = offset + idx;
           if (fileIdx < updated.length) {
             // If multi-marketplace split detected, show confirmation card
@@ -690,9 +713,33 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
             }
 
             let error: string | undefined;
+            let forceOverwrite = false;
+            let existingSettlementStatus: string | undefined;
+
             if (allDupes) {
-              status = 'error';
-              error = `Already saved — ${dbDupeIds.length} settlement${dbDupeIds.length > 1 ? 's' : ''} from this file already exist in your account.`;
+              // Context-aware reparse based on existing settlement status
+              const firstDupeStatus = existingStatuses[dbDupeIds[0]] || '';
+              existingSettlementStatus = firstDupeStatus;
+
+              if (firstDupeStatus === 'pushed_to_xero') {
+                // BLOCK — already pushed to Xero
+                status = 'error';
+                error = 'This settlement has already been pushed to Xero. To correct it, use the Correct & Repost option in the settlement drawer.';
+              } else if (
+                !alwaysConfirmReparse && 
+                ['gap_detected', 'settlement_needed', 'upload_needed', 'missing', 'ingested'].includes(firstDupeStatus)
+              ) {
+                // AUTO re-parse — user is clearly fixing a problem
+                status = 'detected';
+                forceOverwrite = true;
+                toast.info('Settlement will be re-parsed with updated data.', { duration: 4000 });
+              } else if (['ready_to_push', 'already_recorded'].includes(firstDupeStatus) || alwaysConfirmReparse) {
+                // ASK — settlement is clean, confirm before overwriting
+                status = 'reparse_confirm';
+              } else {
+                // Default for unknown statuses — ask
+                status = 'reparse_confirm';
+              }
             }
 
             updated[fileIdx] = {
@@ -701,6 +748,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               settlements: settlements.length > 0 ? settlements : undefined,
               status,
               error,
+              forceOverwrite: forceOverwrite || undefined,
+              existingSettlementStatus,
               csvHeaders: result ? (csvHeaders || undefined) : undefined,
               sampleRows: sampleRows || undefined,
               wasLowConfidence: isFirstContact || false,
@@ -2786,6 +2835,7 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
     <Card className={`transition-all ${
       status === 'wrong_file' ? 'border-amber-400/50 bg-amber-50/30 dark:bg-amber-950/10' :
       status === 'error' ? 'border-destructive/30 bg-destructive/5' :
+      status === 'reparse_confirm' ? 'border-amber-400/50 bg-amber-50/30 dark:bg-amber-950/10' :
       status === 'saved' ? 'border-green-400/50 bg-green-50/30 dark:bg-green-950/10' :
       isReviewing ? 'border-primary/40 bg-primary/[0.03] ring-1 ring-primary/20' :
       status === 'detected' && previewData ? 'border-primary/30 bg-primary/[0.02]' :
@@ -3278,7 +3328,7 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
                   <XCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
                   <div className="space-y-1.5">
                     <p className="text-xs text-destructive">{df.error}</p>
-                    {df.error.includes('Already saved') && df.settlements && df.settlements.length > 0 && (
+                    {df.error.includes('Already saved') && !df.error.includes('pushed to Xero') && df.settlements && df.settlements.length > 0 && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -3289,6 +3339,37 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
                         Re-parse &amp; Overwrite
                       </Button>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {/* Re-parse confirmation (context-aware: settlement exists and is ready_to_push/already_recorded) */}
+              {status === 'reparse_confirm' && df.settlements && df.settlements.length > 0 && (
+                <div className="flex items-start gap-2 bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-800/30 rounded-lg p-3">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div className="space-y-2 flex-1">
+                    <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                      This settlement already exists and is {df.existingSettlementStatus === 'ready_to_push' ? 'ready to push' : df.existingSettlementStatus === 'already_recorded' ? 'already recorded' : 'saved'}. Re-parsing will overwrite the current data.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="h-7 text-xs gap-1.5"
+                        onClick={() => onForceOverwrite(idx)}
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        Re-parse
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => onRemove(idx)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
