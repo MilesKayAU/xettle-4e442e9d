@@ -46,7 +46,7 @@ import { parseShopifyOrdersCSV } from '@/utils/shopify-orders-parser';
 import { parseBunningsSummaryPdf } from '@/utils/bunnings-summary-parser';
 import { parseKoganRemittancePdf, extractKoganPdfInfo, parseKoganPayoutCSV, type KoganRemittanceResult } from '@/utils/kogan-remittance-parser';
 import { parseWoolworthsMarketPlusCSV, isTransactionFee } from '@/utils/woolworths-marketplus-parser';
-import { saveSettlement, validateSettlementSanity, triggerValidationSweep, MARKETPLACE_LABELS as ENGINE_LABELS, type StandardSettlement } from '@/utils/settlement-engine';
+import { saveSettlement, overwriteSettlement, validateSettlementSanity, triggerValidationSweep, MARKETPLACE_LABELS as ENGINE_LABELS, type StandardSettlement } from '@/utils/settlement-engine';
 import { createDraftFingerprint } from '@/utils/fingerprint-lifecycle';
 import { validateBookkeeperMinimumData, type BookkeeperReadinessResult } from '@/utils/bookkeeper-readiness';
 import { checkXeroReadinessForMarketplace, type XeroReadinessResult } from '@/utils/xero-mapping-readiness';
@@ -96,6 +96,8 @@ interface DetectedFile {
   koganPdfPeriodMonth?: string;
   /** Kogan remittance parse result (cached for merge) */
   koganRemittanceResult?: KoganRemittanceResult;
+  /** When true, bypass duplicate detection and overwrite existing settlement */
+  forceOverwrite?: boolean;
 }
 
 interface SmartUploadFlowProps {
@@ -1101,9 +1103,13 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       const { data: { user } } = await supabase.auth.getUser();
 
       for (const s of settlements) {
-        const result = await saveSettlement(s);
+        const isOverwrite = df.forceOverwrite === true;
+        const result = isOverwrite ? await overwriteSettlement(s) : await saveSettlement(s);
         if (result.success) {
           savedCount++;
+          if (result.overwritten) {
+            toast.success(`Re-parsed & overwritten: ${s.settlement_id}`);
+          }
 
           // Save settlement_lines for drill-down
           if (user && marketplace === 'woolworths_marketplus' && woolworthsRows.length > 0) {
@@ -2365,6 +2371,13 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                 onProcess={processFile}
                 onSetStatus={setFileStatus}
                 onFirstContact={(i) => setFirstContactIdx(i)}
+                onForceOverwrite={(i) => {
+                  setFiles(prev => {
+                    const updated = [...prev];
+                    updated[i] = { ...updated[i], forceOverwrite: true, status: 'detected', error: undefined };
+                    return updated;
+                  });
+                }}
               />
             )
           ))}
@@ -2520,9 +2533,10 @@ interface FileResultCardProps {
   onProcess: (idx: number) => void;
   onSetStatus: (idx: number, status: FileStatus) => void;
   onFirstContact: (idx: number) => void;
+  onForceOverwrite: (idx: number) => void;
 }
 
-function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess, onSetStatus, onFirstContact }: FileResultCardProps) {
+function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess, onSetStatus, onFirstContact, onForceOverwrite }: FileResultCardProps) {
   const { file, status, detection, settlements } = df;
   const marketplace = df.overrideMarketplace || detection?.marketplace;
   const catDef = MARKETPLACE_CATALOG.find(m => m.code === marketplace);
@@ -3074,7 +3088,20 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
               {status === 'error' && df.error && (
                 <div className="flex items-start gap-2">
                   <XCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-destructive">{df.error}</p>
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-destructive">{df.error}</p>
+                    {df.error.includes('Already saved') && df.settlements && df.settlements.length > 0 && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs gap-1.5"
+                        onClick={() => onForceOverwrite(idx)}
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        Re-parse &amp; Overwrite
+                      </Button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
