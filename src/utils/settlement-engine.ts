@@ -1154,6 +1154,7 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
         status: 'saved',
         reconciliation_status: settlement.reconciles ? 'reconciled' : 'warning',
         fingerprint_id: settlement.fingerprint_id || null,
+        raw_payload: Object.keys(meta).length > 0 ? meta : null,
       },
       marketplace: settlement.marketplace,
       periodStart: settlement.period_start,
