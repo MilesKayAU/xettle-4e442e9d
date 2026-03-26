@@ -413,6 +413,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
           .in('source', [...PUSHABLE_SOURCES])
           .neq('status', 'duplicate_suppressed')
           .neq('status', 'already_recorded')
+          .gte('period_end', '2026-01-01')
           .order('period_end', { ascending: false }),
         actionableOnly
           ? supabase

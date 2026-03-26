@@ -101,7 +101,8 @@ async function fetchTaskCounts(): Promise<Omit<DashboardTaskCounts, 'loading'>> 
     // Validation pipeline counts — the canonical source of truth for stage counts
     supabase
       .from('marketplace_validation')
-      .select('overall_status'),
+      .select('overall_status')
+      .gte('period_end', '2026-01-01'),
   ]);
 
   const settlements = settlementsRes.data || [];

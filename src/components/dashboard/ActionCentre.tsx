@@ -114,7 +114,7 @@ export default function ActionCentre({
   const loadData = useCallback(async () => {
     try {
       const [validationRes, eventsRes, userRes, boundaryRes, connectionsRes, lastSyncRes, autoPostRailsRes, autoPostFailedRes, xeroRes] = await Promise.all([
-        supabase.from('marketplace_validation').select('*').order('marketplace_code').order('period_start', { ascending: false }),
+        supabase.from('marketplace_validation').select('*').gte('period_end', '2026-01-01').order('marketplace_code').order('period_start', { ascending: false }),
         supabase.from('system_events').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.auth.getUser(),
         supabase.from('app_settings').select('value').eq('key', 'accounting_boundary_date').maybeSingle(),

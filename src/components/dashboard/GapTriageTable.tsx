@@ -75,6 +75,7 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
         .from('marketplace_validation')
         .select('settlement_id, marketplace_code, period_label, reconciliation_difference, overall_status, gap_acknowledged, gap_acknowledged_reason')
         .eq('overall_status', 'gap_detected')
+        .gte('period_end', '2026-01-01')
         .order('reconciliation_difference', { ascending: true });
 
       if (!validationRows || validationRows.length === 0) {
