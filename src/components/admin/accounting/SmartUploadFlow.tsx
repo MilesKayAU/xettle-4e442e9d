@@ -372,18 +372,25 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         toast.info(`All Shopify payouts already imported (${skipped} checked)`);
       }
     } catch (err: any) {
-      // Check for 429 thrown as FunctionsHttpError
+      // Check for 429 thrown as FunctionsHttpError — read body from context
+      let bodyJson: any = null;
+      try {
+        const ctx = err?.context;
+        if (ctx && typeof ctx.json === 'function') {
+          bodyJson = await ctx.json();
+        }
+      } catch {}
       const status = err?.context?.status ?? err?.status;
-      let body = '';
-      try { body = await err?.context?.text?.() ?? ''; } catch {}
-      const is429 = status === 429 || /cooldown|already in progress/i.test(body) || /cooldown|already in progress/i.test(err?.message ?? '');
+      const is429 = status === 429
+        || bodyJson?.error === 'Sync cooldown active'
+        || bodyJson?.error === 'Sync already in progress';
       if (is429) {
-        toast.info('Shopify payouts were recently synced — please wait before syncing again.');
+        toast.info(bodyJson?.message || 'Shopify payouts were recently synced — please wait before syncing again.');
       } else if (err.message?.includes('401') || err.message?.includes('invalid') || err.message?.includes('expired')) {
         setShopifyTokenInvalid(true);
         toast.error('Shopify token is invalid. Please reconnect via OAuth in Settings.');
       } else {
-        toast.error(`Shopify sync failed: ${err.message || 'Unknown error'}`);
+        toast.error(`Shopify sync failed: ${bodyJson?.error || err.message || 'Unknown error'}`);
       }
     } finally {
       setShopifySyncing(false);
