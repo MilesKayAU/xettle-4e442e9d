@@ -140,6 +140,7 @@ export default function BookkeeperPipeline({
         .select('settlement_id, marketplace, period_start, period_end, bank_deposit, status, updated_at')
         .eq('status', 'pushed_to_xero')
         .neq('xero_status', 'PAID')
+        .gte('period_end', boundaryDate)
         .order('period_end', { ascending: false })
         .limit(50),
 
