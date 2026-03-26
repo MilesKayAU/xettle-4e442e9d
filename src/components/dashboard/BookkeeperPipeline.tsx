@@ -123,11 +123,13 @@ export default function BookkeeperPipeline({
         .in('connection_status', ['error', 'expired', 'disconnected']),
 
       // All validation rows for upload_needed, gaps, ready
+      // Exclude acknowledged gaps at DB level + terminal statuses
       supabase
         .from('marketplace_validation')
         .select('id, marketplace_code, period_label, period_start, period_end, settlement_id, settlement_net, overall_status, reconciliation_difference, gap_acknowledged, updated_at, bank_amount')
         .eq('user_id', userId)
-        .not('overall_status', 'in', '("archived","already_recorded","duplicate_suppressed","complete","reconciled")'),
+        .not('overall_status', 'in', '("archived","already_recorded","duplicate_suppressed","complete","reconciled")')
+        .or('gap_acknowledged.is.null,gap_acknowledged.eq.false,overall_status.neq.gap_detected'),
 
       // Awaiting: pushed but not paid
       supabase
@@ -178,12 +180,12 @@ export default function BookkeeperPipeline({
       let bucket: BucketType;
       if (row.overall_status === 'settlement_needed' || row.overall_status === 'missing') {
         bucket = 'upload_needed';
-      } else if (row.overall_status === 'gap_detected' && !row.gap_acknowledged) {
+      } else if (row.overall_status === 'gap_detected' && row.gap_acknowledged !== true) {
         bucket = 'gaps';
       } else if (row.overall_status === 'ready_to_push') {
         bucket = 'ready';
       } else {
-        return; // skip other statuses
+        return; // skip other statuses (including acknowledged gaps)
       }
 
       pipeline.push({
@@ -426,10 +428,12 @@ export default function BookkeeperPipeline({
                         {formatPeriod(item.period_start, item.period_end)}
                       </span>
                     </div>
-                    {item.amount != null && (
+                    {item.amount != null && item.amount !== 0 ? (
                       <span className="text-xs font-medium text-muted-foreground shrink-0 ml-2">
                         {formatAUD(item.amount)}
                       </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground shrink-0 ml-2">—</span>
                     )}
                   </div>
                 ))}
@@ -532,11 +536,13 @@ function PipelineRow({
             </div>
           )}
         </div>
-        {item.amount != null && (
+        {item.amount != null && item.amount !== 0 ? (
           <span className="text-sm font-semibold tabular-nums shrink-0 ml-2">
             {formatAUD(item.amount)}
           </span>
-        )}
+        ) : item.bucket !== 'blocked' ? (
+          <span className="text-sm text-muted-foreground shrink-0 ml-2">—</span>
+        ) : null}
       </div>
       <div className="shrink-0 ml-3">
         {actionButton()}
