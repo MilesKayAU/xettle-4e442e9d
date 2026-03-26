@@ -689,6 +689,32 @@ Deno.serve(async (req) => {
       }
     }
 
+    // FIX 3: Log every resolution attempt for diagnostic trail
+    try {
+      await adminClient.from('system_events').insert({
+        user_id: userId,
+        event_type: 'gap_resolve_attempt',
+        severity: ['no_data', 'api_error'].includes(result.verdict) ? 'warning' : 'info',
+        marketplace_code: settlement.marketplace,
+        settlement_id: settlement_id,
+        details: {
+          settlement_id,
+          marketplace: settlement.marketplace,
+          source: settlement.source,
+          verdict: result.verdict,
+          auto_correct_requested: !!auto_correct,
+          auto_corrected: autoCorrected,
+          transaction_count: result.transaction_count,
+          discrepancy_count: result.discrepancies.length,
+          filter_method: result.filter_method,
+          error_message: result.error ?? null,
+          triggered_by: body.triggered_by ?? 'unknown',
+        },
+      });
+    } catch (logErr: any) {
+      console.error('[verify-settlement] Failed to log gap_resolve_attempt:', logErr.message);
+    }
+
     return new Response(
       JSON.stringify({ ...result, auto_corrected: autoCorrected }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
