@@ -58,6 +58,7 @@ export function useSettlementManager<T extends BaseSettlementRow = BaseSettlemen
         .from('settlements')
         .select(selectFields)
         .or(orFilter)
+        .gte('period_end', '2026-01-01')
         .order('period_end', { ascending: false });
       if (error) throw error;
       setSettlements((data || []) as unknown as T[]);
