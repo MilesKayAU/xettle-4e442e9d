@@ -664,6 +664,7 @@ export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittan
       transferDate,
       paymentDate,
       periodMonth,
+      invoiceDate,
       lineItems,
       totalPaidAmount,
       invoiceTotal,
