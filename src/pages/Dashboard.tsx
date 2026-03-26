@@ -14,8 +14,8 @@ import { toast } from 'sonner';
 import { triggerValidationSweep } from '@/utils/settlement-engine';
 
 import ValidationSweep from '@/components/onboarding/ValidationSweep';
-import RecentSettlements from '@/components/dashboard/RecentSettlements';
-import ActionCentre, { type MissingSettlement } from '@/components/dashboard/ActionCentre';
+import BookkeeperPipeline from '@/components/dashboard/BookkeeperPipeline';
+import type { MissingSettlement } from '@/components/dashboard/ActionCentre';
 import InsightsDashboard from '@/components/admin/accounting/InsightsDashboard';
 import { ReconciliationHealth } from '@/components/shared/ReconciliationStatus';
 import MarketplaceProfitComparison from '@/components/insights/MarketplaceProfitComparison';
