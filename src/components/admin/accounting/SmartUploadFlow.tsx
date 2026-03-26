@@ -3327,7 +3327,7 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
                   <XCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
                   <div className="space-y-1.5">
                     <p className="text-xs text-destructive">{df.error}</p>
-                    {df.error.includes('Already saved') && df.settlements && df.settlements.length > 0 && (
+                    {df.error.includes('Already saved') && !df.error.includes('pushed to Xero') && df.settlements && df.settlements.length > 0 && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -3338,6 +3338,37 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
                         Re-parse &amp; Overwrite
                       </Button>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {/* Re-parse confirmation (context-aware: settlement exists and is ready_to_push/already_recorded) */}
+              {status === 'reparse_confirm' && df.settlements && df.settlements.length > 0 && (
+                <div className="flex items-start gap-2 bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-800/30 rounded-lg p-3">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div className="space-y-2 flex-1">
+                    <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                      This settlement already exists and is {df.existingSettlementStatus === 'ready_to_push' ? 'ready to push' : df.existingSettlementStatus === 'already_recorded' ? 'already recorded' : 'saved'}. Re-parsing will overwrite the current data.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="h-7 text-xs gap-1.5"
+                        onClick={() => onForceOverwrite(idx)}
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        Re-parse
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => onRemove(idx)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
