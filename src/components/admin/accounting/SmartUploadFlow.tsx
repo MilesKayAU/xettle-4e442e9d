@@ -263,15 +263,28 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         const { data: result, error: dryErr } = await supabase.functions.invoke('fetch-shopify-payouts', {
           body: { dryRun: true },
         });
-        // 429 cooldown is expected — treat token as valid
         if (dryErr) {
-          const msg = typeof dryErr === 'object' && 'message' in dryErr ? (dryErr as any).message : String(dryErr);
-          const isCooldown = msg.includes('429') || msg.includes('cooldown') || msg.includes('already in progress');
+          // FunctionsHttpError: read the actual response body from context
+          let bodyJson: any = null;
+          try {
+            const ctx = (dryErr as any)?.context;
+            if (ctx && typeof ctx.json === 'function') {
+              bodyJson = await ctx.json();
+            }
+          } catch {}
+          const status = (dryErr as any)?.context?.status;
+          const isCooldown = status === 429
+            || bodyJson?.error === 'Sync cooldown active'
+            || bodyJson?.error === 'Sync already in progress';
+          const isInvalidToken = bodyJson?.error === 'Shopify token invalid or expired';
+
+          setHasShopifyConnection(true);
           if (isCooldown) {
-            setHasShopifyConnection(true);
             setShopifyTokenInvalid(false);
+          } else if (isInvalidToken) {
+            setShopifyTokenInvalid(true);
           } else {
-            setHasShopifyConnection(true);
+            // Unknown error — assume token issue
             setShopifyTokenInvalid(true);
           }
         } else if (result?.error === 'Shopify token invalid or expired') {
@@ -285,11 +298,18 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           setShopifyTokenInvalid(false);
         }
       } catch (e: any) {
-        // FunctionsHttpError for 429 — treat as valid token, just on cooldown
+        // Fallback: check if thrown error has context (FunctionsHttpError)
+        let bodyJson: any = null;
+        try {
+          const ctx = e?.context;
+          if (ctx && typeof ctx.json === 'function') {
+            bodyJson = await ctx.json();
+          }
+        } catch {}
         const status = e?.context?.status ?? e?.status;
-        let body = '';
-        try { body = await e?.context?.text?.() ?? ''; } catch {}
-        const is429 = status === 429 || /cooldown|already in progress/i.test(body) || /cooldown|already in progress/i.test(e?.message ?? '');
+        const is429 = status === 429
+          || bodyJson?.error === 'Sync cooldown active'
+          || bodyJson?.error === 'Sync already in progress';
         setHasShopifyConnection(true);
         setShopifyTokenInvalid(is429 ? false : true);
       }
@@ -300,15 +320,29 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
     setShopifySyncing(true);
     try {
       const { data, error } = await supabase.functions.invoke('fetch-shopify-payouts', {});
-      // supabase.functions.invoke puts non-2xx responses in error — check for 429 cooldown/lock
+      // supabase.functions.invoke puts non-2xx responses in error — read body from context
       if (error) {
-        const errMsg = typeof error === 'object' && 'message' in error ? (error as any).message : String(error);
-        const is429 = errMsg.includes('429') || errMsg.includes('cooldown') || errMsg.includes('already in progress');
+        let bodyJson: any = null;
+        try {
+          const ctx = (error as any)?.context;
+          if (ctx && typeof ctx.json === 'function') {
+            bodyJson = await ctx.json();
+          }
+        } catch {}
+        const status = (error as any)?.context?.status;
+        const is429 = status === 429
+          || bodyJson?.error === 'Sync cooldown active'
+          || bodyJson?.error === 'Sync already in progress';
         if (is429) {
-          toast.info('Shopify payouts were recently synced — please wait before syncing again.');
+          toast.info(bodyJson?.message || 'Shopify payouts were recently synced — please wait before syncing again.');
           return;
         }
-        throw error;
+        if (bodyJson?.error === 'Shopify token invalid or expired') {
+          setShopifyTokenInvalid(true);
+          toast.error('Shopify token is invalid. Please reconnect via OAuth in Settings.');
+          return;
+        }
+        throw new Error(bodyJson?.error || (error as any)?.message || 'Sync failed');
       }
       if (data?.error) {
         // Handle invalid/expired token
@@ -338,18 +372,25 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         toast.info(`All Shopify payouts already imported (${skipped} checked)`);
       }
     } catch (err: any) {
-      // Check for 429 thrown as FunctionsHttpError
+      // Check for 429 thrown as FunctionsHttpError — read body from context
+      let bodyJson: any = null;
+      try {
+        const ctx = err?.context;
+        if (ctx && typeof ctx.json === 'function') {
+          bodyJson = await ctx.json();
+        }
+      } catch {}
       const status = err?.context?.status ?? err?.status;
-      let body = '';
-      try { body = await err?.context?.text?.() ?? ''; } catch {}
-      const is429 = status === 429 || /cooldown|already in progress/i.test(body) || /cooldown|already in progress/i.test(err?.message ?? '');
+      const is429 = status === 429
+        || bodyJson?.error === 'Sync cooldown active'
+        || bodyJson?.error === 'Sync already in progress';
       if (is429) {
-        toast.info('Shopify payouts were recently synced — please wait before syncing again.');
+        toast.info(bodyJson?.message || 'Shopify payouts were recently synced — please wait before syncing again.');
       } else if (err.message?.includes('401') || err.message?.includes('invalid') || err.message?.includes('expired')) {
         setShopifyTokenInvalid(true);
         toast.error('Shopify token is invalid. Please reconnect via OAuth in Settings.');
       } else {
-        toast.error(`Shopify sync failed: ${err.message || 'Unknown error'}`);
+        toast.error(`Shopify sync failed: ${bodyJson?.error || err.message || 'Unknown error'}`);
       }
     } finally {
       setShopifySyncing(false);
