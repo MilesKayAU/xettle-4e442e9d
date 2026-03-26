@@ -475,12 +475,15 @@ export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittan
   try {
     const rawText = await extractPdfText(file);
 
+    console.log('[Kogan PDF] Raw text length:', rawText?.length, 'First 500 chars:', rawText?.substring(0, 500));
+
     if (!rawText || rawText.trim().length < 30) {
       return { ...empty, success: false, error: 'Could not extract text from PDF.', rawText };
     }
 
     // Normalise: collapse whitespace (including newlines) to single spaces for regex matching
     const norm = rawText.replace(/\s+/g, ' ');
+    console.log('[Kogan PDF] Normalised text (first 800):', norm.substring(0, 800));
 
     // Extract remittance number from title
     const remittanceMatch = norm.match(/Remittance\s+Advice\s*-?\s*#?\s*(\d+)/i);
