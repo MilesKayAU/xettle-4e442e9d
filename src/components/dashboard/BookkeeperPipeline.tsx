@@ -178,12 +178,12 @@ export default function BookkeeperPipeline({
       let bucket: BucketType;
       if (row.overall_status === 'settlement_needed' || row.overall_status === 'missing') {
         bucket = 'upload_needed';
-      } else if (row.overall_status === 'gap_detected' && !row.gap_acknowledged) {
+      } else if (row.overall_status === 'gap_detected' && row.gap_acknowledged !== true) {
         bucket = 'gaps';
       } else if (row.overall_status === 'ready_to_push') {
         bucket = 'ready';
       } else {
-        return; // skip other statuses
+        return; // skip other statuses (including acknowledged gaps)
       }
 
       pipeline.push({
