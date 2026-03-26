@@ -150,6 +150,7 @@ export default function BookkeeperPipeline({
         .select('settlement_id, marketplace, period_start, period_end, bank_deposit, status, xero_status, updated_at')
         .eq('status', 'pushed_to_xero')
         .eq('xero_status', 'PAID')
+        .gte('period_end', boundaryDate)
         .gte('period_end', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0])
         .order('period_end', { ascending: false })
         .limit(50),
