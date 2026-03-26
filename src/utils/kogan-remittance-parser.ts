@@ -31,8 +31,10 @@ export interface KoganRemittanceResult {
   remittanceNumber?: string;       // e.g. '3599603'
   transferDate?: string;           // ISO date
   paymentDate?: string;            // ISO date
-  /** Period month derived from transfer date or line item dates, e.g. "2026-02" */
+  /** Period month derived from A/P Invoice reference, e.g. "2026-02" */
   periodMonth?: string;
+  /** Exact A/P Invoice date from reference code, e.g. "2026-02-28" */
+  invoiceDate?: string;
   lineItems: KoganRemittanceLineItem[];
   totalPaidAmount?: number;        // Bank deposit amount (THIS IS THE AUTHORITATIVE BANK DEPOSIT)
   /** Breakdown of adjustments */
