@@ -126,7 +126,13 @@ async function verifyMirakl(
     };
   }
 
-  const miraklRow = miraklRows[0];
+  // FIX 4: Marketplace-aware Mirakl token matching
+  const miraklRow = miraklRows.find(r => {
+    const label = (r.marketplace_label ?? '').toLowerCase();
+    const mkt = (settlement.marketplace ?? '').toLowerCase();
+    return mkt.includes(label) || label.includes(mkt);
+  }) ?? miraklRows[0];
+  console.log(`[verify-settlement] Matched Mirakl token: label=${miraklRow.marketplace_label}, base_url=${miraklRow.base_url}`);
 
   // Auth
   let authResult;
@@ -681,6 +687,32 @@ Deno.serve(async (req) => {
           console.log(`[verify-settlement] Auto-corrected ${settlement_id}: ${JSON.stringify(corrections)}`);
         }
       }
+    }
+
+    // FIX 3: Log every resolution attempt for diagnostic trail
+    try {
+      await adminClient.from('system_events').insert({
+        user_id: userId,
+        event_type: 'gap_resolve_attempt',
+        severity: ['no_data', 'api_error'].includes(result.verdict) ? 'warning' : 'info',
+        marketplace_code: settlement.marketplace,
+        settlement_id: settlement_id,
+        details: {
+          settlement_id,
+          marketplace: settlement.marketplace,
+          source: settlement.source,
+          verdict: result.verdict,
+          auto_correct_requested: !!auto_correct,
+          auto_corrected: autoCorrected,
+          transaction_count: result.transaction_count,
+          discrepancy_count: result.discrepancies.length,
+          filter_method: result.filter_method,
+          error_message: result.error ?? null,
+          triggered_by: body.triggered_by ?? 'unknown',
+        },
+      });
+    } catch (logErr: any) {
+      console.error('[verify-settlement] Failed to log gap_resolve_attempt:', logErr.message);
     }
 
     return new Response(
