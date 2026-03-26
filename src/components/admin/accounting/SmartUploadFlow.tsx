@@ -3095,11 +3095,7 @@ function FileResultCard({ df, idx, onRemove, onOverride, onAnalyzeAI, onProcess,
                         size="sm"
                         variant="outline"
                         className="h-7 text-xs gap-1.5"
-                        onClick={() => {
-                          onSetStatus(idx, 'detected');
-                          // Mark for overwrite via a custom event — parent will set forceOverwrite
-                          (window as any).__smartUploadForceOverwrite?.(idx);
-                        }}
+                        onClick={() => onForceOverwrite(idx)}
                       >
                         <RefreshCw className="h-3 w-3" />
                         Re-parse &amp; Overwrite
