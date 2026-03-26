@@ -1106,6 +1106,10 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                   const totalAdFees = Math.abs(pdfResult.advertisingFees);
                   const totalReturns = pdfResult.returnsCreditNotes;
 
+                  // Save CSV values before overriding
+                  const csvSalesTotal = s.sales_ex_gst;
+                  const csvCommissionTotal = Math.abs(s.fees_ex_gst);
+
                   // Override with PDF authoritative values
                   s.net_payout = pdfResult.totalPaidAmount;
                   
