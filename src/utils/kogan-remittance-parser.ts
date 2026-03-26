@@ -611,7 +611,9 @@ export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittan
       creditNoteTotal,
       advertisingFees,
       monthlySellerFee,
+      monthlyFeePerOrder,
       returnsCreditNotes,
+      apInvoiceRef,
       rawText,
     };
   } catch (err: any) {
