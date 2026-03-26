@@ -748,6 +748,8 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               settlements: settlements.length > 0 ? settlements : undefined,
               status,
               error,
+              forceOverwrite: forceOverwrite || undefined,
+              existingSettlementStatus,
               csvHeaders: result ? (csvHeaders || undefined) : undefined,
               sampleRows: sampleRows || undefined,
               wasLowConfidence: isFirstContact || false,
