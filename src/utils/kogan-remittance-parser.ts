@@ -608,12 +608,39 @@ export async function parseKoganRemittancePdf(file: File): Promise<KoganRemittan
       'Monthly seller fee:', monthlySellerFee, 'Monthly fee/order:', monthlyFeePerOrder,
       'Returns:', returnsCreditNotes, 'AP Invoice ref:', apInvoiceRef);
 
-    // Derive periodMonth from transferDate or first line item date
+    // Derive periodMonth from A/P Invoice reference (AUMKA:KOG:AU:YYYYMMDD) — this is the
+    // canonical period identifier, NOT the Transfer Date (which is the payment date and may
+    // fall in a different month than the actual settlement period).
     let periodMonth: string | undefined;
-    if (transferDate) {
-      // transferDate is ISO: YYYY-MM-DD
+
+    // Priority 1: Extract from A/P Invoice reference code (e.g. AUMKA:KOG:AU:20260228 → 2026-02)
+    for (const item of lineItems) {
+      if (item.type.toLowerCase().includes('invoice') && item.reference) {
+        const refDateMatch = item.reference.match(/(\d{4})(\d{2})\d{2}/);
+        if (refDateMatch) {
+          periodMonth = `${refDateMatch[1]}-${refDateMatch[2]}`;
+          break;
+        }
+      }
+    }
+
+    // Priority 2: Use the A/P Invoice's own date field (M/D/YYYY in PDF table)
+    if (!periodMonth) {
+      for (const item of lineItems) {
+        if (item.type.toLowerCase().includes('invoice') && item.date) {
+          const isoDate = parseDateToISO(item.date);
+          if (isoDate) {
+            periodMonth = isoDate.substring(0, 7);
+            break;
+          }
+        }
+      }
+    }
+
+    // Priority 3: Fall back to transferDate only if nothing else available
+    if (!periodMonth && transferDate) {
       periodMonth = transferDate.substring(0, 7);
-    } else if (lineItems.length > 0 && lineItems[0].date) {
+    } else if (!periodMonth && lineItems.length > 0 && lineItems[0].date) {
       const isoDate = parseDateToISO(lineItems[0].date);
       if (isoDate) periodMonth = isoDate.substring(0, 7);
     }
