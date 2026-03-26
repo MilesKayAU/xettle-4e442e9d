@@ -420,6 +420,7 @@ export default function RecentSettlements({ onViewAll, pipelineFilter, onClearPi
               .from('marketplace_validation')
               .select('id, overall_status, settlement_id, marketplace_code, period_start, period_end, settlement_net, reconciliation_difference, updated_at')
               .in('overall_status', ['settlement_needed', 'missing', 'ready_to_push'])
+              .gte('period_end', '2026-01-01')
           : Promise.resolve({ data: null, error: null } as any),
         actionableOnly
           ? supabase
