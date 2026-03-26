@@ -1104,24 +1104,23 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
     }
 
     const meta = settlement.metadata || {};
+    const isKoganPdf = !!meta.koganPdfMerged;
     
-    // Extract Kogan advertising fees from metadata (stored by PDF merge)
-    const koganAdFeesExGst = meta.koganAdvertisingFees 
-      ? Math.round(Math.abs(meta.koganAdvertisingFees) / 1.1 * 100) / 100 
-      : 0;
-    const koganSellerFeeExGst = meta.koganMonthlySellerFee
-      ? Math.round(meta.koganMonthlySellerFee / 1.1 * 100) / 100
-      : 0;
+    // For Kogan PDF settlements, all amounts are GST-inclusive — use as-is, no /1.1 conversion.
+    // Ad fees, returns, and monthly fees are stored directly in metadata from PDF parsing.
+    const koganAdFees = isKoganPdf ? Math.abs(meta.koganAdvertisingFees || 0) : 0;
+    const koganReturns = isKoganPdf ? Math.abs(meta.koganReturnsCreditNotes || 0) : 0;
     
-    // Separate advertising from general fees so Xero can map to correct COA
-    // fees_ex_gst already includes ad fees + seller fees (added during PDF merge)
-    // We need to break them out into their own columns
     const baseFees = -(Math.abs(settlement.fees_ex_gst));
-    const advertisingCosts = koganAdFeesExGst > 0 ? -koganAdFeesExGst : 0;
-    // Remove ad fees from seller_fees so they're not double-counted
-    const sellerFees = koganAdFeesExGst > 0 ? baseFees + koganAdFeesExGst + koganSellerFeeExGst : baseFees;
-    // Monthly seller fee goes to other_fees
-    const otherFees = -Math.abs((meta.subscriptionAmount || 0) + (meta.manualDebitInclGst || 0) + (meta.otherChargesInclGst || 0) + koganSellerFeeExGst);
+    // For Kogan PDF: seller_fees = baseFees (monthly fees only, already in fees_ex_gst)
+    // For non-Kogan: seller_fees = baseFees (all fees)
+    const sellerFees = baseFees;
+    const advertisingCosts = isKoganPdf ? -koganAdFees : 0;
+    // For Kogan PDF: other_fees = 0 (monthly fees already in seller_fees, ad fees in advertising_costs)
+    // For non-Kogan: standard other charges
+    const otherFees = isKoganPdf
+      ? 0
+      : -Math.abs((meta.subscriptionAmount || 0) + (meta.manualDebitInclGst || 0) + (meta.otherChargesInclGst || 0));
 
     const { saveSettlementCanonical } = await import('@/actions/settlements');
     const canonResult = await saveSettlementCanonical({
