@@ -954,6 +954,54 @@ export async function saveSettlement(settlement: StandardSettlement): Promise<Sa
       console.warn(`[sanity-check] WARNING: ${settlement.settlement_id} — ${sanity.warning}`);
     }
 
+    // ─── Ingestion Sign Validation Layer ────────────────────────────
+    // Catches and corrects sign inversions BEFORE data reaches the database.
+    // This is the architectural fix that prevents the entire class of sign bugs.
+    const { validateAndNormaliseSettlement } = await import('@/utils/settlement-validation');
+    const meta0 = settlement.metadata || {};
+    const preValidation = validateAndNormaliseSettlement({
+      settlement_id: settlement.settlement_id,
+      marketplace: settlement.marketplace,
+      sales_principal: settlement.sales_ex_gst,
+      sales_shipping: meta0.shippingExGst || 0,
+      seller_fees: -(Math.abs(settlement.fees_ex_gst)),
+      other_fees: -Math.abs((meta0.subscriptionAmount || 0) + (meta0.manualDebitInclGst || 0) + (meta0.otherChargesInclGst || 0)),
+      refunds: meta0.refundsExGst || 0,
+      reimbursements: (meta0.refundCommissionExGst || 0) + (meta0.manualCreditInclGst || 0),
+      gst_on_income: settlement.gst_on_sales,
+      gst_on_expenses: -Math.abs(settlement.gst_on_fees),
+      bank_deposit: settlement.net_payout,
+    }, settlement.source);
+
+    if (preValidation.warnings.length > 0) {
+      console.warn(`[ingestion-validation] ${settlement.settlement_id}: ${preValidation.warnings.length} warnings`, preValidation.warnings);
+      // Apply normalised values back
+      const n = preValidation.normalised;
+      settlement.sales_ex_gst = n.sales_principal;
+      if (meta0.shippingExGst !== undefined) meta0.shippingExGst = n.sales_shipping;
+      if (meta0.refundsExGst !== undefined) meta0.refundsExGst = n.refunds;
+      settlement.gst_on_sales = n.gst_on_income ?? settlement.gst_on_sales;
+      settlement.gst_on_fees = Math.abs(n.gst_on_expenses ?? settlement.gst_on_fees);
+      // Log warnings to system_events for audit trail
+      try {
+        const { data: { user: valUser } } = await supabase.auth.getUser();
+        if (valUser) {
+          await supabase.from('system_events').insert({
+            user_id: valUser.id,
+            event_type: 'settlement_ingestion_warning',
+            severity: 'warning',
+            marketplace_code: settlement.marketplace,
+            settlement_id: settlement.settlement_id,
+            details: {
+              source: settlement.source,
+              warnings: preValidation.warnings,
+              normalised: true,
+            },
+          } as any);
+        }
+      } catch {}
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { success: false, error: 'Not authenticated' };
 

@@ -481,7 +481,7 @@ function buildSettlementFromPayout(
       sales_principal: round2(salesTotal),
       sales_shipping: round2(shippingTotal),
       seller_fees: round2(feesTotal),
-      refunds: round2(refundsTotal),
+      refunds: round2(-Math.abs(refundsTotal)),
       reimbursements: 0,
       fba_fees: 0,
       storage_fees: 0,
