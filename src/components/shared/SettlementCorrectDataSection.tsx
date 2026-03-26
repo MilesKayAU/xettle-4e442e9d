@@ -92,23 +92,16 @@ export default function SettlementCorrectDataSection({ settlement, isAdmin, onSe
       if (marketplace === 'bunnings' && isPdf) {
         const result = await parseBunningsSummaryPdf(file);
         if (result.success) parsed = result.settlement;
-        else throw new Error(result.error);
+        else throw new Error('Bunnings PDF parse failed');
       } else if (marketplace === 'kogan' && isPdf) {
-        const result = await parseKoganRemittancePdf(file);
-        if (result.success && result.lineItems.length > 0) {
-          // Kogan PDF provides supplementary data, not a full settlement
-          throw new Error('Kogan PDF re-parse requires the CSV file as well. Please use the CSV.');
-        } else {
-          throw new Error(result.error || 'Kogan PDF parse failed');
-        }
+        throw new Error('Kogan PDF re-parse requires the CSV file as well. Please use the CSV.');
       } else if (marketplace === 'kogan' && isCsv) {
         const text = await file.text();
         const result = parseKoganPayoutCSV(text);
         if (result.success && result.settlements.length > 0) {
-          // Find the matching settlement by ID
           parsed = result.settlements.find(s => s.settlement_id === settlement.settlement_id) || result.settlements[0];
         } else {
-          throw new Error(result.error || 'Kogan CSV parse failed');
+          throw new Error('Kogan CSV parse failed');
         }
       } else if (marketplace === 'woolworths_marketplus' && isCsv) {
         const text = await file.text();
@@ -116,19 +109,20 @@ export default function SettlementCorrectDataSection({ settlement, isAdmin, onSe
         if (result.success && result.settlements.length > 0) {
           parsed = result.settlements.find(s => s.settlement_id === settlement.settlement_id) || result.settlements[0];
         } else {
-          throw new Error(result.error || 'Woolworths CSV parse failed');
+          throw new Error('Woolworths CSV parse failed');
         }
       } else if (isCsv || isXlsx) {
         // Generic parser — needs fingerprint/mapping detection
-        const detection = await detectFile(file, user.id, marketplace);
-        if (!detection || !detection.mapping) {
+        const detection = await detectFile(file);
+        if (!detection || !detection.columnMapping) {
           throw new Error('Could not detect file format. Try re-uploading through the main upload flow.');
         }
-        const options = {
-          mapping: detection.mapping,
+        const options: GenericParseOptions = {
+          mapping: detection.columnMapping,
           marketplace,
-          gstModel: 'gst_inclusive' as const,
+          gstModel: 'seller',
           gstRate: 10,
+          groupBySettlement: true,
         };
         let result;
         if (isXlsx) {
