@@ -192,7 +192,7 @@ export function parseKoganPayoutCSV(csvText: string): KoganCsvParseResult {
   const iInvoiceDate = colIdx('InvoiceDate');
   const iDateManifested = colIdx('DateManifested');
   const iDateRemitted = colIdx('DateRemitted');
-  const iTotal = headers.findIndex(h => /total.*aud/i.test(h.trim()));
+  const iTotal = headers.findIndex(h => /^total(\s*\(.*\))?$/i.test(h.trim()) || /total.*aud/i.test(h.trim()));
   const iCommission = headers.findIndex(h => /commission.*inc.*gst/i.test(h.trim()));
   const iRemitted = colIdx('Remitted');
   const iGST = headers.findIndex(h => /gst/i.test(h.trim()) && !/commission/i.test(h.trim()));
