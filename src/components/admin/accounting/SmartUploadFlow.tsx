@@ -602,8 +602,9 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           }
         }
 
-        // Dedup 2: check if any parsed settlement already exists in DB
+        // Dedup 2: check if any parsed settlement already exists in DB (with status for context-aware reparse)
         let dbDupeIds: string[] = [];
+        let existingStatuses: Record<string, string> = {};
         if (settlements.length > 0) {
           try {
             const { data: { user } } = await supabase.auth.getUser();
@@ -611,10 +612,13 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               const ids = settlements.map(s => s.settlement_id);
               const { data: existing } = await supabase
                 .from('settlements')
-                .select('settlement_id')
+                .select('settlement_id, status')
                 .eq('user_id', user.id)
                 .in('settlement_id', ids);
               dbDupeIds = (existing || []).map((e: any) => e.settlement_id);
+              for (const e of (existing || []) as any[]) {
+                existingStatuses[e.settlement_id] = e.status;
+              }
             }
           } catch {}
         }
