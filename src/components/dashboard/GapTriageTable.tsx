@@ -4,7 +4,7 @@
  * Provides inline diagnosis, edit access, and AI scan per row.
  */
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { getDisplayGap } from '@/utils/getDisplayGap';
 import { diagnoseGapReason } from '@/utils/diagnose-gap-reason';
@@ -13,9 +13,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { AlertTriangle, ChevronDown, ChevronUp, Pencil, Sparkles } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, ChevronUp, Pencil, Sparkles, Undo2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
+import { toast } from 'sonner';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 
 interface GapTriageTableProps {
   onEditSettlement: (settlementId: string) => void;
@@ -37,16 +48,24 @@ interface GapRow {
   gst_on_expenses?: number;
   raw_payload?: any;
   net_ex_gst?: number;
+  gap_acknowledged?: boolean;
+  gap_acknowledged_reason?: string | null;
 }
 
 export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps) {
   const [rows, setRows] = useState<GapRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(true);
+  const [ackExpanded, setAckExpanded] = useState(false);
   const [aiScanning, setAiScanning] = useState<string | null>(null);
   const [aiResults, setAiResults] = useState<Record<string, string>>({});
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowsSignatureRef = useRef('');
+  // Acknowledge modal state
+  const [ackTarget, setAckTarget] = useState<GapRow | null>(null);
+  const [ackReason, setAckReason] = useState('');
+  const [ackNotes, setAckNotes] = useState('');
+  const [ackSubmitting, setAckSubmitting] = useState(false);
 
   const fetchGaps = useCallback(async ({ background = false }: { background?: boolean } = {}) => {
     if (!background) setLoading(true);
@@ -54,7 +73,7 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
       // Get gap_detected validation rows
       const { data: validationRows } = await supabase
         .from('marketplace_validation')
-        .select('settlement_id, marketplace_code, period_label, reconciliation_difference, overall_status')
+        .select('settlement_id, marketplace_code, period_label, reconciliation_difference, overall_status, gap_acknowledged, gap_acknowledged_reason')
         .eq('overall_status', 'gap_detected')
         .order('reconciliation_difference', { ascending: true });
 
@@ -199,11 +218,97 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
     }
   }, []);
 
-  if (loading && rows.length === 0) return null;
-  if (rows.length === 0) return null;
+  const activeRows = useMemo(() => rows.filter(r => !r.gap_acknowledged), [rows]);
+  const acknowledgedRows = useMemo(() => rows.filter(r => r.gap_acknowledged), [rows]);
 
-  const visibleRows = expanded ? rows : rows.slice(0, 5);
-  const hasMore = rows.length > 5;
+  const handleAcknowledge = useCallback(async () => {
+    if (!ackTarget || !ackReason) return;
+    setAckSubmitting(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const fullReason = ackReason === 'Other' ? ackNotes : ackReason + (ackNotes ? ` — ${ackNotes}` : '');
+
+      const { error } = await supabase
+        .from('marketplace_validation')
+        .update({
+          gap_acknowledged: true,
+          gap_acknowledged_reason: fullReason,
+          gap_acknowledged_at: new Date().toISOString(),
+          gap_acknowledged_by: user.id,
+        } as any)
+        .eq('settlement_id', ackTarget.settlement_id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      await supabase.from('system_events' as any).insert({
+        user_id: user.id,
+        event_type: 'gap_acknowledged',
+        severity: 'info',
+        marketplace_code: ackTarget.marketplace_code,
+        settlement_id: ackTarget.settlement_id,
+        details: {
+          settlement_id: ackTarget.settlement_id,
+          marketplace: ackTarget.marketplace_code,
+          gap_amount: ackTarget.reconciliation_difference,
+          reason: fullReason,
+        },
+      } as any);
+
+      toast.success(`Gap acknowledged: ${ackTarget.settlement_id}`);
+      setAckTarget(null);
+      setAckReason('');
+      setAckNotes('');
+      void fetchGaps({ background: true });
+    } catch (err: any) {
+      toast.error(`Failed: ${err.message}`);
+    } finally {
+      setAckSubmitting(false);
+    }
+  }, [ackTarget, ackReason, ackNotes, fetchGaps]);
+
+  const handleRevokeAck = useCallback(async (row: GapRow) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      await supabase
+        .from('marketplace_validation')
+        .update({
+          gap_acknowledged: false,
+          gap_acknowledged_reason: null,
+          gap_acknowledged_at: null,
+          gap_acknowledged_by: null,
+        } as any)
+        .eq('settlement_id', row.settlement_id)
+        .eq('user_id', user.id);
+
+      await supabase.from('system_events' as any).insert({
+        user_id: user.id,
+        event_type: 'gap_acknowledgement_revoked',
+        severity: 'info',
+        marketplace_code: row.marketplace_code,
+        settlement_id: row.settlement_id,
+        details: {
+          settlement_id: row.settlement_id,
+          previous_reason: row.gap_acknowledged_reason,
+        },
+      } as any);
+
+      toast.success(`Gap re-opened: ${row.settlement_id}`);
+      void fetchGaps({ background: true });
+    } catch (err: any) {
+      toast.error(`Failed: ${err.message}`);
+    }
+  }, [fetchGaps]);
+
+  if (loading && rows.length === 0) return null;
+  if (rows.length === 0 && acknowledgedRows.length === 0) return null;
+
+  const visibleRows = expanded ? activeRows : activeRows.slice(0, 5);
+  const hasMore = activeRows.length > 5;
 
   return (
     <div className="rounded-lg border border-destructive/20 bg-card">
@@ -211,7 +316,7 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
         <div className="flex items-center gap-2">
           <AlertTriangle className="h-4 w-4 text-destructive" />
           <h3 className="font-semibold text-sm text-foreground">Gaps to Resolve</h3>
-          <Badge variant="destructive" className="text-xs">{rows.length}</Badge>
+          <Badge variant="destructive" className="text-xs">{activeRows.length}</Badge>
         </div>
         {hasMore && (
           <Button variant="ghost" size="sm" onClick={() => setExpanded(!expanded)} className="text-xs text-muted-foreground">
@@ -278,6 +383,15 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
                         <Sparkles className="h-3 w-3 mr-1" />
                         {isScanning ? 'Scanning…' : 'AI Scan'}
                       </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs text-muted-foreground"
+                        onClick={() => { setAckTarget(row); setAckReason(''); setAckNotes(''); }}
+                      >
+                        <Check className="h-3 w-3 mr-1" />
+                        Acknowledge
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -304,6 +418,100 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
           })}
         </TableBody>
       </Table>
+
+      {/* Acknowledged gaps section */}
+      {acknowledgedRows.length > 0 && (
+        <div className="border-t border-border">
+          <button
+            onClick={() => setAckExpanded(!ackExpanded)}
+            className="flex items-center gap-2 px-4 py-2 w-full text-left text-xs text-muted-foreground hover:bg-muted/50"
+          >
+            {ackExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            Acknowledged ({acknowledgedRows.length})
+          </button>
+          {ackExpanded && (
+            <Table>
+              <TableBody>
+                {acknowledgedRows.map(row => {
+                  const gap = getDisplayGap(
+                    { reconciliation_difference: row.reconciliation_difference },
+                    { net_amount: row.net_ex_gst ?? null, bank_deposit: row.bank_deposit ?? null }
+                  );
+                  const label = MARKETPLACE_LABELS[row.marketplace_code] || row.marketplace_code;
+                  return (
+                    <TableRow key={row.settlement_id} className="opacity-60">
+                      <TableCell className="text-xs">{label}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{row.period_label}</TableCell>
+                      <TableCell className="text-xs text-right font-mono">{gap !== null ? formatAUD(gap) : '—'}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground italic max-w-[240px] truncate" title={row.gap_acknowledged_reason || ''}>
+                        {row.gap_acknowledged_reason || 'Acknowledged'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => handleRevokeAck(row)}>
+                          <Undo2 className="h-3 w-3 mr-1" />
+                          Undo
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </div>
+      )}
+
+      {/* Acknowledge modal */}
+      <Dialog open={!!ackTarget} onOpenChange={(open) => { if (!open) setAckTarget(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Acknowledge Gap</DialogTitle>
+            <DialogDescription>
+              Mark this gap as reviewed. It will move to the acknowledged section and won't count toward active gaps.
+            </DialogDescription>
+          </DialogHeader>
+          {ackTarget && (
+            <div className="space-y-4">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Settlement</span>
+                <span className="font-mono font-medium">{ackTarget.settlement_id}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Gap</span>
+                <span className="font-mono font-semibold text-destructive">{formatAUD(ackTarget.reconciliation_difference || 0)}</span>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Reason</label>
+                <Select value={ackReason} onValueChange={setAckReason}>
+                  <SelectTrigger><SelectValue placeholder="Select a reason…" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Marketplace no longer active (MyDeal, Catch etc)">Marketplace no longer active</SelectItem>
+                    <SelectItem value="Pending payout — not yet paid">Pending payout — not yet paid</SelectItem>
+                    <SelectItem value="Rounding difference — within acceptable tolerance">Rounding difference</SelectItem>
+                    <SelectItem value="Already reconciled externally">Already reconciled externally</SelectItem>
+                    <SelectItem value="Other">Other (enter reason below)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-muted-foreground">Notes (optional)</label>
+                <Textarea
+                  value={ackNotes}
+                  onChange={e => setAckNotes(e.target.value)}
+                  placeholder="Additional context…"
+                  className="h-20 text-sm"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAckTarget(null)} disabled={ackSubmitting}>Cancel</Button>
+            <Button onClick={handleAcknowledge} disabled={!ackReason || ackSubmitting}>
+              {ackSubmitting ? 'Saving…' : 'Acknowledge Gap'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
