@@ -60,6 +60,8 @@ import {
 } from '@/utils/multi-marketplace-splitter';
 import MultiMarketplaceSplitCard from './MultiMarketplaceSplitCard';
 
+function round2(n: number): number { return Math.round(n * 100) / 100; }
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type FileStatus = 'detecting' | 'detected' | 'reviewing' | 'wrong_file' | 'unknown' | 'first_contact' | 'ai_analyzing' | 'confirmed' | 'saving' | 'saved' | 'error' | 'multi_split';
@@ -837,16 +839,23 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
     const df = filesRef.current[idx];
     if (!df?.detection || !df.detection.isSettlementFile) return;
 
-    // ── Kogan PDFs are companion files — never process standalone ──
+    // ── Kogan PDFs: companion files when CSV present, standalone otherwise ──
     if (df.detection.marketplace === 'kogan' && df.file.name.toLowerCase().endsWith('.pdf')) {
-      // Mark as informational, not an error
-      setFiles(prev => {
-        const updated = [...prev];
-        updated[idx] = { ...updated[idx], status: 'detected', error: undefined };
-        return updated;
-      });
-      toast.info('Kogan PDFs are merged automatically when their matching CSV is saved.');
-      return;
+      // Check if there's a matching CSV already queued
+      const hasMatchingCsv = filesRef.current.some(f => 
+        f !== df && f.detection?.marketplace === 'kogan' && !f.file.name.toLowerCase().endsWith('.pdf')
+      );
+      if (hasMatchingCsv) {
+        // PDF will be merged when CSV is saved
+        setFiles(prev => {
+          const updated = [...prev];
+          updated[idx] = { ...updated[idx], status: 'detected', error: undefined };
+          return updated;
+        });
+        toast.info('Kogan PDFs are merged automatically when their matching CSV is saved.');
+        return;
+      }
+      // No matching CSV — process PDF standalone (creates settlement from PDF only)
     }
 
     const marketplace = df.overrideMarketplace || df.detection.marketplace;
@@ -876,6 +885,53 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           const result = await parseBunningsSummaryPdf(df.file);
           if (!result.success) throw new Error('error' in result ? result.error : 'Bunnings parse failed');
           settlements = [result.settlement];
+        } else if (marketplace === 'kogan' && df.file.name.toLowerCase().endsWith('.pdf')) {
+          // PDF-only mode — create settlement from Remittance Advice PDF
+          const pdfResult = await parseKoganRemittancePdf(df.file);
+          if (!pdfResult.success || pdfResult.totalPaidAmount === undefined) {
+            throw new Error(pdfResult.error || 'Kogan PDF parse failed');
+          }
+          const totalMonthlyFees = pdfResult.monthlySellerFee + pdfResult.monthlyFeePerOrder;
+          const totalAdFees = Math.abs(pdfResult.advertisingFees);
+          const totalReturns = pdfResult.returnsCreditNotes;
+          // Derive period from PDF dates
+          const pdfPeriodMonth = pdfResult.periodMonth || '';
+          const periodYear = pdfPeriodMonth ? parseInt(pdfPeriodMonth.split('-')[0]) : new Date().getFullYear();
+          const periodMon = pdfPeriodMonth ? parseInt(pdfPeriodMonth.split('-')[1]) - 1 : new Date().getMonth();
+          const periodStart = `${periodYear}-${String(periodMon + 1).padStart(2, '0')}-01`;
+          const lastDay = new Date(periodYear, periodMon + 1, 0).getDate();
+          const periodEnd = `${periodYear}-${String(periodMon + 1).padStart(2, '0')}-${lastDay}`;
+          const apRef = pdfResult.apInvoiceRef || pdfResult.remittanceNumber || 'pdf';
+          
+          settlements = [{
+            marketplace: 'kogan',
+            settlement_id: `kogan_${apRef}`,
+            period_start: periodStart,
+            period_end: periodEnd,
+            sales_ex_gst: pdfResult.invoiceTotal,
+            gst_on_sales: round2(pdfResult.invoiceTotal - (pdfResult.invoiceTotal / 1.1)),
+            fees_ex_gst: -totalMonthlyFees,
+            gst_on_fees: round2(totalMonthlyFees - (totalMonthlyFees / 1.1)),
+            net_payout: pdfResult.totalPaidAmount,
+            source: 'csv_upload',
+            reconciles: Math.abs(round2(pdfResult.invoiceTotal - totalMonthlyFees - totalAdFees - totalReturns) - pdfResult.totalPaidAmount) <= 1,
+            metadata: {
+              koganPdfMerged: true,
+              koganPdfOnly: true,
+              koganRemittanceNumber: pdfResult.remittanceNumber,
+              koganApInvoiceRef: pdfResult.apInvoiceRef,
+              koganAdvertisingFees: pdfResult.advertisingFees,
+              koganMonthlySellerFee: pdfResult.monthlySellerFee,
+              koganMonthlyFeePerOrder: pdfResult.monthlyFeePerOrder,
+              koganReturnsCreditNotes: pdfResult.returnsCreditNotes,
+              koganPdfBankDeposit: pdfResult.totalPaidAmount,
+              koganPdfInvoiceTotal: pdfResult.invoiceTotal,
+              otherChargesInclGst: totalAdFees,
+              refundsInclGst: -totalReturns,
+              refundsExGst: -round2(totalReturns / 1.1),
+              gstModel: 'inclusive',
+            },
+          }];
         } else if (marketplace === 'kogan' && !df.file.name.toLowerCase().endsWith('.pdf')) {
           const text = await df.file.text();
           const result = parseKoganPayoutCSV(text);
@@ -1033,44 +1089,69 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                   li => li.type === 'A/P Invoice' && s.settlement_id.includes(li.docNumber)
                 );
                 if (matchingInvoice || settlements.length === 1) {
-                  // Augment settlement with PDF deductions
-                  const refundsExGst = Math.round(pdfResult.returnsCreditNotes / 1.1 * 100) / 100;
-                  const refundsGst = Math.round((pdfResult.returnsCreditNotes - refundsExGst) * 100) / 100;
+                  // ── AUTHORITATIVE PDF MERGE ──
+                  // The PDF is the ground truth. The formula that ALWAYS works:
+                  // PDF invoiceTotal - deductions = totalPaidAmount (bank_deposit)
+                  //
+                  // sales_principal = PDF invoiceTotal (gross pre-deduction amount)
+                  // This is NOT the CSV Total column — it's the amount Kogan invoiced
+                  // after their commission, representing what they owe the seller.
+                  //
+                  // seller_fees = -(monthly fees from PDF) — stored as negative
+                  // other_fees = -(advertising from PDF) — stored as negative
+                  // refunds = -(returns from PDF) — stored as negative
+                  // bank_deposit = PDF totalPaidAmount
+
+                  const totalMonthlyFees = pdfResult.monthlySellerFee + pdfResult.monthlyFeePerOrder;
+                  const totalAdFees = Math.abs(pdfResult.advertisingFees);
+                  const totalReturns = pdfResult.returnsCreditNotes;
+
+                  // Save CSV values before overriding
+                  const csvSalesTotal = s.sales_ex_gst;
+                  const csvCommissionTotal = Math.abs(s.fees_ex_gst);
+
+                  // Override with PDF authoritative values
+                  s.net_payout = pdfResult.totalPaidAmount;
                   
-                  // Add refunds (from credit notes)
+                  // Use PDF invoiceTotal as sales_principal (GST-inclusive gross)
+                  // This ensures: invoiceTotal - monthly_fees - ad_fees - returns = bank_deposit
+                  s.sales_ex_gst = pdfResult.invoiceTotal;
+                  
+                  // GST breakdown (all values are GST-inclusive, extract GST component)
+                  s.gst_on_sales = round2(pdfResult.invoiceTotal - (pdfResult.invoiceTotal / 1.1));
+                  
+                  // seller_fees = -(monthly fees from PDF) — negative expense
+                  s.fees_ex_gst = -totalMonthlyFees;
+                  s.gst_on_fees = round2(totalMonthlyFees - (totalMonthlyFees / 1.1));
+                  
+                  // Store PDF breakdown in metadata
                   s.metadata = {
                     ...s.metadata,
                     koganPdfMerged: true,
                     koganRemittanceNumber: pdfResult.remittanceNumber,
+                    koganApInvoiceRef: pdfResult.apInvoiceRef,
                     koganAdvertisingFees: pdfResult.advertisingFees,
                     koganMonthlySellerFee: pdfResult.monthlySellerFee,
+                    koganMonthlyFeePerOrder: pdfResult.monthlyFeePerOrder,
                     koganReturnsCreditNotes: pdfResult.returnsCreditNotes,
                     koganPdfBankDeposit: pdfResult.totalPaidAmount,
-                    refundsInclGst: -pdfResult.returnsCreditNotes,
-                    refundsExGst: -refundsExGst,
+                    koganPdfInvoiceTotal: pdfResult.invoiceTotal,
+                    // These metadata keys are picked up by settlement engine's save function
+                    otherChargesInclGst: totalAdFees,
+                    refundsInclGst: -totalReturns,
+                    refundsExGst: -round2(totalReturns / 1.1),
+                    // Keep CSV data for reference
+                    csvSalesTotal,
+                    csvCommissionTotal,
+                    gstModel: 'inclusive',
                   };
 
-                  // Override net_payout with the actual bank deposit from PDF
-                  s.net_payout = pdfResult.totalPaidAmount;
-
-                  // Add advertising fees and monthly seller fee to fees
-                  const adSpendExGst = Math.round(Math.abs(pdfResult.advertisingFees) / 1.1 * 100) / 100;
-                  const sellerFeeExGst = Math.round(pdfResult.monthlySellerFee / 1.1 * 100) / 100;
-                  s.fees_ex_gst = Math.round((s.fees_ex_gst - adSpendExGst - sellerFeeExGst) * 100) / 100;
-
-                  // Recalculate GST on fees 
-                  const totalFeesInclGst = Math.abs(s.fees_ex_gst) * 1.1;
-                  s.gst_on_fees = Math.round((totalFeesInclGst - Math.abs(s.fees_ex_gst)) * 100) / 100;
-
                   // Recalculate reconciliation
-                  const calculatedNet = Math.round((
-                    s.sales_ex_gst + s.gst_on_sales +
-                    s.fees_ex_gst - s.gst_on_fees +
-                    (-pdfResult.returnsCreditNotes)
-                  ) * 100) / 100;
-                  s.reconciles = Math.abs(calculatedNet - s.net_payout) <= 5;
+                  // Formula: invoiceTotal - monthlyFees - adFees - returns = bank_deposit
+                  const calculatedNet = round2(pdfResult.invoiceTotal - totalMonthlyFees - totalAdFees - totalReturns);
+                  s.reconciles = Math.abs(calculatedNet - pdfResult.totalPaidAmount) <= 1;
                   s.metadata.calculatedNet = calculatedNet;
-                  s.metadata.reconciliationDiff = Math.round((calculatedNet - s.net_payout) * 100) / 100;
+                  s.metadata.reconciliationDiff = round2(calculatedNet - pdfResult.totalPaidAmount);
                 }
               }
               // Mark PDF as processed
@@ -1613,35 +1694,42 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       
-      // Calculate deductions from PDF
-      const refundsExGst = Math.round(pdfResult.returnsCreditNotes / 1.1 * 100) / 100;
-      const adSpendExGst = Math.round(Math.abs(pdfResult.advertisingFees) / 1.1 * 100) / 100;
-      const sellerFeeExGst = Math.round(pdfResult.monthlySellerFee / 1.1 * 100) / 100;
+      // ── Authoritative PDF merge ──
+      // Use PDF values directly — invoiceTotal is the gross, deductions produce bank_deposit
+      const totalMonthlyFees = pdfResult.monthlySellerFee + pdfResult.monthlyFeePerOrder;
+      const totalAdFees = Math.abs(pdfResult.advertisingFees);
+      const totalReturns = pdfResult.returnsCreditNotes;
       
-      // Update the existing settlement with PDF data
+      // Update the existing settlement with PDF authoritative data
       const updatedMetadata = {
         ...(existing.metadata || {}),
         koganPdfMerged: true,
         koganRemittanceNumber: pdfResult.remittanceNumber,
+        koganApInvoiceRef: pdfResult.apInvoiceRef,
         koganAdvertisingFees: pdfResult.advertisingFees,
         koganMonthlySellerFee: pdfResult.monthlySellerFee,
+        koganMonthlyFeePerOrder: pdfResult.monthlyFeePerOrder,
         koganReturnsCreditNotes: pdfResult.returnsCreditNotes,
         koganPdfBankDeposit: pdfResult.totalPaidAmount,
+        koganPdfInvoiceTotal: pdfResult.invoiceTotal,
         missingPdf: false,
-        refundsInclGst: -pdfResult.returnsCreditNotes,
-        refundsExGst: -refundsExGst,
+        otherChargesInclGst: totalAdFees,
+        refundsInclGst: -totalReturns,
+        refundsExGst: -round2(totalReturns / 1.1),
+        gstModel: 'inclusive',
       };
       
-      // Update ALL financial fields from PDF — not just bank_deposit
-      // Without this, the reconciliation formula sees the old CSV-only figures
-      // while bank_deposit reflects the PDF total, creating a gap.
+      // Update ALL financial fields from PDF — invoiceTotal as sales_principal
       const { error } = await supabase
         .from('settlements')
         .update({
+          sales_principal: pdfResult.invoiceTotal,
+          seller_fees: -totalMonthlyFees,
+          other_fees: -totalAdFees,
+          refunds: -round2(totalReturns / 1.1),
           bank_deposit: pdfResult.totalPaidAmount,
-          advertising_costs: adSpendExGst > 0 ? -adSpendExGst : 0,
-          other_fees: -(Math.abs((existing.metadata?.subscriptionAmount || 0)) + sellerFeeExGst),
-          refunds: -refundsExGst,
+          gst_on_income: round2(pdfResult.invoiceTotal - (pdfResult.invoiceTotal / 1.1)),
+          gst_on_expenses: -round2(totalMonthlyFees - (totalMonthlyFees / 1.1)),
           metadata: updatedMetadata,
         } as any)
         .eq('id', existing.id)
