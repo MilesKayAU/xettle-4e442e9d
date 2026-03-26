@@ -1082,80 +1082,36 @@ export default function Dashboard() {
                 <DestinationAccountMapper />
               )}
 
-              {/* Data Integrity Scanner */}
-              {(xeroConnected || userMarketplaces.length > 0) && (
-                <DataIntegrityScanner />
-              )}
-
-              {/* Kogan missingPdf alert */}
-              {koganMissingPdfCount > 0 && (
-                <div className="flex items-center justify-between rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/20 px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
-                    <span className="text-xs text-foreground">
-                      <strong>{koganMissingPdfCount} Kogan settlement{koganMissingPdfCount !== 1 ? 's' : ''} saved without PDF</strong>
-                      <span className="text-muted-foreground"> — net payout may not match bank deposit. Upload the Remittance PDF to correct.</span>
-                    </span>
-                  </div>
-                  <Button size="sm" variant="outline" className="gap-1.5 text-xs border-amber-300 dark:border-amber-700" onClick={() => setShowUploadSheet(true)}>
-                    <Upload className="h-3 w-3" /> Upload PDF
-                  </Button>
-                </div>
-              )}
-
-              {/* CoA-detected channels awaiting confirmation */}
-              {suggestedConnections.length > 0 && (
-                <CoaDetectedPanel
-                  suggestedConnections={suggestedConnections}
-                  onChanged={loadMarketplaces}
-                />
-              )}
-
-              {/* Action Centre — simplified 3-section daily view */}
-              <div id="action-centre-section">
-              <ActionCentre
+              {/* BookkeeperPipeline — unified priority task list */}
+              <BookkeeperPipeline
                 onSwitchToUpload={(missing) => {
                   if (missing) setMissingSettlements(missing);
                   setShowUploadSheet(true);
                 }}
-                onSwitchToSettlements={(filter) => {
-                  if (filter) setSettlementStatusFilter(filter);
-                  switchView('settlements');
-                  switchSettlementsSubTab('overview');
+                onOpenPushPreview={(settlements) => {
+                  setPushPreviewSettlements(settlements);
+                  setPushPreviewOpen(true);
                 }}
-                onSwitchToReconciliation={() => {
-                  switchView('settlements');
-                  switchSettlementsSubTab('reconciliation');
-                }}
-                userName={user?.email?.split('@')[0]}
-              />
-              </div>
-
-              {/* Gap Triage — focused worklist of reconciliation gaps */}
-              <GapTriageTable
                 onEditSettlement={(sid) => {
                   setDrawerSettlementId(sid);
                   setDrawerOpen(true);
                 }}
+                onNavigateToSettings={() => switchView('settings')}
+                userName={user?.email}
               />
 
-              {/* Settlements table — only actionable rows */}
-              <div id="settlements-table-section">
-                <RecentSettlements
-                  onViewAll={() => {
-                    switchView('settlements');
-                    switchSettlementsSubTab('overview');
-                  }}
-                  pipelineFilter={pipelineFilter}
-                  onClearPipelineFilter={() => setPipelineFilter(null)}
-                  actionableOnly
-                  onNavigateToFilter={(filter) => {
-                    setSettlementStatusFilter(filter);
-                    switchView('settlements');
-                    switchSettlementsSubTab('overview');
-                  }}
-                />
-              </div>
+              {/* System Health — collapsed by default */}
+              {(xeroConnected || userMarketplaces.length > 0) && (
+                <details className="group">
+                  <summary className="flex items-center gap-2 cursor-pointer text-xs text-muted-foreground hover:text-foreground transition-colors py-2">
+                    <ChevronDown className="h-3 w-3 group-open:rotate-180 transition-transform" />
+                    System Health
+                  </summary>
+                  <div className="mt-1">
+                    <DataIntegrityScanner />
+                  </div>
+                </details>
+              )}
             </div>
           </ErrorBoundary>
         )}
