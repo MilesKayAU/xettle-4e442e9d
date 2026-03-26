@@ -239,23 +239,33 @@ function parseXeroDate(dateField: string | null | undefined): string | null {
   return raw.split('T')[0];
 }
 
-const MARKETPLACE_CONTACT_PATTERNS: Record<string, string[]> = {
-  amazon_au: ['amazon', 'amzn'],
-  kogan: ['kogan'],
-  bigw: ['big w', 'bigw'],
-  bunnings: ['bunnings'],
-  mydeal: ['mydeal', 'my deal'],
-  catch: ['catch'],
-  shopify_payments: ['shopify'],
-  ebay_au: ['ebay'],
-  woolworths: ['woolworths', 'woolies', 'everyday market'],
-  theiconic: ['iconic', 'the iconic'],
-  etsy: ['etsy'],
-};
+// ─── Contact → marketplace mapping ─────────────────────────────────
+// Order matters: specific patterns MUST come before generic ones.
+// Each entry is checked in array order; first match wins.
+// E.g. 'amazon.com.au' must precede 'amazon.com' which must precede 'amazon'.
+const MARKETPLACE_CONTACT_PATTERNS_ORDERED: [string, string[]][] = [
+  // Amazon — specific regions first, generic fallback last
+  ['amazon_au', ['amazon.com.au', 'amazon au']],
+  ['amazon_us', ['amazon.com', 'amazon us', 'amazon usa']],
+  ['amazon_jp', ['amazon japan', 'amazon.co.jp', 'amazon jp']],
+  ['amazon_sg', ['amazon singapore', 'amazon.sg', 'amazon sg']],
+  ['amazon_au', ['amzn']],  // legacy AMZN abbreviation defaults to AU if no region hint
+  // Non-Amazon marketplaces (order doesn't matter for these)
+  ['kogan', ['kogan']],
+  ['bigw', ['big w', 'bigw']],
+  ['bunnings', ['bunnings']],
+  ['mydeal', ['mydeal', 'my deal', 'e-com (aus)']],
+  ['catch', ['catch']],
+  ['shopify_payments', ['shopify']],
+  ['ebay_au', ['ebay']],
+  ['woolworths', ['woolworths', 'woolies', 'everyday market']],
+  ['theiconic', ['iconic', 'the iconic']],
+  ['etsy', ['etsy']],
+];
 
 function detectMarketplaceFromContact(contactName: string): string | null {
   const lower = contactName.toLowerCase();
-  for (const [code, patterns] of Object.entries(MARKETPLACE_CONTACT_PATTERNS)) {
+  for (const [code, patterns] of MARKETPLACE_CONTACT_PATTERNS_ORDERED) {
     if (patterns.some(p => lower.includes(p))) return code;
   }
   return null;
@@ -812,7 +822,11 @@ serve(async (req) => {
 
       const ref = inv.Reference || '';
       const contactName = inv.Contact?.Name || '';
-      const detectedMarketplace = detectMarketplaceFromContact(contactName) || 'amazon_au';
+      const detectedMarketplace = detectMarketplaceFromContact(contactName);
+      if (!detectedMarketplace) {
+        console.log(`[step-4b] Skipping unclassified contact "${contactName}" for invoice ${inv.InvoiceNumber || inv.InvoiceID}`);
+        continue;
+      }
 
       // ─── SAFETY: Only auto-link Xettle-created invoices ─────────────
       const isXettleCreated = ref.toLowerCase().startsWith('xettle-');
