@@ -885,6 +885,53 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           const result = await parseBunningsSummaryPdf(df.file);
           if (!result.success) throw new Error('error' in result ? result.error : 'Bunnings parse failed');
           settlements = [result.settlement];
+        } else if (marketplace === 'kogan' && df.file.name.toLowerCase().endsWith('.pdf')) {
+          // PDF-only mode — create settlement from Remittance Advice PDF
+          const pdfResult = await parseKoganRemittancePdf(df.file);
+          if (!pdfResult.success || pdfResult.totalPaidAmount === undefined) {
+            throw new Error(pdfResult.error || 'Kogan PDF parse failed');
+          }
+          const totalMonthlyFees = pdfResult.monthlySellerFee + pdfResult.monthlyFeePerOrder;
+          const totalAdFees = Math.abs(pdfResult.advertisingFees);
+          const totalReturns = pdfResult.returnsCreditNotes;
+          // Derive period from PDF dates
+          const pdfPeriodMonth = pdfResult.periodMonth || '';
+          const periodYear = pdfPeriodMonth ? parseInt(pdfPeriodMonth.split('-')[0]) : new Date().getFullYear();
+          const periodMon = pdfPeriodMonth ? parseInt(pdfPeriodMonth.split('-')[1]) - 1 : new Date().getMonth();
+          const periodStart = `${periodYear}-${String(periodMon + 1).padStart(2, '0')}-01`;
+          const lastDay = new Date(periodYear, periodMon + 1, 0).getDate();
+          const periodEnd = `${periodYear}-${String(periodMon + 1).padStart(2, '0')}-${lastDay}`;
+          const apRef = pdfResult.apInvoiceRef || pdfResult.remittanceNumber || 'pdf';
+          
+          settlements = [{
+            marketplace: 'kogan',
+            settlement_id: `kogan_${apRef}`,
+            period_start: periodStart,
+            period_end: periodEnd,
+            sales_ex_gst: pdfResult.invoiceTotal,
+            gst_on_sales: round2(pdfResult.invoiceTotal - (pdfResult.invoiceTotal / 1.1)),
+            fees_ex_gst: -totalMonthlyFees,
+            gst_on_fees: round2(totalMonthlyFees - (totalMonthlyFees / 1.1)),
+            net_payout: pdfResult.totalPaidAmount,
+            source: 'csv_upload',
+            reconciles: Math.abs(round2(pdfResult.invoiceTotal - totalMonthlyFees - totalAdFees - totalReturns) - pdfResult.totalPaidAmount) <= 1,
+            metadata: {
+              koganPdfMerged: true,
+              koganPdfOnly: true,
+              koganRemittanceNumber: pdfResult.remittanceNumber,
+              koganApInvoiceRef: pdfResult.apInvoiceRef,
+              koganAdvertisingFees: pdfResult.advertisingFees,
+              koganMonthlySellerFee: pdfResult.monthlySellerFee,
+              koganMonthlyFeePerOrder: pdfResult.monthlyFeePerOrder,
+              koganReturnsCreditNotes: pdfResult.returnsCreditNotes,
+              koganPdfBankDeposit: pdfResult.totalPaidAmount,
+              koganPdfInvoiceTotal: pdfResult.invoiceTotal,
+              otherChargesInclGst: totalAdFees,
+              refundsInclGst: -totalReturns,
+              refundsExGst: -round2(totalReturns / 1.1),
+              gstModel: 'inclusive',
+            },
+          }];
         } else if (marketplace === 'kogan' && !df.file.name.toLowerCase().endsWith('.pdf')) {
           const text = await df.file.text();
           const result = parseKoganPayoutCSV(text);
