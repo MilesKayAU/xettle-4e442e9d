@@ -263,15 +263,28 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
         const { data: result, error: dryErr } = await supabase.functions.invoke('fetch-shopify-payouts', {
           body: { dryRun: true },
         });
-        // 429 cooldown is expected — treat token as valid
         if (dryErr) {
-          const msg = typeof dryErr === 'object' && 'message' in dryErr ? (dryErr as any).message : String(dryErr);
-          const isCooldown = msg.includes('429') || msg.includes('cooldown') || msg.includes('already in progress');
+          // FunctionsHttpError: read the actual response body from context
+          let bodyJson: any = null;
+          try {
+            const ctx = (dryErr as any)?.context;
+            if (ctx && typeof ctx.json === 'function') {
+              bodyJson = await ctx.json();
+            }
+          } catch {}
+          const status = (dryErr as any)?.context?.status;
+          const isCooldown = status === 429
+            || bodyJson?.error === 'Sync cooldown active'
+            || bodyJson?.error === 'Sync already in progress';
+          const isInvalidToken = bodyJson?.error === 'Shopify token invalid or expired';
+
+          setHasShopifyConnection(true);
           if (isCooldown) {
-            setHasShopifyConnection(true);
             setShopifyTokenInvalid(false);
+          } else if (isInvalidToken) {
+            setShopifyTokenInvalid(true);
           } else {
-            setHasShopifyConnection(true);
+            // Unknown error — assume token issue
             setShopifyTokenInvalid(true);
           }
         } else if (result?.error === 'Shopify token invalid or expired') {
@@ -285,11 +298,18 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           setShopifyTokenInvalid(false);
         }
       } catch (e: any) {
-        // FunctionsHttpError for 429 — treat as valid token, just on cooldown
+        // Fallback: check if thrown error has context (FunctionsHttpError)
+        let bodyJson: any = null;
+        try {
+          const ctx = e?.context;
+          if (ctx && typeof ctx.json === 'function') {
+            bodyJson = await ctx.json();
+          }
+        } catch {}
         const status = e?.context?.status ?? e?.status;
-        let body = '';
-        try { body = await e?.context?.text?.() ?? ''; } catch {}
-        const is429 = status === 429 || /cooldown|already in progress/i.test(body) || /cooldown|already in progress/i.test(e?.message ?? '');
+        const is429 = status === 429
+          || bodyJson?.error === 'Sync cooldown active'
+          || bodyJson?.error === 'Sync already in progress';
         setHasShopifyConnection(true);
         setShopifyTokenInvalid(is429 ? false : true);
       }
