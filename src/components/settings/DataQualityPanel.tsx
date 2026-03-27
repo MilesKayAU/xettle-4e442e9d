@@ -1,7 +1,7 @@
 /**
  * Data Quality Panel — Settings section for retroactive data corrections.
  * Provides manual sweeps for marketplace labels, fulfilment classification,
- * and an RLS policy audit inventory for admin users.
+ * an RLS policy audit inventory, and a full system audit for admin users.
  */
 
 import { useState } from 'react';
@@ -10,6 +10,7 @@ import { RefreshCw, CheckCircle2, Package, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Badge } from '@/components/ui/badge';
+import SystemAuditPanel from './SystemAuditPanel';
 
 interface RlsTableEntry {
   table_name: string;
@@ -221,6 +222,9 @@ export default function DataQualityPanel() {
           </div>
         )}
       </div>
+
+      {/* System Audit */}
+      <SystemAuditPanel />
     </div>
   );
 }
