@@ -27,7 +27,7 @@ import { Label } from '@/components/ui/label';
 
 import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
 import ChannelDetectedEmptyState from './shared/ChannelDetectedEmptyState';
-import EbayUploadGuide from './EbayUploadGuide';
+import MarketplaceUploadGuide from './shared/MarketplaceUploadGuide';
 import { isReconciliationOnly } from '@/utils/settlement-policy';
 import { isReconSafeForPush, isGapBlocking } from '@/utils/canonical-recon-status';
 
