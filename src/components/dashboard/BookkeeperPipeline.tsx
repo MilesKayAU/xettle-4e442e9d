@@ -163,6 +163,16 @@ export default function BookkeeperPipeline({
         .order('period_end', { ascending: false })
         .limit(50),
 
+      // Scheduled / In Transit: eBay payouts not yet arrived
+      supabase
+        .from('settlements')
+        .select('settlement_id, marketplace, period_start, period_end, bank_deposit, payout_status, deposit_date, updated_at' as any)
+        .eq('marketplace', 'ebay_au')
+        .in('payout_status', ['in_transit', 'on_hold', 'failed'])
+        .gte('period_end', boundaryDate)
+        .order('period_end', { ascending: false })
+        .limit(50),
+
       // Amazon AU open periods (from validation, not settlements — no settlement exists yet)
       supabase
         .from('marketplace_validation')
