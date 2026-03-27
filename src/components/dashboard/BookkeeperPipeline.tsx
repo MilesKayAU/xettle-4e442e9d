@@ -639,11 +639,16 @@ function PipelineRow({
             'text-[10px] h-5 px-1.5',
             item.payout_status === 'open'
               ? 'border-muted-foreground/50 text-muted-foreground'
-              : item.payout_status === 'in_transit'
-                ? 'border-blue-400 text-blue-600 dark:text-blue-400'
-                : 'border-amber-400 text-amber-600 dark:text-amber-400'
+              : item.payout_status === 'on_hold'
+                ? 'border-orange-400 text-orange-600 dark:text-orange-400'
+                : item.payout_status === 'in_transit'
+                  ? 'border-blue-400 text-blue-600 dark:text-blue-400'
+                  : 'border-amber-400 text-amber-600 dark:text-amber-400'
           )}>
-            {item.payout_status === 'open' ? 'Open Period' : item.payout_status === 'in_transit' ? 'In Transit' : 'Scheduled'}
+            {item.payout_status === 'open' ? 'Open Period'
+              : item.payout_status === 'on_hold' ? 'On Hold'
+              : item.payout_status === 'in_transit' ? 'In Transit'
+              : 'Scheduled'}
           </Badge>
         );
       case 'awaiting':
