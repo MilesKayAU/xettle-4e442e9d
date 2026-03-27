@@ -31,6 +31,8 @@ export interface WoolworthsOrderRow {
   commissionFee: number;
   netAmount: number;
   gstOnNetAmount: number;
+  netShippingAmount: number;   // Net Shipping Amount (ex-GST shipping income)
+  gstOnShipping: number;       // GST on Shipping
   originalOrderId: string;
   invoiceRef: string;
   orderSource: string;      // 'BigW' | 'EverydayMarket' | 'MyDeal'
