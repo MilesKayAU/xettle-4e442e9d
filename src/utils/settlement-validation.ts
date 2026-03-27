@@ -118,7 +118,8 @@ export function validateAndNormaliseSettlement(
       (s.storage_fees || 0) +
       (s.advertising_costs || 0) +
       (s.refunds || 0) +
-      (s.reimbursements || 0);
+      (s.reimbursements || 0) -
+      (s.gst_on_expenses || 0);
 
     const variance = Math.abs(computedNet - s.bank_deposit);
     const variancePct = Math.abs(variance / s.bank_deposit);
