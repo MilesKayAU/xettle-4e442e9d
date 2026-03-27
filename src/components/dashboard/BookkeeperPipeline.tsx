@@ -208,8 +208,16 @@ export default function BookkeeperPipeline({
       });
     });
 
-    // 2–4. From validation rows
+    // Collect scheduled settlement IDs for deduplication
+    const scheduledSettlementIds = new Set(
+      (scheduledRes.data ?? []).map((s: any) => String(s.settlement_id))
+    );
+
+    // 2–4. From validation rows (exclude scheduled/in_transit settlements)
     (validationRes.data ?? []).forEach(row => {
+      // Skip if this settlement is already in the scheduled bucket
+      if (row.settlement_id && scheduledSettlementIds.has(String(row.settlement_id))) return;
+
       let bucket: BucketType;
       if (row.overall_status === 'settlement_needed' || row.overall_status === 'missing') {
         bucket = 'upload_needed';
