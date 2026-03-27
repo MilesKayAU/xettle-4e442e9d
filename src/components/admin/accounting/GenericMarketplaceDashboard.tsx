@@ -128,7 +128,7 @@ function TransactionDrilldown({ lines, linesTotal, salesTotal, feesTotal, refund
     </div>
   );
 }
-
+interface GenericMarketplaceDashboardProps {
   marketplace: UserMarketplace;
   onMarketplacesChanged?: () => void;
   onSwitchToUpload?: () => void;
