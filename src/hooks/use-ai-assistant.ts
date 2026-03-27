@@ -35,9 +35,10 @@ export function useAiAssistant({ context }: UseAiAssistantOptions = {}) {
   const [usageCount, setUsageCount] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Persist messages on every change
+  // Persist messages on change (debounced to avoid blocking main thread)
   useEffect(() => {
-    persistMessages(messages);
+    const timeout = setTimeout(() => persistMessages(messages), 500);
+    return () => clearTimeout(timeout);
   }, [messages]);
 
   const loadUsage = useCallback(async () => {
