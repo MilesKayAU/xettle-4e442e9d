@@ -2578,7 +2578,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                 groups.push({
                   marketplaceCode: subCode,
                   displayName: WOOLWORTHS_LABELS[subCode] || subCode,
-                  bankDeposit: s.bank_deposit || 0,
+                  bankDeposit: s.net_payout || 0,
                   status: 'saved',
                   hasPdf: false,
                   settlementId: s.settlement_id,
