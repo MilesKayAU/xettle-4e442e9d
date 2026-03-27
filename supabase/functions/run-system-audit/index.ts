@@ -91,7 +91,7 @@ serve(async (req) => {
 
     const gstInclusiveMarketplaces = [
       "shopify_payments", "everyday_market", "bigw", "woolworths_marketplus",
-      "woolworths_everyday", "woolworths_bigw"
+      "woolworths_everyday", "woolworths_bigw", "bunnings"
     ];
 
     const formulaChecks: any[] = [];
