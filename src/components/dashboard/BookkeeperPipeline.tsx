@@ -338,7 +338,7 @@ export default function BookkeeperPipeline({
 
   // ─── Grouping ───────────────────────────────────────────────────
 
-  const bucketOrder: BucketType[] = ['blocked', 'upload_needed', 'gaps', 'ready', 'awaiting', 'complete'];
+  const bucketOrder: BucketType[] = ['blocked', 'scheduled', 'upload_needed', 'gaps', 'ready', 'awaiting', 'complete'];
   const grouped = bucketOrder.reduce((acc, bucket) => {
     acc[bucket] = items.filter(i => i.bucket === bucket);
     return acc;
