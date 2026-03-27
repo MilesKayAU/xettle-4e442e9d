@@ -316,9 +316,11 @@ async function syncPayoutsForUser(
       const feesExGst = Math.abs(totalFees) - gstOnExpenses;
       const netExGst = netPayout - gstOnIncome + gstOnExpenses;
 
-      // Shopify payouts arrive fully reconciled — promote immediately unless pre-boundary
+      // Shopify payouts: only 'paid' payouts are ready to push
+      // scheduled/in_transit stay as 'ingested' until they arrive
       const isBeforeBoundary = dateMin && payoutDate < dateMin;
-      const settlementStatus = isBeforeBoundary ? "ingested" : "ready_to_push";
+      const isScheduledOrTransit = payout.status === 'scheduled' || payout.status === 'in_transit';
+      const settlementStatus = isBeforeBoundary ? "ingested" : isScheduledOrTransit ? "ingested" : "ready_to_push";
 
       // ─── Insert settlement (ON CONFLICT DO NOTHING) ─────────
       // SIGN CONVENTION: fees/expenses stored NEGATIVE per canonical posting rules
