@@ -96,18 +96,26 @@ export async function pushSettlementToXero(opts: {
     .maybeSingle();
 
   if (settlement) {
-    const computedNet =
-      (settlement.sales_principal || 0) + (settlement.sales_shipping || 0)
-      - Math.abs(settlement.seller_fees || 0) - Math.abs(settlement.fba_fees || 0)
-      - Math.abs(settlement.storage_fees || 0) - Math.abs(settlement.advertising_costs || 0)
-      - Math.abs(settlement.other_fees || 0)
-      + (settlement.refunds || 0) + (settlement.reimbursements || 0)
-      - (settlement.gst_on_expenses || 0);
-    const reconGap = Math.abs((settlement.bank_deposit || 0) - computedNet);
-    if (reconGap > 1.00) {
+    const { computeReconciliation, RECONCILIATION_TOLERANCE } = await import('@/services/reconciliation');
+    const recon = computeReconciliation({
+      marketplace: opts.marketplace,
+      sales_principal: settlement.sales_principal || 0,
+      sales_shipping: settlement.sales_shipping || 0,
+      seller_fees: settlement.seller_fees || 0,
+      other_fees: settlement.other_fees || 0,
+      refunds: settlement.refunds || 0,
+      reimbursements: settlement.reimbursements || 0,
+      fba_fees: settlement.fba_fees || 0,
+      storage_fees: settlement.storage_fees || 0,
+      advertising_costs: settlement.advertising_costs || 0,
+      gst_on_income: 0, // Not in this query — reconciliation handles it
+      gst_on_expenses: settlement.gst_on_expenses || 0,
+      bank_deposit: settlement.bank_deposit || 0,
+    });
+    if (!recon.withinTolerance) {
       return {
         success: false,
-        error: `Reconciliation gap of $${reconGap.toFixed(2)} exceeds $1.00 tolerance. Edit figures to resolve before pushing.`,
+        error: `Reconciliation gap of $${recon.absGap.toFixed(2)} exceeds $${RECONCILIATION_TOLERANCE.toFixed(2)} tolerance. Edit figures to resolve before pushing.`,
         errorCode: 'RECON_GAP',
       };
     }

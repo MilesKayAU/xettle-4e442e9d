@@ -15,6 +15,9 @@
  * Referenced by: settlement-engine.ts, fetch-ebay-settlements, fetch-mirakl-settlements, fetch-amazon-settlements
  */
 
+import { computeReconciliation } from '@/services/reconciliation';
+
+
 export interface SettlementFieldsForValidation {
   settlement_id: string;
   marketplace: string;
@@ -108,25 +111,15 @@ export function validateAndNormaliseSettlement(
   }
 
   // ── Rule 6: Computed net vs bank_deposit variance check ──
+  // Uses the canonical reconciliation formula from the service layer
   if (s.bank_deposit !== 0 && s.bank_deposit != null) {
-    const computedNet =
-      s.sales_principal +
-      s.sales_shipping +
-      (s.seller_fees || 0) +
-      (s.other_fees || 0) +
-      (s.fba_fees || 0) +
-      (s.storage_fees || 0) +
-      (s.advertising_costs || 0) +
-      (s.refunds || 0) +
-      (s.reimbursements || 0) -
-      (s.gst_on_expenses || 0);
-
-    const variance = Math.abs(computedNet - s.bank_deposit);
+    const recon = computeReconciliation(s);
+    const variance = recon.absGap;
     const variancePct = Math.abs(variance / s.bank_deposit);
 
     if (variancePct > 0.20 && variance > 10) {
       warnings.push(
-        `Large variance at ingestion: computed_net=${computedNet.toFixed(2)} ` +
+        `Large variance at ingestion: computed_net=${recon.computedNet.toFixed(2)} ` +
         `vs bank_deposit=${s.bank_deposit} (${(variancePct * 100).toFixed(1)}%) [source=${source}]`
       );
     }
