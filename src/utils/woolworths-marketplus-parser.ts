@@ -157,6 +157,8 @@ interface ColumnMap {
   commissionFee: number;
   netAmount: number;
   gstOnNetAmount: number;
+  netShippingAmount: number;
+  gstOnShipping: number;
   originalOrderId: number;
   invoiceRef: number;
   orderSource: number;
