@@ -780,7 +780,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                 error = 'This settlement has already been pushed to Xero. To correct it, use the Correct & Repost option in the settlement drawer.';
               } else if (
                 !alwaysConfirmReparse && 
-                ['gap_detected', 'settlement_needed', 'upload_needed', 'missing', 'ingested'].includes(firstDupeStatus)
+                ['gap_detected', 'settlement_needed', 'upload_needed', 'missing', 'ingested', 'already_recorded'].includes(firstDupeStatus)
               ) {
                 // AUTO re-parse — user is clearly fixing a problem
                 status = 'detected';
