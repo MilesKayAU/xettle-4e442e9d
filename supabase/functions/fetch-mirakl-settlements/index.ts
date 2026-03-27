@@ -252,6 +252,22 @@ interface IV01Invoice {
   }>;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// Map Mirakl IV01 invoice state + payment state to canonical payout_status
+// IV01 state values: COMPLETE, PENDING, CANCELLED
+// payment.state values: PAID, PENDING, null
+// ═══════════════════════════════════════════════════════════════
+function mapMiraklPayoutStatus(invoiceState?: string, paymentState?: string): string {
+  const state = (invoiceState || "").toUpperCase();
+  const pState = (paymentState || "").toUpperCase();
+
+  if (state === "CANCELLED") return "cancelled";
+  if (pState === "PAID" || state === "COMPLETE") return "paid";
+  if (state === "PENDING" && pState === "PENDING") return "in_transit"; // validated, payment processing
+  if (state === "PENDING") return "scheduled"; // billing cycle created, not yet validated
+  return "paid"; // safe default for unknown states
+}
+
 async function fetchSettlementsForConnection(
   adminClient: any,
   userId: string,
@@ -334,9 +350,12 @@ async function fetchSettlementsForConnection(
   let emptySkipped = 0;
 
   for (const inv of allInvoices) {
-    // Only process COMPLETE invoices
-    if (inv.state !== "COMPLETE") {
-      console.log(`[fetch-mirakl-settlements] ⏭️ Skipping ${inv.invoice_id}: state=${inv.state}`);
+    // Map Mirakl IV01 state + payment.state to canonical payout_status
+    const miraklPayoutStatus = mapMiraklPayoutStatus(inv.state, inv.payment?.state);
+
+    // Skip CANCELLED invoices entirely
+    if (miraklPayoutStatus === "cancelled") {
+      console.log(`[fetch-mirakl-settlements] ⏭️ Skipping ${inv.invoice_id}: state=${inv.state} (cancelled)`);
       skipped++;
       continue;
     }
@@ -429,10 +448,14 @@ async function fetchSettlementsForConnection(
       });
     }
 
+    // For non-paid invoices, skip reconciliation — amounts may not be final
+    const isPaid = miraklPayoutStatus === "paid";
+
     const settlementStatus = isPreBoundary ? "pre_boundary"
+      : !isPaid ? "ingested"
       : reconStatus === "recon_warning" ? "recon_warning" : "saved";
 
-    console.log(`[fetch-mirakl-settlements] 📊 ${settlementId}: bank_deposit=${bankDeposit}, gross=${grossSales}, refunds=${refunds}, fees=${totalFeesExclTax}, payment=${paymentDate}`);
+    console.log(`[fetch-mirakl-settlements] 📊 ${settlementId}: bank_deposit=${bankDeposit}, gross=${grossSales}, refunds=${refunds}, fees=${totalFeesExclTax}, payment=${paymentDate}, payout_status=${miraklPayoutStatus}`);
 
     // Upsert settlement
     const { error: upsertErr } = await adminClient.from("settlements").upsert({
@@ -451,6 +474,7 @@ async function fetchSettlementsForConnection(
       gst_on_income: gstOnIncome,
       gst_on_expenses: totalFeesGst,
       status: settlementStatus,
+      payout_status: miraklPayoutStatus,
       source: "mirakl_api",
       source_reference: `iv01_invoice_${inv.invoice_id}`,
       is_pre_boundary: isPreBoundary,
