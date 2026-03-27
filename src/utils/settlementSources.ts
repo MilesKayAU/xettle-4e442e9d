@@ -1,21 +1,8 @@
 /**
- * settlementSources — Client-side mirror of supabase/functions/_shared/settlementSources.ts.
+ * settlementSources — Re-exports from canonical service layer.
  *
- * Only sources in this list can create accounting entries in Xero.
- * Everything else (order-level APIs like Kogan, Shopify sub-channel syncs)
- * is automatically reconciliation-only.
- *
- * IMPORTANT: This file MUST stay identical to the server-side copy.
- * Edge functions cannot import from src/ — this is the only acceptable duplication.
+ * @deprecated Import directly from '@/services/settlementService' instead.
+ * This file exists only for backward compatibility.
  */
 
-export const PUSHABLE_SOURCES = [
-  'csv_upload',
-  'manual',
-  'api',
-  'ebay_api',
-  'mirakl_api',
-  'amazon_api',
-] as const;
-
-export type PushableSource = typeof PUSHABLE_SOURCES[number];
+export { PUSHABLE_SOURCES, type PushableSource } from '@/services/settlementService';
