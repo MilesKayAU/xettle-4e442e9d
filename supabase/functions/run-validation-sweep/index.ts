@@ -727,7 +727,7 @@ async function sweepUser(adminSupabase: any, userId: string) {
           // Shopify and Everyday Market bank deposits are GST-inclusive,
           // but financial fields are stored ex-GST. Include gst_on_income
           // in the formula so computed net matches the GST-inclusive deposit.
-          const includeGstInFormula = ['shopify_payments', 'everyday_market'].includes(settlement.marketplace)
+          const includeGstInFormula = ['shopify_payments', 'everyday_market', 'bigw', 'woolworths_marketplus', 'woolworths_marketplus_bigw', 'woolworths_marketplus_woolworths', 'woolworths_marketplus_mydeal', 'woolworths_marketplus_everyday_market', 'bunnings'].includes(settlement.marketplace)
           const computedNet = (parseFloat(settlement.sales_principal) || 0)
             + (parseFloat(settlement.sales_shipping) || 0)
             + (includeGstInFormula ? (parseFloat(settlement.gst_on_income) || 0) : 0)
