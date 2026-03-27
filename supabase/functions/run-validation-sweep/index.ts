@@ -387,7 +387,7 @@ async function sweepUser(adminSupabase: any, userId: string) {
   // Boundary only determines what gets pushed to Xero.
     const { data: settlements } = await adminSupabase
     .from('settlements')
-    .select('settlement_id, marketplace, period_start, period_end, bank_deposit, status, reconciliation_status, xero_journal_id, xero_status, bank_verified, bank_verified_amount, created_at, source, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, gst_on_income')
+    .select('settlement_id, marketplace, period_start, period_end, bank_deposit, status, reconciliation_status, xero_journal_id, xero_status, bank_verified, bank_verified_amount, created_at, source, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, gst_on_income, payout_status')
     .eq('user_id', userId)
 
   const { data: reconChecks } = await adminSupabase
