@@ -131,6 +131,7 @@ export default function BookkeeperPipeline({
       blockedRes,
       validationRes,
       scheduledRes,
+      ebayScheduledRes,
       amazonOpenRes,
       awaitingRes,
       completeRes,
