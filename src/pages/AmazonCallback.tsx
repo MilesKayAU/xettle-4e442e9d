@@ -37,12 +37,25 @@ export default function AmazonCallback() {
         // Parse marketplace_id and region from the state param (format: uuid:marketplaceId:region)
         const stateParam = searchParams.get('state') || '';
         const stateParts = stateParam.split(':');
+        const csrfNonce = stateParts.length >= 1 ? stateParts[0] : '';
         const storedMarketplaceId = stateParts.length >= 3 ? stateParts[1] : null;
         const storedRegion = stateParts.length >= 3 ? stateParts[2] : null;
 
-        // Fallback to sessionStorage for backward compat, then defaults
-        const marketplace_id = storedMarketplaceId || sessionStorage.getItem('amazon_marketplace_id') || DEFAULT_AMAZON_REGION.marketplaceId;
-        const region = storedRegion || sessionStorage.getItem('amazon_region') || DEFAULT_AMAZON_REGION.region;
+        // Verify CSRF nonce matches what we stored before the redirect
+        const expectedState = sessionStorage.getItem('amazon_oauth_state') || '';
+        const expectedNonce = expectedState.split(':')[0] || '';
+        if (!csrfNonce || csrfNonce !== expectedNonce) {
+          console.warn('[AmazonCallback] State nonce mismatch — possible CSRF or stale session');
+          // Don't hard-block: the user may have cleared storage, but log the warning
+        }
+        // Clean up stored state
+        sessionStorage.removeItem('amazon_oauth_state');
+        sessionStorage.removeItem('amazon_marketplace_id');
+        sessionStorage.removeItem('amazon_region');
+
+        // Fallback to defaults if state didn't carry region info
+        const marketplace_id = storedMarketplaceId || DEFAULT_AMAZON_REGION.marketplaceId;
+        const region = storedRegion || DEFAULT_AMAZON_REGION.region;
 
         const { data, error } = await supabase.functions.invoke('amazon-auth', {
           headers: { 'x-action': 'connect' },

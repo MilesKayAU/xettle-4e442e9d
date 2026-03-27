@@ -3,7 +3,7 @@
  * Part of the BaseMarketplaceDashboard architecture pattern.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { deleteSettlement } from '@/utils/settlement-engine';
 import { toast } from 'sonner';
 import type { BaseSettlementRow } from './use-settlement-manager';
@@ -12,6 +12,8 @@ interface UseBulkSelectOptions {
   settlements: BaseSettlementRow[];
   onComplete: () => void;
 }
+
+const XERO_SYNCED_STATUSES = ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'];
 
 export function useBulkSelect({ settlements, onComplete }: UseBulkSelectOptions) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -35,45 +37,37 @@ export function useBulkSelect({ settlements, onComplete }: UseBulkSelectOptions)
   }, [selected.size, settlements]);
 
   /** Count how many selected settlements are synced to Xero */
-  const syncedSelectedCount = settlements.filter(
-    s => selected.has(s.id) && ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || '') || (selected.has(s.id) && s.xero_journal_id)
-  ).length;
+  const syncedSelectedCount = useMemo(() => settlements.filter(
+    s => selected.has(s.id) && (XERO_SYNCED_STATUSES.includes(s.status || '') || s.xero_journal_id)
+  ).length, [settlements, selected]);
+
+  /** Core deletion loop — used by both handleBulkDelete and confirmBulkDelete */
+  const executeDeletion = useCallback(async (ids: string[]) => {
+    setBulkDeleteDialogOpen(false);
+    setBulkDeleting(true);
+    setSelected(new Set());
+    let deleted = 0;
+    for (const id of ids) {
+      const result = await deleteSettlement(id);
+      if (result.success) deleted++;
+    }
+    setBulkDeleting(false);
+    toast.success(`Deleted ${deleted} settlement${deleted !== 1 ? 's' : ''}`);
+    onComplete();
+  }, [onComplete]);
 
   const handleBulkDelete = useCallback(async () => {
     if (selected.size === 0) return;
-    // If synced items exist and dialog not yet shown, open confirmation
     if (syncedSelectedCount > 0 && !bulkDeleteDialogOpen) {
       setBulkDeleteDialogOpen(true);
       return;
     }
-    const itemsToDelete = Array.from(selected);
-    setBulkDeleteDialogOpen(false);
-    setBulkDeleting(true);
-    setSelected(new Set());
-    let deleted = 0;
-    for (const id of itemsToDelete) {
-      const result = await deleteSettlement(id);
-      if (result.success) deleted++;
-    }
-    setBulkDeleting(false);
-    toast.success(`Deleted ${deleted} settlement${deleted !== 1 ? 's' : ''}`);
-    onComplete();
-  }, [selected, syncedSelectedCount, bulkDeleteDialogOpen, onComplete]);
+    await executeDeletion(Array.from(selected));
+  }, [selected, syncedSelectedCount, bulkDeleteDialogOpen, executeDeletion]);
 
   const confirmBulkDelete = useCallback(async () => {
-    const itemsToDelete = Array.from(selected);
-    setBulkDeleteDialogOpen(false);
-    setBulkDeleting(true);
-    setSelected(new Set());
-    let deleted = 0;
-    for (const id of itemsToDelete) {
-      const result = await deleteSettlement(id);
-      if (result.success) deleted++;
-    }
-    setBulkDeleting(false);
-    toast.success(`Deleted ${deleted} settlement${deleted !== 1 ? 's' : ''}`);
-    onComplete();
-  }, [selected, onComplete]);
+    await executeDeletion(Array.from(selected));
+  }, [selected, executeDeletion]);
 
   const cancelBulkDelete = useCallback(() => {
     setBulkDeleteDialogOpen(false);
