@@ -334,9 +334,12 @@ async function fetchSettlementsForConnection(
   let emptySkipped = 0;
 
   for (const inv of allInvoices) {
-    // Only process COMPLETE invoices
-    if (inv.state !== "COMPLETE") {
-      console.log(`[fetch-mirakl-settlements] ⏭️ Skipping ${inv.invoice_id}: state=${inv.state}`);
+    // Map Mirakl IV01 state + payment.state to canonical payout_status
+    const miraklPayoutStatus = mapMiraklPayoutStatus(inv.state, inv.payment?.state);
+
+    // Skip CANCELLED invoices entirely
+    if (miraklPayoutStatus === "cancelled") {
+      console.log(`[fetch-mirakl-settlements] ⏭️ Skipping ${inv.invoice_id}: state=${inv.state} (cancelled)`);
       skipped++;
       continue;
     }
