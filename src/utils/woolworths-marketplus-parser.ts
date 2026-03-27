@@ -52,6 +52,12 @@ export interface WoolworthsMarketplaceGroup {
   commission: number;       // Sum of Commission Fee
   netAmount: number;        // Sum of Net Amount
   gst: number;              // Sum of GST on Net Amount
+  shipping: number;         // Sum of Net Shipping Amount (ex-GST)
+  shippingGst: number;      // Sum of GST on Shipping
+  /** GST on Net Amount from sale rows only (totalSalePrice > 0) */
+  gstSales: number;
+  /** GST on Net Amount from refund rows only (totalSalePrice < 0) */
+  gstRefunds: number;
   periodStart: string;
   periodEnd: string;
 }
