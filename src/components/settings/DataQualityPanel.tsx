@@ -222,6 +222,9 @@ export default function DataQualityPanel() {
           </div>
         )}
       </div>
+
+      {/* System Audit */}
+      <SystemAuditPanel />
     </div>
   );
 }
