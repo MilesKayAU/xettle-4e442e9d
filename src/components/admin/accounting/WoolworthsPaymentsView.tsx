@@ -118,7 +118,7 @@ export default function WoolworthsPaymentsView({ marketplace, onSwitchToUpload, 
       // Fetch all woolworths-family settlements
       const { data: sRows, error } = await supabase
         .from('settlements')
-        .select('id, settlement_id, marketplace, period_start, period_end, sales_principal, seller_fees, bank_deposit, status, created_at, raw_payload, source, xero_invoice_number, xero_status, xero_journal_id')
+        .select('id, settlement_id, marketplace, period_start, period_end, sales_principal, seller_fees, bank_deposit, status, created_at, gst_on_income, gst_on_expenses, raw_payload, source, xero_invoice_number, xero_status, xero_journal_id')
         .eq('user_id', user.id)
         .in('marketplace', WOOLWORTHS_CODES)
         .eq('is_hidden', false)
