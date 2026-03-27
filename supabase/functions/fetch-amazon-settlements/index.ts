@@ -943,6 +943,7 @@ async function _executeSmartSync(supabase: any, userId: string, smartSyncFrom?: 
         bank_deposit: summary.bankDeposit,
         reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
         status: settlementStatus,
+        payout_status: 'paid',
         is_pre_boundary: isPreBoundary,
         source: 'api',
         is_split_month: splitMonth.isSplitMonth,

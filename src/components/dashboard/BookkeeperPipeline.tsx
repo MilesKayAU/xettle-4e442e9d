@@ -162,6 +162,16 @@ export default function BookkeeperPipeline({
         .order('period_end', { ascending: false })
         .limit(50),
 
+      // Amazon AU open periods (from validation, not settlements — no settlement exists yet)
+      supabase
+        .from('marketplace_validation')
+        .select('id, marketplace_code, period_label, period_start, period_end, settlement_net, overall_status, updated_at')
+        .eq('marketplace_code', 'amazon_au')
+        .eq('overall_status', 'open_period')
+        .gte('period_end', boundaryDate)
+        .order('period_end', { ascending: false })
+        .limit(10),
+
       // Awaiting: pushed but not paid
       supabase
         .from('settlements')
