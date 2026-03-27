@@ -432,10 +432,14 @@ async function fetchSettlementsForConnection(
       });
     }
 
+    // For non-paid invoices, skip reconciliation — amounts may not be final
+    const isPaid = miraklPayoutStatus === "paid";
+
     const settlementStatus = isPreBoundary ? "pre_boundary"
+      : !isPaid ? "ingested"
       : reconStatus === "recon_warning" ? "recon_warning" : "saved";
 
-    console.log(`[fetch-mirakl-settlements] 📊 ${settlementId}: bank_deposit=${bankDeposit}, gross=${grossSales}, refunds=${refunds}, fees=${totalFeesExclTax}, payment=${paymentDate}`);
+    console.log(`[fetch-mirakl-settlements] 📊 ${settlementId}: bank_deposit=${bankDeposit}, gross=${grossSales}, refunds=${refunds}, fees=${totalFeesExclTax}, payment=${paymentDate}, payout_status=${miraklPayoutStatus}`);
 
     // Upsert settlement
     const { error: upsertErr } = await adminClient.from("settlements").upsert({
@@ -454,6 +458,7 @@ async function fetchSettlementsForConnection(
       gst_on_income: gstOnIncome,
       gst_on_expenses: totalFeesGst,
       status: settlementStatus,
+      payout_status: miraklPayoutStatus,
       source: "mirakl_api",
       source_reference: `iv01_invoice_${inv.invoice_id}`,
       is_pre_boundary: isPreBoundary,
