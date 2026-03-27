@@ -282,12 +282,11 @@ export default function WoolworthsPaymentsView({ marketplace, onSwitchToUpload, 
         <Button
           size="sm"
           className="gap-1.5 text-xs"
-          disabled={pushing}
+          disabled={!!pushing}
           onClick={async () => {
             for (const s of group.settlements) {
               if (['pushed_to_xero', 'reconciled_in_xero', 'bank_verified', 'already_recorded'].includes(s.status || '')) continue;
-              const std = toStandardSettlement(s);
-              if (std) await handlePushToXero(std);
+              await handlePushToXero(s as any);
             }
           }}
         >
