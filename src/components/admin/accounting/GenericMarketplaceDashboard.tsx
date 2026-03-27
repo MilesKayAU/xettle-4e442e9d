@@ -167,7 +167,7 @@ interface SettlementRow {
  * Determine if a marketplace is CSV-only by checking connection_type.
  * Falls back to checking if the marketplace has any API connectors in the static catalog.
  */
-const API_CAPABLE_CODES = new Set(['amazon_au', 'amazon_us', 'amazon_uk', 'amazon_ca', 'shopify_payments', 'shopify_orders', 'ebay_au']);
+const API_CAPABLE_CODES = new Set(['amazon_au', 'amazon_us', 'amazon_uk', 'amazon_ca', 'shopify_payments', 'shopify_orders', 'ebay_au', 'bunnings']);
 
 export default function GenericMarketplaceDashboard({ marketplace, onMarketplacesChanged, onSwitchToUpload }: GenericMarketplaceDashboardProps) {
   const def = MARKETPLACE_CATALOG.find(m => m.code === marketplace.marketplace_code);
