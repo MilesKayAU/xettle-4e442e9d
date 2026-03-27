@@ -10,13 +10,10 @@
 
 import { supabase } from '@/integrations/supabase/client';
 
-// ─── Required COA Categories for Push Eligibility ────────────────────────────
-
-/**
- * Categories that MUST be mapped before a push is allowed.
- * Missing any of these blocks the push with MAPPING_REQUIRED.
- */
-const REQUIRED_PUSH_CATEGORIES = ['Sales', 'Seller Fees', 'Refunds', 'Other Fees', 'Shipping'];
+import {
+  checkPushCategoryCoverage as _checkCoverage,
+  REQUIRED_CATEGORIES,
+} from '@/services/xeroService';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
