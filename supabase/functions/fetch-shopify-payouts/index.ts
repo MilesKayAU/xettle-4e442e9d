@@ -421,6 +421,13 @@ async function syncPayoutsForUser(
         .lte("period_end", monthEnd);
       const derivedSettlementNet = Math.round(((monthSettlements || []).reduce((sum: number, s: any) => sum + (s.bank_deposit || 0), 0)) * 100) / 100;
 
+      // Determine validation overall_status based on payout status
+      const validationOverallStatus = isBeforeBoundary
+        ? "already_recorded"
+        : isScheduledOrTransit
+          ? "scheduled"
+          : "saved";
+
       if (existingVal) {
         await supabase
           .from("marketplace_validation")
@@ -429,7 +436,7 @@ async function syncPayoutsForUser(
             settlement_uploaded_at: new Date().toISOString(),
             settlement_id: String(payout.id),
             settlement_net: derivedSettlementNet,
-            overall_status: isBeforeBoundary ? "already_recorded" : "saved",
+            overall_status: validationOverallStatus,
           })
           .eq("id", existingVal.id);
       } else {
@@ -443,7 +450,7 @@ async function syncPayoutsForUser(
           settlement_uploaded_at: new Date().toISOString(),
           settlement_id: String(payout.id),
           settlement_net: derivedSettlementNet,
-          overall_status: isBeforeBoundary ? "already_recorded" : "saved",
+          overall_status: validationOverallStatus,
         } as any);
       }
 
