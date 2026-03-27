@@ -1,58 +1,65 @@
 
 
-## Woolworths Dedicated Upload UX
+## Problem Analysis
 
-### The Problem
-Currently, the "Upload" button on the Woolworths payments view sends users to the generic Smart Upload page — a completely different context. Users lose sight of which Payment IDs need files, and the Smart Upload doesn't understand the Woolworths payment structure.
+The Woolworths view shows **"Pushed to Xero"** (green badge) for settlements that were never actually pushed. Here's what's really happening:
 
-### The Design
+**Database reality for most Woolworths settlements:**
+- `status: already_recorded` — means "pre-accounting boundary" (before user started using Xettle)
+- `sync_origin: xettle` with `xero_invoice_id: null` — the system marked them as handled but never created a Xero invoice
+- `xero_pushed: true` — incorrectly set; no invoice exists
 
-Embed a Woolworths-specific upload zone directly inside `WoolworthsPaymentsView`, replacing the current "Smart Upload →" redirect. Two modes:
+Only 4 out of 14 settlements have a real `xero_invoice_id` (posted by Link My Books or another external tool, with `sync_origin: external`). The other 10 have `xero_pushed: true` but no invoice — false positives.
 
-**Mode A — Bulk upload (top of page)**
-A compact drop zone replaces the current dashed card at the bottom. Sits between the stats row and the table:
+**Should they be pushed to Xero?**
+No — these are intentionally behind the accounting boundary date. The system correctly decided not to push them. But the **labelling is wrong**. `already_recorded` should NOT show as "Pushed to Xero".
 
-```text
-┌──────────────────────────────────────────────────────┐
-│  📦 Upload Woolworths Files                          │
-│                                                      │
-│  ┌────────────────────────────────────────────────┐  │
-│  │  Drop ZIP, CSV, or PDF files here              │  │
-│  │  Xettle extracts and matches automatically     │  │
-│  │              [Browse files]                     │  │
-│  └────────────────────────────────────────────────┘  │
-│                                                      │
-│  After drop:                                         │
-│  ✅ Extracted 4 files from zip                       │
-│  ✅ CSV → matched to Payment 293603                  │
-│  ✅ BigW PDF → matched to 293603                     │
-│  ✅ EM PDF → matched to 293603                       │
-│  ✅ MyDeal PDF → matched to 293603                   │
-│  [Confirm & Process]                                 │
-└──────────────────────────────────────────────────────┘
+## Plan
+
+### 1. Fix the Woolworths view status badge logic
+
+In `WoolworthsPaymentsView.tsx`, the `allPushed` check (line 201) lumps `already_recorded` with `pushed_to_xero`. Split these into distinct visual states:
+
+- **`pushed_to_xero` / `reconciled_in_xero`** → Green "In Xero ✓"
+- **`already_recorded`** with `sync_origin: external` → Grey outline "Already in Xero (external)"
+- **`already_recorded`** with no `xero_invoice_id` → Grey "Pre-boundary — Not in Xero"
+
+Add a new `overallStatus` value: `'pre_boundary'` alongside the existing `'pushed'`.
+
+### 2. Update the group status badge renderer
+
+In `getStatusBadge()` (line 412), add:
+- `'pre_boundary'` → Grey secondary badge: "Pre-accounting boundary"
+- Keep `'pushed'` → Green badge but relabel to "In Xero ✓"
+
+### 3. Fix the group action button
+
+Line 458: When `overallStatus === 'pre_boundary'`, show "Pre-boundary" text instead of "Complete".
+
+### 4. Fix false `xero_pushed` data (migration)
+
+Run a data fix migration to correct settlements where `xero_pushed = true` but `xero_invoice_id IS NULL`:
+```sql
+UPDATE marketplace_validation
+SET xero_pushed = false
+WHERE xero_pushed = true AND xero_invoice_id IS NULL;
 ```
 
-**Mode B — Per-row upload (inline)**
-When a payment row shows ❌ for CSV or PDF, clicking the Upload button on that row opens a small inline drop zone scoped to that Payment ID only. Files dropped there are tagged to that specific payment.
+This ensures the data accurately reflects reality. Settlements that are genuinely already in Xero (via external tools) keep their `xero_pushed = true` and valid `xero_invoice_id`.
 
-### Key UX Improvements
+### 5. Update stats counts
 
-1. **Upload zone lives on the Woolworths page** — no context switch to Smart Upload
-2. **Zip extraction happens inline** with a file-by-file progress list showing what was found
-3. **Auto-matching** — extracted files are matched to Payment IDs using the CSV's `Bank Payment Ref` column and PDF filenames
-4. **Per-row upload** for targeted "just need this one PDF" scenarios
-5. **Processing feedback** stays on the same page — the table updates in real-time as settlements are created
+The "Needs Attention" counter (line 558) currently excludes `pushed`. It should also exclude `pre_boundary` since those are intentionally not actionable.
 
-### Technical Approach
+### Summary of status meanings after fix
 
-**File: `WoolworthsPaymentsView.tsx`**
+| Settlement state | Badge shown | Actionable? |
+|---|---|---|
+| `already_recorded` + no xero_invoice_id | "Pre-boundary" (grey) | No |
+| `already_recorded` + xero_invoice_id | "In Xero (external)" (outline) | No |
+| `ready_to_push` | "Ready to Push" (blue) | Yes — push button |
+| `pushed_to_xero` / `reconciled_in_xero` | "In Xero ✓" (green) | No |
+| `gap_detected` | "Gap Detected" (amber) | Yes — fix gap |
 
-1. Add a collapsible upload zone between the stats cards and the payments table
-2. Import `JSZip` and reuse the zip extraction logic from `SmartUploadFlow.tsx`
-3. Reuse existing parsers (`parseWoolworthsMarketPlusCSV`, PDF detection) — just call them directly instead of going through the full SmartUpload pipeline
-4. After processing, call `loadData()` to refresh the table — settlements appear immediately in their correct Payment ID rows
-5. Replace the bottom "Smart Upload →" card with the inline upload zone
-6. Add per-row upload: when `onSwitchToUpload` is clicked on a specific row, expand an inline file input for that payment
-
-**No new components needed** — the upload zone is embedded directly in the existing view. The existing parsers and `saveSettlement` utility handle all the backend logic.
+**Files changed:** `WoolworthsPaymentsView.tsx` + 1 data migration
 
