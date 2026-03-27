@@ -691,6 +691,15 @@ Deno.serve(async (req) => {
         // 5. Build settlement
         const { settlement, gst_mode } = buildSettlementFromPayout(payout, transactions, userId)
 
+        // Map eBay payout status to canonical payout_status
+        const canonicalPayoutStatus = mapEbayPayoutStatus(payout.payoutStatus)
+        settlement.payout_status = canonicalPayoutStatus
+
+        // For non-paid payouts, set status to 'ingested' (not 'saved') to prevent premature push
+        if (canonicalPayoutStatus !== 'paid') {
+          settlement.status = 'ingested'
+        }
+
         // 5b. Ingestion-time sign validation — catches & corrects sign inversions before DB write
         const ingestionWarnings: string[] = []
         const signChecks: Array<{ field: string; value: number; mustBeNegative: boolean }> = [
