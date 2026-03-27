@@ -687,6 +687,19 @@ async function sweepUser(adminSupabase: any, userId: string) {
             // Let the trigger compute overall_status naturally — don't force ready_to_push
             // The trigger will set settlement_needed since xero_pushed=false and reconciliation may not be matched
           }
+          // Guard: scheduled/in_transit payouts skip reconciliation — money hasn't arrived yet
+          const payoutStatus = (settlement as any).payout_status;
+          if (payoutStatus === 'scheduled' || payoutStatus === 'in_transit') {
+            record.overall_status = 'scheduled'
+            record.reconciliation_status = 'pending'
+            record.processing_state = 'processed'
+            record.processing_completed_at = new Date().toISOString()
+            await adminSupabase
+              .from('marketplace_validation')
+              .upsert(record, { onConflict: 'user_id,marketplace_code,period_label' })
+            summary.skipped = (summary.skipped || 0) + 1
+            continue
+          }
         }
 
         // Step 3: Reconciliation — always compute gap from settlement financial fields when available
