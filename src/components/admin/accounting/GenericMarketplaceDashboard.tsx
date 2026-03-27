@@ -167,7 +167,7 @@ interface SettlementRow {
  * Determine if a marketplace is CSV-only by checking connection_type.
  * Falls back to checking if the marketplace has any API connectors in the static catalog.
  */
-const API_CAPABLE_CODES = new Set(['amazon_au', 'amazon_us', 'amazon_uk', 'amazon_ca', 'shopify_payments', 'shopify_orders', 'ebay_au']);
+const API_CAPABLE_CODES = new Set(['amazon_au', 'amazon_us', 'amazon_uk', 'amazon_ca', 'shopify_payments', 'shopify_orders', 'ebay_au', 'bunnings']);
 
 export default function GenericMarketplaceDashboard({ marketplace, onMarketplacesChanged, onSwitchToUpload }: GenericMarketplaceDashboardProps) {
   const def = MARKETPLACE_CATALOG.find(m => m.code === marketplace.marketplace_code);
@@ -216,6 +216,32 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [includeGateways, setIncludeGateways] = useState(false);
   const [accountingBoundary, setAccountingBoundary] = useState<string | null>(null);
   const [validationStatusMap, setValidationStatusMap] = useState<Record<string, string>>({});
+  const [resyncingSettlementId, setResyncingSettlementId] = useState<string | null>(null);
+
+  const handleResyncViaApi = useCallback(async (settlementId: string) => {
+    setResyncingSettlementId(settlementId);
+    try {
+      const { data: resp, error: fnError } = await supabase.functions.invoke('verify-settlement', {
+        body: { settlement_id: settlementId },
+      });
+      if (fnError) {
+        toast.error('Re-sync failed', { description: fnError.message || 'Could not fetch corrected data from API' });
+        return;
+      }
+      if (resp?.corrected) {
+        toast.success('Settlement corrected via API', { description: `Updated values fetched from ${code} API` });
+      } else if (resp?.matched) {
+        toast.info('Already matched', { description: 'API data matches stored figures — no changes needed' });
+      } else {
+        toast.success('Re-sync complete', { description: resp?.message || 'Settlement verified against API' });
+      }
+      await loadSettlements();
+    } catch (err: any) {
+      toast.error('Re-sync failed', { description: err.message || 'Unexpected error' });
+    } finally {
+      setResyncingSettlementId(null);
+    }
+  }, [code, loadSettlements]);
 
   // Auto-audit Xero status once settlements are loaded (with session-level cooldown)
   const [hasAutoAudited, setHasAutoAudited] = useState(false);
@@ -1033,6 +1059,8 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                               { source: s.source || undefined, marketplace: s.marketplace, seller_fees: s.seller_fees || 0, bank_deposit: s.bank_deposit || 0, sales_principal: s.sales_principal || 0, gst_on_income: s.gst_on_income || 0, gst_on_expenses: s.gst_on_expenses || 0 },
                               gapAmt
                             );
+                            const isApiCapable = !isCsvOnly && API_CAPABLE_CODES.has(code);
+                            const isResyncing = resyncingSettlementId === s.settlement_id;
                             return (
                               <div className="px-4 pb-3 pt-2 border-t border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/10 space-y-2">
                                 <div className="flex items-start gap-2">
@@ -1046,9 +1074,26 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                                         <span className="font-medium">Likely cause:</span> {diagnosis}
                                       </p>
                                     )}
+                                    {isApiCapable && (
+                                      <p className="text-xs text-amber-700/80 dark:text-amber-400/70 mt-0.5">
+                                        This marketplace has an API connection — try <span className="font-semibold">Re-sync</span> to fetch corrected figures automatically.
+                                      </p>
+                                    )}
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2 pl-6">
+                                  {isApiCapable && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 px-3 text-xs gap-1 border-primary/40 text-primary hover:bg-primary/10"
+                                      disabled={isResyncing}
+                                      onClick={() => handleResyncViaApi(s.settlement_id)}
+                                    >
+                                      {isResyncing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                                      {isResyncing ? 'Re-syncing…' : 'Re-sync via API'}
+                                    </Button>
+                                  )}
                                   <Button
                                     size="sm"
                                     variant="outline"
