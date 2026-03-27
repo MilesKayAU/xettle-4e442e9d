@@ -2326,6 +2326,7 @@ export type Database = {
           net_ex_gst: number | null
           other_fees: number | null
           parser_version: string | null
+          payout_status: string | null
           period_end: string
           period_start: string
           posted_at: string | null
@@ -2395,6 +2396,7 @@ export type Database = {
           net_ex_gst?: number | null
           other_fees?: number | null
           parser_version?: string | null
+          payout_status?: string | null
           period_end: string
           period_start: string
           posted_at?: string | null
@@ -2464,6 +2466,7 @@ export type Database = {
           net_ex_gst?: number | null
           other_fees?: number | null
           parser_version?: string | null
+          payout_status?: string | null
           period_end?: string
           period_start?: string
           posted_at?: string | null
