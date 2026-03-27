@@ -1,0 +1,1 @@
+UPDATE settlements SET payout_status = 'paid' WHERE marketplace = 'ebay_au' AND (payout_status IS NULL OR payout_status = '');

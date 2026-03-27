@@ -131,6 +131,7 @@ export default function BookkeeperPipeline({
       blockedRes,
       validationRes,
       scheduledRes,
+      ebayScheduledRes,
       amazonOpenRes,
       awaitingRes,
       completeRes,
@@ -149,7 +150,7 @@ export default function BookkeeperPipeline({
         .from('marketplace_validation')
         .select('id, marketplace_code, period_label, period_start, period_end, settlement_id, settlement_net, overall_status, reconciliation_difference, gap_acknowledged, updated_at, bank_amount')
         .eq('user_id', userId)
-        .not('overall_status', 'in', '("archived","already_recorded","duplicate_suppressed","complete","reconciled","open_period")')
+        .not('overall_status', 'in', '("archived","already_recorded","duplicate_suppressed","complete","reconciled","open_period","on_hold","scheduled","payment_failed")')
         .or('gap_acknowledged.is.null,gap_acknowledged.eq.false,overall_status.neq.gap_detected')
         .gte('period_end', boundaryDate),
 
@@ -159,6 +160,16 @@ export default function BookkeeperPipeline({
         .select('settlement_id, marketplace, period_start, period_end, bank_deposit, payout_status, deposit_date, updated_at' as any)
         .eq('marketplace', 'shopify_payments')
         .in('payout_status', ['scheduled', 'in_transit'])
+        .gte('period_end', boundaryDate)
+        .order('period_end', { ascending: false })
+        .limit(50),
+
+      // Scheduled / In Transit: eBay payouts not yet arrived
+      supabase
+        .from('settlements')
+        .select('settlement_id, marketplace, period_start, period_end, bank_deposit, payout_status, deposit_date, updated_at' as any)
+        .eq('marketplace', 'ebay_au')
+        .in('payout_status', ['in_transit', 'on_hold', 'failed'])
         .gte('period_end', boundaryDate)
         .order('period_end', { ascending: false })
         .limit(50),
@@ -219,10 +230,11 @@ export default function BookkeeperPipeline({
       });
     });
 
-    // Collect scheduled settlement IDs for deduplication
-    const scheduledSettlementIds = new Set(
-      (scheduledRes.data ?? []).map((s: any) => String(s.settlement_id))
-    );
+    // Collect scheduled settlement IDs for deduplication (Shopify + eBay)
+    const scheduledSettlementIds = new Set([
+      ...(scheduledRes.data ?? []).map((s: any) => String(s.settlement_id)),
+      ...(ebayScheduledRes.data ?? []).map((s: any) => String(s.settlement_id)),
+    ]);
 
     // 2–4. From validation rows (exclude scheduled/in_transit settlements)
     (validationRes.data ?? []).forEach(row => {
@@ -271,6 +283,30 @@ export default function BookkeeperPipeline({
         detail: payoutStatus === 'in_transit'
           ? 'In transit to your bank'
           : 'Payment announced — not yet transferred',
+        last_activity: s.updated_at,
+        payout_status: payoutStatus,
+      });
+    });
+
+    // eBay in_transit / on_hold / failed
+    (ebayScheduledRes.data ?? []).forEach((s: any) => {
+      const payoutStatus = s.payout_status || 'in_transit';
+      const isFailedPayout = payoutStatus === 'failed';
+      pipeline.push({
+        id: `${isFailedPayout ? 'blocked' : 'scheduled'}-ebay-${s.settlement_id}`,
+        bucket: isFailedPayout ? 'blocked' : 'scheduled',
+        marketplace_code: s.marketplace,
+        marketplace_label: getMarketplaceLabel(s.marketplace),
+        period_label: '',
+        period_start: s.period_start,
+        period_end: s.period_end,
+        amount: s.bank_deposit,
+        settlement_id: s.settlement_id,
+        detail: isFailedPayout
+          ? 'eBay payout failed — check your eBay account'
+          : payoutStatus === 'on_hold'
+            ? 'Funds held by eBay — pending review'
+            : 'In transit to your bank',
         last_activity: s.updated_at,
         payout_status: payoutStatus,
       });
@@ -603,11 +639,16 @@ function PipelineRow({
             'text-[10px] h-5 px-1.5',
             item.payout_status === 'open'
               ? 'border-muted-foreground/50 text-muted-foreground'
-              : item.payout_status === 'in_transit'
-                ? 'border-blue-400 text-blue-600 dark:text-blue-400'
-                : 'border-amber-400 text-amber-600 dark:text-amber-400'
+              : item.payout_status === 'on_hold'
+                ? 'border-orange-400 text-orange-600 dark:text-orange-400'
+                : item.payout_status === 'in_transit'
+                  ? 'border-blue-400 text-blue-600 dark:text-blue-400'
+                  : 'border-amber-400 text-amber-600 dark:text-amber-400'
           )}>
-            {item.payout_status === 'open' ? 'Open Period' : item.payout_status === 'in_transit' ? 'In Transit' : 'Scheduled'}
+            {item.payout_status === 'open' ? 'Open Period'
+              : item.payout_status === 'on_hold' ? 'On Hold'
+              : item.payout_status === 'in_transit' ? 'In Transit'
+              : 'Scheduled'}
           </Badge>
         );
       case 'awaiting':

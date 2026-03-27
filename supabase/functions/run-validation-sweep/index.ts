@@ -687,10 +687,10 @@ async function sweepUser(adminSupabase: any, userId: string) {
             // Let the trigger compute overall_status naturally — don't force ready_to_push
             // The trigger will set settlement_needed since xero_pushed=false and reconciliation may not be matched
           }
-          // Guard: scheduled/in_transit/open payouts skip reconciliation — money hasn't arrived yet
+          // Guard: scheduled/in_transit/open/on_hold payouts skip reconciliation — money hasn't arrived yet
           const payoutStatus = (settlement as any).payout_status;
-          if (payoutStatus === 'scheduled' || payoutStatus === 'in_transit' || payoutStatus === 'open') {
-            record.overall_status = payoutStatus === 'open' ? 'open_period' : 'scheduled'
+          if (payoutStatus === 'scheduled' || payoutStatus === 'in_transit' || payoutStatus === 'open' || payoutStatus === 'on_hold') {
+            record.overall_status = payoutStatus === 'open' ? 'open_period' : payoutStatus === 'on_hold' ? 'on_hold' : 'scheduled'
             record.reconciliation_status = 'pending'
             record.reconciliation_difference = null
             record.processing_state = 'processed'
