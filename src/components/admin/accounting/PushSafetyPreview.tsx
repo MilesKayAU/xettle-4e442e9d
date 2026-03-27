@@ -767,7 +767,8 @@ function buildValidationChecks(
       - Math.abs(s.seller_fees || 0) - Math.abs(s.fba_fees || 0)
       - Math.abs(s.storage_fees || 0) - Math.abs(s.advertising_costs || 0)
       - Math.abs(s.other_fees || 0)
-      + (s.refunds || 0) + (s.reimbursements || 0);
+      + (s.refunds || 0) + (s.reimbursements || 0)
+      - (s.gst_on_expenses || 0);
     const reconGap = Math.abs(bankDeposit - computedNet);
     if (bankDeposit === 0 && computedNet === 0) {
       // No financial data — skip recon check
