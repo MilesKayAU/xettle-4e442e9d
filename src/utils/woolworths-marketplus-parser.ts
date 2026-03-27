@@ -333,6 +333,9 @@ export function parseWoolworthsMarketPlusCSV(csvContent: string): WoolworthsResu
         .filter(d => d && d >= '2020-01-01')
         .sort();
 
+      const saleRows = rows.filter(r => r.totalSalePrice > 0);
+      const refundRows = rows.filter(r => r.totalSalePrice < 0);
+
       groups.push({
         orderSource: source,
         marketplaceCode: resolved.code,
@@ -340,11 +343,15 @@ export function parseWoolworthsMarketPlusCSV(csvContent: string): WoolworthsResu
         contactName: resolved.contact,
         orders: rows,
         orderCount: rows.length,
-        grossSales: round2(rows.filter(r => r.totalSalePrice > 0).reduce((s, r) => s + r.totalSalePrice, 0)),
-        refunds: round2(rows.filter(r => r.totalSalePrice < 0).reduce((s, r) => s + r.totalSalePrice, 0)),
+        grossSales: round2(saleRows.reduce((s, r) => s + r.totalSalePrice, 0)),
+        refunds: round2(refundRows.reduce((s, r) => s + r.totalSalePrice, 0)),
         commission: round2(rows.reduce((s, r) => s + r.commissionFee, 0)),
         netAmount: round2(rows.reduce((s, r) => s + r.netAmount, 0)),
         gst: round2(rows.reduce((s, r) => s + r.gstOnNetAmount, 0)),
+        shipping: round2(rows.reduce((s, r) => s + r.netShippingAmount, 0)),
+        shippingGst: round2(rows.reduce((s, r) => s + r.gstOnShipping, 0)),
+        gstSales: round2(saleRows.reduce((s, r) => s + r.gstOnNetAmount, 0)),
+        gstRefunds: round2(refundRows.reduce((s, r) => s + r.gstOnNetAmount, 0)),
         periodStart: dates[0] || bankPaymentDate || '',
         periodEnd: dates[dates.length - 1] || bankPaymentDate || '',
       });
