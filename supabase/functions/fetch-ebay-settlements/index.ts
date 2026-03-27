@@ -859,13 +859,13 @@ Deno.serve(async (req) => {
         .eq('user_id', userId)
         .eq('key', 'ebay_rate_limit_until')
 
-      logger.debug(`[fetch-ebay-settlements] User ${userId}: imported=${imported}, updated=${updated}, skipped=${skipped}, total_payouts=${succeededPayouts.length}`)
+      logger.debug(`[fetch-ebay-settlements] User ${userId}: imported=${imported}, updated=${updated}, skipped=${skipped}, total_payouts=${processablePayouts.length}`)
       results.push({
         user_id: userId,
         imported,
         updated,
         skipped,
-        total_payouts: succeededPayouts.length,
+        total_payouts: processablePayouts.length,
         sync_from: syncFrom,
         sync_to: syncTo,
       })
