@@ -544,6 +544,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
             bank_deposit: summary.bankDeposit,
             reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
             status: 'ingested',
+            payout_status: 'paid',
             is_pre_boundary: !!isBeforeCutoff,
             source: 'api',
             is_split_month: splitMonth.isSplitMonth,
