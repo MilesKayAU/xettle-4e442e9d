@@ -47,10 +47,14 @@ serve(async (req) => {
         })
       }
 
+      const body = await req.json().catch(() => ({}))
       const redirectUri = 'https://xettle.app/amazon/callback'
       
-      // Generate a state token to prevent CSRF
-      const state = crypto.randomUUID()
+      // Encode CSRF token + region info into state so callback doesn't need sessionStorage
+      const csrfToken = crypto.randomUUID()
+      const marketplaceId = body.marketplace_id || ''
+      const region = body.region || ''
+      const state = `${csrfToken}:${marketplaceId}:${region}`
       
       const params = new URLSearchParams({
         application_id: 'amzn1.sp.solution.d95a6e1f-2b22-4bb1-a6de-73427cb73bd9',
