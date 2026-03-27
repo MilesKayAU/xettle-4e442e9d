@@ -288,6 +288,30 @@ export default function BookkeeperPipeline({
       });
     });
 
+    // eBay in_transit / on_hold / failed
+    (ebayScheduledRes.data ?? []).forEach((s: any) => {
+      const payoutStatus = s.payout_status || 'in_transit';
+      const isFailedPayout = payoutStatus === 'failed';
+      pipeline.push({
+        id: `${isFailedPayout ? 'blocked' : 'scheduled'}-ebay-${s.settlement_id}`,
+        bucket: isFailedPayout ? 'blocked' : 'scheduled',
+        marketplace_code: s.marketplace,
+        marketplace_label: getMarketplaceLabel(s.marketplace),
+        period_label: '',
+        period_start: s.period_start,
+        period_end: s.period_end,
+        amount: s.bank_deposit,
+        settlement_id: s.settlement_id,
+        detail: isFailedPayout
+          ? 'eBay payout failed — check your eBay account'
+          : payoutStatus === 'on_hold'
+            ? 'Funds held by eBay — pending review'
+            : 'In transit to your bank',
+        last_activity: s.updated_at,
+        payout_status: payoutStatus,
+      });
+    });
+
     // Amazon AU open periods
     (amazonOpenRes.data ?? []).forEach((row: any) => {
       pipeline.push({
