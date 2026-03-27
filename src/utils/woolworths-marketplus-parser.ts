@@ -295,6 +295,8 @@ export function parseWoolworthsMarketPlusCSV(csvContent: string): WoolworthsResu
         commissionFee:   colMap.commissionFee >= 0 ? parseAmount(fields[colMap.commissionFee] || '') : 0,
         netAmount:       parseAmount(fields[colMap.netAmount] || ''),
         gstOnNetAmount:  colMap.gstOnNetAmount >= 0 ? parseAmount(fields[colMap.gstOnNetAmount] || '') : 0,
+        netShippingAmount: colMap.netShippingAmount >= 0 ? parseAmount(fields[colMap.netShippingAmount] || '') : 0,
+        gstOnShipping:   colMap.gstOnShipping >= 0 ? parseAmount(fields[colMap.gstOnShipping] || '') : 0,
         originalOrderId: colMap.originalOrderId >= 0 ? fields[colMap.originalOrderId] || '' : '',
         invoiceRef:      colMap.invoiceRef >= 0 ? fields[colMap.invoiceRef] || '' : '',
         orderSource:     orderSource,
