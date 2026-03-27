@@ -30,6 +30,7 @@ import ChannelDetectedEmptyState from './shared/ChannelDetectedEmptyState';
 import MarketplaceUploadGuide from './shared/MarketplaceUploadGuide';
 import { isReconciliationOnly } from '@/utils/settlement-policy';
 import { isReconSafeForPush, isGapBlocking } from '@/utils/canonical-recon-status';
+import { diagnoseGapReason } from '@/utils/diagnose-gap-reason';
 
 // ── Shared architecture hooks + components ──────────────────────────────────
 import { useSettlementManager, type BaseSettlementRow } from '@/hooks/use-settlement-manager';
