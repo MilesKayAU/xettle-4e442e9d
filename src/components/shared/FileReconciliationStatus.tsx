@@ -49,6 +49,10 @@ export default function FileReconciliationStatus({ settlements, onSettlementClic
     const dbStatus = (s.reconciliation_status || '').toLowerCase();
     const reconciles = dbStatus === 'reconciled' || dbStatus === 'matched';
 
+    // Compute gap for display
+    const computedNet = sales + fees + refunds;
+    const gap = bankDeposit - computedNet;
+
     return {
       settlement_id: s.settlement_id,
       period: `${s.period_start} → ${s.period_end}`,
@@ -59,6 +63,7 @@ export default function FileReconciliationStatus({ settlements, onSettlementClic
       gstExpenses,
       bankDeposit,
       reconciles,
+      gap,
     };
   });
 
