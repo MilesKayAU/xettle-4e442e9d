@@ -91,7 +91,7 @@ serve(async (req) => {
 
     const gstInclusiveMarketplaces = [
       "shopify_payments", "everyday_market", "bigw", "woolworths_marketplus",
-      "woolworths_everyday", "woolworths_bigw"
+      "woolworths_everyday", "woolworths_bigw", "bunnings"
     ];
 
     const formulaChecks: any[] = [];
@@ -166,27 +166,55 @@ serve(async (req) => {
       .eq("user_id", userId)
       .eq("connection_status", "active");
 
-    const REQUIRED_MAPPING_CATEGORIES = ["sales_principal", "seller_fees", "refunds"];
+    // Mapping format is flat: "Category:Marketplace Display Name" → "account_code"
+    // e.g. "Sales:Amazon AU" → "200", "Seller Fees:Shopify" → "400"
+    // Also has defaults without marketplace suffix: "Sales" → "211"
+    const REQUIRED_CATEGORIES_DISPLAY = ["Sales", "Seller Fees", "Refunds"];
+    const MARKETPLACE_CODE_TO_DISPLAY: Record<string, string> = {
+      amazon_au: "Amazon AU",
+      shopify_payments: "Shopify",
+      ebay_au: "eBay AU",
+      everyday_market: "Everyday Market",
+      bigw: "BigW",
+      mydeal: "MyDeal",
+      kogan: "Kogan",
+      bunnings: "Bunnings",
+      woolworths_marketplus: "Everyday Market",
+      woolworths_everyday: "Everyday Market",
+      woolworths_bigw: "BigW",
+    };
+
     const mappingGaps: any[] = [];
     const mappingStatus: any[] = [];
 
-    let confirmedMappings: Record<string, any> = {};
+    let flatMappings: Record<string, string> = {};
     try {
       if (mappingSettings?.value) {
-        const parsed = typeof mappingSettings.value === "string"
+        flatMappings = typeof mappingSettings.value === "string"
           ? JSON.parse(mappingSettings.value)
           : mappingSettings.value;
-        confirmedMappings = parsed?.confirmed || parsed || {};
       }
     } catch {
-      confirmedMappings = {};
+      flatMappings = {};
     }
 
     for (const conn of (activeConnections || [])) {
       const mpCode = conn.marketplace_code;
-      const mpMappings = confirmedMappings[mpCode] || {};
-      const mappedCategories = Object.keys(mpMappings);
-      const missing = REQUIRED_MAPPING_CATEGORIES.filter(c => !mappedCategories.includes(c));
+      const displayName = MARKETPLACE_CODE_TO_DISPLAY[mpCode] || mpCode;
+
+      // Check for marketplace-specific mappings like "Sales:Amazon AU"
+      // or fall back to default mappings like "Sales"
+      const mappedCategories: string[] = [];
+      const missing: string[] = [];
+
+      for (const cat of REQUIRED_CATEGORIES_DISPLAY) {
+        const specificKey = `${cat}:${displayName}`;
+        if (flatMappings[specificKey] || flatMappings[cat]) {
+          mappedCategories.push(cat);
+        } else {
+          missing.push(cat);
+        }
+      }
 
       if (missing.length > 0) {
         mappingGaps.push({
