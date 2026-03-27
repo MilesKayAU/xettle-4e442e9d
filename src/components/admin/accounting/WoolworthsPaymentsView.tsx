@@ -573,7 +573,7 @@ export default function WoolworthsPaymentsView({ marketplace, onSwitchToUpload, 
     );
   };
 
-  const needsAttentionCount = activeGroups.filter(g => g.overallStatus !== 'pushed').length;
+  const needsAttentionCount = activeGroups.filter(g => !['pushed', 'pre_boundary', 'external_xero'].includes(g.overallStatus)).length;
   const readyCount = activeGroups.filter(g => g.overallStatus === 'ready_to_push').length;
   const missingCount = activeGroups.filter(g => g.overallStatus === 'missing').length;
 
