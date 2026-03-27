@@ -46,14 +46,15 @@ export function useBulkSelect({ settlements, onComplete }: UseBulkSelectOptions)
       setBulkDeleteDialogOpen(true);
       return;
     }
+    const itemsToDelete = Array.from(selected);
     setBulkDeleteDialogOpen(false);
     setBulkDeleting(true);
+    setSelected(new Set());
     let deleted = 0;
-    for (const id of selected) {
+    for (const id of itemsToDelete) {
       const result = await deleteSettlement(id);
       if (result.success) deleted++;
     }
-    setSelected(new Set());
     setBulkDeleting(false);
     toast.success(`Deleted ${deleted} settlement${deleted !== 1 ? 's' : ''}`);
     onComplete();
