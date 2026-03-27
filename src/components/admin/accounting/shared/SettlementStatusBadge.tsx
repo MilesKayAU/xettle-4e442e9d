@@ -1,6 +1,5 @@
 /**
- * SettlementStatusBadge — Consistent status badge for all marketplace dashboards.
- * Part of the BaseMarketplaceDashboard architecture pattern.
+ * SettlementStatusBadge — Consistent status badge with plain-language tooltips.
  *
  * Status Matrix (full lifecycle):
  * ready_to_push / saved / parsed  → 🟡 Amber  "Ready for Xero"
@@ -19,6 +18,7 @@
 
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { isBankMatchRequired } from '@/constants/settlement-rails';
 
 interface SettlementStatusBadgeProps {
@@ -29,132 +29,184 @@ interface SettlementStatusBadgeProps {
   marketplace?: string | null;
 }
 
+function StatusWithTooltip({ children, tooltip }: { children: React.ReactNode; tooltip: string }) {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span>{children}</span>
+        </TooltipTrigger>
+        <TooltipContent className="text-xs max-w-[220px]">
+          <p>{tooltip}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 export default function SettlementStatusBadge({ status, xeroInvoiceNumber, xeroType, xeroStatus, marketplace }: SettlementStatusBadgeProps) {
   const typeLabel = xeroType === 'bill' ? 'Bill' : 'Inv';
   const refSuffix = xeroInvoiceNumber ? ` (${typeLabel}: ${xeroInvoiceNumber})` : '';
 
   switch (status) {
-    // ─── New lifecycle statuses ─────────────────────────────────────
     case 'draft_in_xero':
       return (
-        <Badge className="bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800 text-[10px]">
-          Draft in Xero — Approve{refSuffix}
-        </Badge>
+        <StatusWithTooltip tooltip="This settlement has been pushed as a draft invoice in Xero. Log in to Xero to approve it.">
+          <Badge className="bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800 text-[10px]">
+            Draft in Xero — Approve{refSuffix}
+          </Badge>
+        </StatusWithTooltip>
       );
 
     case 'authorised_in_xero':
-      // Settlement-confirmed rails: show as complete once authorised
       if (marketplace && !isBankMatchRequired(marketplace)) {
         return (
-          <Badge className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-[10px]">
-            Posted{refSuffix} ✓
-          </Badge>
+          <StatusWithTooltip tooltip="Posted to Xero and approved. No bank matching needed for this marketplace — all done.">
+            <Badge className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-[10px]">
+              Posted{refSuffix} ✓
+            </Badge>
+          </StatusWithTooltip>
         );
       }
       return (
-        <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
-          Awaiting Reconciliation{refSuffix}
-        </Badge>
+        <StatusWithTooltip tooltip="Approved in Xero. Waiting for the bank deposit to appear so it can be reconciled against this invoice.">
+          <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
+            Awaiting Reconciliation{refSuffix}
+          </Badge>
+        </StatusWithTooltip>
       );
 
     case 'reconciled_in_xero':
       return (
-        <Badge className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-[10px]">
-          Reconciled{refSuffix} ✓
-        </Badge>
+        <StatusWithTooltip tooltip="Fully reconciled — the invoice in Xero has been matched to a bank deposit. Nothing more to do.">
+          <Badge className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-[10px]">
+            Reconciled{refSuffix} ✓
+          </Badge>
+        </StatusWithTooltip>
       );
 
-    // ─── Legacy pushed_to_xero with granular xeroStatus ────────────
     case 'synced':
     case 'pushed_to_xero': {
       const xs = (xeroStatus || '').toUpperCase();
       if (xs === 'DRAFT') {
         return (
-          <Badge className="bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800 text-[10px]">
-            Draft in Xero{refSuffix}
-          </Badge>
+          <StatusWithTooltip tooltip="Pushed as a draft. Open Xero to review and approve.">
+            <Badge className="bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800 text-[10px]">
+              Draft in Xero{refSuffix}
+            </Badge>
+          </StatusWithTooltip>
         );
       }
       if (xs === 'AUTHORISED') {
-        // Settlement-confirmed rails: treat as complete once authorised
         if (marketplace && !isBankMatchRequired(marketplace)) {
           return (
-            <Badge className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-[10px]">
-              Posted{refSuffix} ✓
-            </Badge>
+            <StatusWithTooltip tooltip="Posted and approved. No bank matching needed — complete.">
+              <Badge className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-[10px]">
+                Posted{refSuffix} ✓
+              </Badge>
+            </StatusWithTooltip>
           );
         }
         return (
-          <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
-            Awaiting Reconciliation{refSuffix}
-          </Badge>
+          <StatusWithTooltip tooltip="Approved in Xero. Waiting for the bank deposit to reconcile.">
+            <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
+              Awaiting Reconciliation{refSuffix}
+            </Badge>
+          </StatusWithTooltip>
         );
       }
       if (xs === 'PAID') {
         return (
-          <Badge className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-[10px]">
-            Reconciled{refSuffix} ✓
-          </Badge>
+          <StatusWithTooltip tooltip="Fully reconciled with a bank deposit in Xero. Complete.">
+            <Badge className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-[10px]">
+              Reconciled{refSuffix} ✓
+            </Badge>
+          </StatusWithTooltip>
         );
       }
       return (
-        <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
-          In Xero{refSuffix} ✓
-        </Badge>
+        <StatusWithTooltip tooltip="This settlement has been synced to Xero.">
+          <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
+            In Xero{refSuffix} ✓
+          </Badge>
+        </StatusWithTooltip>
       );
     }
 
     case 'synced_external':
       return (
-        <Badge variant="outline" className="border-muted-foreground/40 text-[10px]">
-          Already in Xero (legacy){refSuffix}
-        </Badge>
+        <StatusWithTooltip tooltip="This was already in Xero before Xettle — imported or created by another tool.">
+          <Badge variant="outline" className="border-muted-foreground/40 text-[10px]">
+            Already in Xero (legacy){refSuffix}
+          </Badge>
+        </StatusWithTooltip>
       );
 
     case 'push_failed':
-      return <Badge variant="destructive" className="text-[10px]">Push failed</Badge>;
+      return (
+        <StatusWithTooltip tooltip="Push to Xero failed. Check your Xero connection and retry.">
+          <Badge variant="destructive" className="text-[10px]">Push failed</Badge>
+        </StatusWithTooltip>
+      );
 
     case 'push_failed_permanent':
-      return <Badge variant="destructive" className="text-[10px]">Push failed (permanent)</Badge>;
+      return (
+        <StatusWithTooltip tooltip="Push failed permanently — this may need manual intervention. Check the settlement details.">
+          <Badge variant="destructive" className="text-[10px]">Push failed (permanent)</Badge>
+        </StatusWithTooltip>
+      );
 
     case 'ready_to_push':
       return (
-        <Badge className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-[10px]">
-          Ready for Xero
-        </Badge>
+        <StatusWithTooltip tooltip="Figures reconcile correctly. Ready to create an invoice in Xero — click Push.">
+          <Badge className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-[10px]">
+            Ready for Xero
+          </Badge>
+        </StatusWithTooltip>
       );
 
     case 'saved':
     case 'parsed':
       return (
-        <Badge className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-[10px]">
-          Ready to push
-        </Badge>
+        <StatusWithTooltip tooltip="Settlement uploaded and saved. Review the details, then push to Xero when ready.">
+          <Badge className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-[10px]">
+            Ready to push
+          </Badge>
+        </StatusWithTooltip>
       );
 
     case 'already_recorded':
       return (
-        <Badge variant="secondary" className="text-[10px] text-muted-foreground">
-          Pre-accounting boundary
-        </Badge>
+        <StatusWithTooltip tooltip="This settlement is from before your accounting boundary date — no action needed.">
+          <Badge variant="secondary" className="text-[10px] text-muted-foreground">
+            Pre-accounting boundary
+          </Badge>
+        </StatusWithTooltip>
       );
 
-    // ─── Deposit verification statuses ──────────────────────────
     case 'deposit_matched':
       return (
-        <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
-          Deposit Matched{refSuffix}
-        </Badge>
+        <StatusWithTooltip tooltip="The bank deposit has been matched to this settlement. Awaiting final verification.">
+          <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px]">
+            Deposit Matched{refSuffix}
+          </Badge>
+        </StatusWithTooltip>
       );
 
     case 'verified_payout':
       return (
-        <Badge className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-[10px]">
-          Verified{refSuffix} ✓
-        </Badge>
+        <StatusWithTooltip tooltip="Payout verified against bank statement — confirmed.">
+          <Badge className="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-[10px]">
+            Verified{refSuffix} ✓
+          </Badge>
+        </StatusWithTooltip>
       );
 
     default:
-      return <Badge variant="outline" className="text-[10px]">{status || 'Saved'}</Badge>;
+      return (
+        <StatusWithTooltip tooltip="Settlement saved — review and push when ready.">
+          <Badge variant="outline" className="text-[10px]">{status || 'Saved'}</Badge>
+        </StatusWithTooltip>
+      );
   }
 }

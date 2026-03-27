@@ -27,7 +27,7 @@ import { Label } from '@/components/ui/label';
 
 import MarketplaceAlertsBanner from '@/components/MarketplaceAlertsBanner';
 import ChannelDetectedEmptyState from './shared/ChannelDetectedEmptyState';
-import EbayUploadGuide from './EbayUploadGuide';
+import MarketplaceUploadGuide from './shared/MarketplaceUploadGuide';
 import { isReconciliationOnly } from '@/utils/settlement-policy';
 import { isReconSafeForPush, isGapBlocking } from '@/utils/canonical-recon-status';
 
@@ -43,6 +43,91 @@ import BulkDeleteDialog from './shared/BulkDeleteDialog';
 import GapDetector, { hasSettlementGap } from './shared/GapDetector';
 import TablePaginationBar, { DEFAULT_PAGE_SIZE } from '@/components/shared/TablePaginationBar';
 
+/** Collapsible transaction list — shows grouped summary, full table behind toggle */
+function TransactionDrilldown({ lines, linesTotal, salesTotal, feesTotal, refundsTotal, uniqueOrders }: {
+  lines: any[]; linesTotal: number; salesTotal: number; feesTotal: number; refundsTotal: number; uniqueOrders: number;
+}) {
+  const [showAll, setShowAll] = React.useState(false);
+  const feeTypes = new Set(lines.filter((l: any) => (l.amount || 0) < 0 && !l.transaction_type?.toLowerCase().includes('refund')).map((l: any) => l.transaction_type || 'Fee'));
+  const refundCount = lines.filter((l: any) => l.transaction_type?.toLowerCase().includes('refund')).length;
+
+  return (
+    <div className="space-y-2">
+      {/* Grouped summary */}
+      <div className="rounded-md border border-border bg-background px-3 py-2 space-y-1">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Orders</span>
+          <span className="font-medium text-foreground">{uniqueOrders} items — {formatAUD(salesTotal)}</span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">Fees</span>
+          <span className="font-medium text-destructive">{feeTypes.size} type{feeTypes.size !== 1 ? 's' : ''} — −{formatAUD(feesTotal)}</span>
+        </div>
+        {refundsTotal > 0 && (
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Refunds</span>
+            <span className="font-medium text-orange-600 dark:text-orange-400">{refundCount} item{refundCount !== 1 ? 's' : ''} — −{formatAUD(refundsTotal)}</span>
+          </div>
+        )}
+        <div className="border-t border-border pt-1 flex items-center justify-between text-xs font-bold">
+          <span>Net</span>
+          <span>{formatAUD(linesTotal)}</span>
+        </div>
+      </div>
+
+      {/* Toggle full transaction list */}
+      <button
+        onClick={() => setShowAll(!showAll)}
+        className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+      >
+        {showAll ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        {showAll ? 'Hide' : 'Show'} all {lines.length} transactions
+      </button>
+
+      {showAll && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                <th className="text-left py-1 pr-2">Order ID</th>
+                <th className="text-left py-1 pr-2">SKU</th>
+                <th className="text-left py-1 pr-2">Type</th>
+                <th className="text-left py-1 pr-2">Description</th>
+                <th className="text-right py-1">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((line: any, lIdx: number) => {
+                const isRefund = line.transaction_type?.toLowerCase().includes('refund');
+                const isFee = (line.amount || 0) < 0 && !isRefund;
+                return (
+                  <tr
+                    key={lIdx}
+                    className={`border-t border-border/50 ${
+                      isRefund ? 'text-orange-600 dark:text-orange-400' :
+                      isFee ? 'text-destructive' :
+                      (line.amount || 0) > 0 ? 'text-emerald-600 dark:text-emerald-400' : ''
+                    }`}
+                  >
+                    <td className="py-1 pr-2 font-mono">{line.order_id || '—'}</td>
+                    <td className="py-1 pr-2">{line.sku || '—'}</td>
+                    <td className="py-1 pr-2">{line.transaction_type || '—'}</td>
+                    <td className="py-1 pr-2 max-w-[200px] truncate">{line.amount_description || '—'}</td>
+                    <td className="py-1 text-right font-mono font-medium">{formatAUD(line.amount || 0)}</td>
+                  </tr>
+                );
+              })}
+              <tr className="border-t-2 border-border font-semibold">
+                <td colSpan={4} className="py-1.5 pr-2">Total ({lines.length} lines)</td>
+                <td className="py-1.5 text-right font-mono">{formatAUD(linesTotal)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
 interface GenericMarketplaceDashboardProps {
   marketplace: UserMarketplace;
   onMarketplacesChanged?: () => void;
@@ -357,9 +442,36 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
       </div>
 
 
-      <Separator />
+      {/* Requirements banner — shown for new users or when few settlements */}
+      {!isApiConnected && settlements.length < 3 && (
+        <Card className="border border-primary/20 bg-primary/5">
+          <CardContent className="py-3 px-4 flex items-center gap-3 flex-wrap">
+            <span className="text-sm">📋</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground">
+                {marketplaceName} requires: {(() => {
+                  const guides: Record<string, string> = {
+                    kogan: 'CSV (payout report) + PDF (remittance advice)',
+                    amazon_au: 'TSV or CSV (settlement report)',
+                    ebay_au: 'CSV (transaction report)',
+                    bunnings: 'PDF (billing cycle summary)',
+                    shopify_payments: 'CSV (payout export)',
+                    woolworths_marketplus: 'CSV (MarketPlus report)',
+                  };
+                  return guides[code] || 'CSV or PDF settlement file';
+                })()}
+              </p>
+            </div>
+            {onSwitchToUpload && (
+              <Button size="sm" variant="outline" className="gap-1.5 text-xs shrink-0" onClick={onSwitchToUpload}>
+                Upload <ArrowRight className="h-3 w-3" />
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Reconciliation Status — moved above settlement list */}
+      <Separator />
       <div className="space-y-3">
         <h4 className="text-base font-semibold text-foreground flex items-center gap-2">
           <Scale className="h-4 w-4 text-primary" />
@@ -1066,49 +1178,15 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                                       </div>
                                     )}
 
-                                    {/* Transaction table */}
-                                    <div className="overflow-x-auto">
-                                      <table className="w-full text-xs">
-                                        <thead>
-                                          <tr className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                                            <th className="text-left py-1 pr-2">Order ID</th>
-                                            <th className="text-left py-1 pr-2">SKU</th>
-                                            <th className="text-left py-1 pr-2">Type</th>
-                                            <th className="text-left py-1 pr-2">Description</th>
-                                            <th className="text-right py-1">Amount</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {lines.map((line: any, lIdx: number) => {
-                                            const isRefund = line.transaction_type?.toLowerCase().includes('refund');
-                                            const isFee = (line.amount || 0) < 0 && !isRefund;
-                                            return (
-                                              <tr
-                                                key={lIdx}
-                                                className={`border-t border-border/50 ${
-                                                  isRefund ? 'text-orange-600 dark:text-orange-400' :
-                                                  isFee ? 'text-destructive' :
-                                                  (line.amount || 0) > 0 ? 'text-emerald-600 dark:text-emerald-400' :
-                                                  ''
-                                                }`}
-                                              >
-                                                <td className="py-1 pr-2 font-mono">{line.order_id || '—'}</td>
-                                                <td className="py-1 pr-2">{line.sku || '—'}</td>
-                                                <td className="py-1 pr-2">{line.transaction_type || '—'}</td>
-                                                <td className="py-1 pr-2 max-w-[200px] truncate">{line.amount_description || '—'}</td>
-                                                <td className="py-1 text-right font-mono font-medium">{formatAUD(line.amount || 0)}</td>
-                                              </tr>
-                                            );
-                                          })}
-                                          <tr className="border-t-2 border-border font-semibold">
-                                            <td colSpan={4} className="py-1.5 pr-2">Total ({lines.length} lines)</td>
-                                            <td className="py-1.5 text-right font-mono">
-                                              {formatAUD(linesTotal)}
-                                            </td>
-                                          </tr>
-                                        </tbody>
-                                      </table>
-                                    </div>
+                                    {/* Transaction table — collapsed by default, summary shown */}
+                                    <TransactionDrilldown
+                                      lines={lines}
+                                      linesTotal={linesTotal}
+                                      salesTotal={salesTotal}
+                                      feesTotal={feesTotal}
+                                      refundsTotal={refundsTotal}
+                                      uniqueOrders={uniqueOrders}
+                                    />
                                   </div>
                                 );
                               })()}
@@ -1132,8 +1210,12 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
         )}
       </div>
 
-      {/* eBay upload guide */}
-      {code === 'ebay_au' && <EbayUploadGuide />}
+      {/* Marketplace upload guide — unified for all marketplaces */}
+      <MarketplaceUploadGuide
+        marketplaceCode={code}
+        marketplaceName={marketplaceName}
+        defaultCollapsed={settlements.length >= 3}
+      />
 
       {/* Upload prompt — below data, not blocking view */}
       {onSwitchToUpload && (
