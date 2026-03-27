@@ -70,69 +70,107 @@ async function syncPayoutsForUser(
     dateMin = boundarySetting.value;
   }
 
-  // ─── Fetch paid payouts from Shopify ──────────────────────────────
+  // ─── Fetch payouts from Shopify (paid + scheduled + in_transit) ─────
   const allPayouts: ShopifyPayout[] = [];
-  let nextPageUrl: string | undefined;
-  let page = 0;
-  const MAX_PAGES = 10;
 
-  const buildInitialUrl = () => {
-    const params = new URLSearchParams({ status: "paid" });
-    // Smart sync window: use sync_from if provided, otherwise use boundary date
-    // This prevents downloading hundreds of historical payouts on first connect
-    if (syncFromParam) {
-      params.set("date_min", syncFromParam);
-      console.log(`[fetch-shopify-payouts] Using sync_from filter: date_min=${syncFromParam}`);
-    } else if (dateMin) {
-      params.set("date_min", dateMin);
-      console.log(`[fetch-shopify-payouts] Using boundary date filter: date_min=${dateMin}`);
-    }
-    return buildShopifyUrl(shopDomain, 'shopify_payments/payouts', params);
-  };
+  const statusesToFetch = ['paid', 'scheduled', 'in_transit'];
 
-  let url: string = buildInitialUrl();
+  for (const payoutStatus of statusesToFetch) {
+    let nextPageUrl: string | undefined;
+    let page = 0;
+    const MAX_PAGES = 10;
 
-  do {
-    const res = await fetch(url, {
-      headers: getShopifyHeaders(accessToken),
-    });
+    const buildInitialUrl = () => {
+      const params = new URLSearchParams({ status: payoutStatus });
+      if (syncFromParam) {
+        params.set("date_min", syncFromParam);
+        console.log(`[fetch-shopify-payouts] Using sync_from filter: date_min=${syncFromParam} status=${payoutStatus}`);
+      } else if (dateMin) {
+        params.set("date_min", dateMin);
+        console.log(`[fetch-shopify-payouts] Using boundary date filter: date_min=${dateMin} status=${payoutStatus}`);
+      }
+      return buildShopifyUrl(shopDomain, 'shopify_payments/payouts', params);
+    };
 
-    if (res.status === 401) {
-      return { synced: 0, skipped: 0, errors: ["Shopify token invalid or expired"] };
-    }
-    if (res.status === 429) {
-      return { synced: 0, skipped: 0, errors: ["Shopify rate limit exceeded"] };
-    }
-    if (!res.ok) {
-      const body = await res.text();
-      return { synced: 0, skipped: 0, errors: [`Shopify API error ${res.status}: ${body}`] };
-    }
+    let url: string = buildInitialUrl();
 
-    const data = await res.json();
-    allPayouts.push(...(data.payouts || []));
+    do {
+      const res = await fetch(url, {
+        headers: getShopifyHeaders(accessToken),
+      });
 
-    nextPageUrl = undefined;
-    const linkHeader = res.headers.get("Link");
-    if (linkHeader) {
-      const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
-      if (nextMatch) nextPageUrl = nextMatch[1];
-    }
+      if (res.status === 401) {
+        return { synced: 0, skipped: 0, errors: ["Shopify token invalid or expired"] };
+      }
+      if (res.status === 429) {
+        return { synced: 0, skipped: 0, errors: ["Shopify rate limit exceeded"] };
+      }
+      if (!res.ok) {
+        const body = await res.text();
+        errors.push(`Shopify API error ${res.status} for status=${payoutStatus}: ${body}`);
+        break;
+      }
 
-    if (nextPageUrl) url = nextPageUrl;
-    page++;
-  } while (nextPageUrl && page < MAX_PAGES);
+      const data = await res.json();
+      allPayouts.push(...(data.payouts || []));
+
+      nextPageUrl = undefined;
+      const linkHeader = res.headers.get("Link");
+      if (linkHeader) {
+        const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+        if (nextMatch) nextPageUrl = nextMatch[1];
+      }
+
+      if (nextPageUrl) url = nextPageUrl;
+      page++;
+    } while (nextPageUrl && page < MAX_PAGES);
+
+    await sleep(RATE_LIMIT_DELAY_MS);
+  }
 
   // ─── Dedup: filter out already-imported payouts ────────────────────
   // Check by exact settlement_id match (numeric payout ID)
   const payoutIds = allPayouts.map((p) => String(p.id));
   const { data: existingSettlements } = await supabase
     .from("settlements")
-    .select("settlement_id, bank_deposit, period_end")
+    .select("settlement_id, bank_deposit, period_end, payout_status")
     .eq("user_id", userId)
     .eq("marketplace", "shopify_payments")
     .in("settlement_id", payoutIds);
 
-  const existingIds = new Set((existingSettlements || []).map((e: any) => e.settlement_id));
+  const existingMap = new Map((existingSettlements || []).map((e: any) => [e.settlement_id, e]));
+  const existingIds = new Set(existingMap.keys());
+
+  // ─── Auto-promote: detect scheduled/in_transit → paid transitions ──
+  for (const payout of allPayouts) {
+    const numericId = String(payout.id);
+    const existing = existingMap.get(numericId);
+    if (!existing) continue;
+    const oldStatus = existing.payout_status || 'paid';
+    const newStatus = payout.status;
+    if ((oldStatus === 'scheduled' || oldStatus === 'in_transit') && newStatus === 'paid') {
+      console.log(`[fetch-shopify-payouts] Auto-promoting payout ${numericId}: ${oldStatus} → paid`);
+      const isBeforeBoundary = dateMin && payout.date < dateMin;
+      await supabase.from("settlements").update({
+        payout_status: 'paid',
+        status: isBeforeBoundary ? 'ingested' : 'ready_to_push',
+      } as any).eq("settlement_id", numericId).eq("user_id", userId).eq("marketplace", "shopify_payments");
+      // Log promotion event
+      await supabase.from("system_events").insert({
+        user_id: userId,
+        event_type: "shopify_payout_arrived",
+        marketplace_code: "shopify_payments",
+        settlement_id: numericId,
+        severity: "info",
+        details: { old_status: oldStatus, new_status: 'paid', amount: parseFloat(payout.amount) || 0 },
+      } as any);
+    } else if (oldStatus !== newStatus && (newStatus === 'failed' || newStatus === 'cancelled')) {
+      // Handle failed/cancelled transitions
+      await supabase.from("settlements").update({
+        payout_status: newStatus,
+      } as any).eq("settlement_id", numericId).eq("user_id", userId).eq("marketplace", "shopify_payments");
+    }
+  }
 
   // Also check alias registry for cross-format matches (bank_ref → numeric ID)
   const { data: aliasMatches } = await supabase
@@ -278,9 +316,11 @@ async function syncPayoutsForUser(
       const feesExGst = Math.abs(totalFees) - gstOnExpenses;
       const netExGst = netPayout - gstOnIncome + gstOnExpenses;
 
-      // Shopify payouts arrive fully reconciled — promote immediately unless pre-boundary
+      // Shopify payouts: only 'paid' payouts are ready to push
+      // scheduled/in_transit stay as 'ingested' until they arrive
       const isBeforeBoundary = dateMin && payoutDate < dateMin;
-      const settlementStatus = isBeforeBoundary ? "ingested" : "ready_to_push";
+      const isScheduledOrTransit = payout.status === 'scheduled' || payout.status === 'in_transit';
+      const settlementStatus = isBeforeBoundary ? "ingested" : isScheduledOrTransit ? "ingested" : "ready_to_push";
 
       // ─── Insert settlement (ON CONFLICT DO NOTHING) ─────────
       // SIGN CONVENTION: fees/expenses stored NEGATIVE per canonical posting rules
@@ -291,6 +331,7 @@ async function syncPayoutsForUser(
         source: "api",
         source_reference: (payout as any).bank_reference || null,
         status: settlementStatus,
+        payout_status: payout.status || 'paid',
         is_pre_boundary: !!isBeforeBoundary,
         period_start: payoutDate,
         period_end: payoutDate,

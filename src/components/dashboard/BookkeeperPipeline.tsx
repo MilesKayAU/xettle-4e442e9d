@@ -32,7 +32,7 @@ import type { MissingSettlement } from '@/components/dashboard/ActionCentre';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
-type BucketType = 'blocked' | 'upload_needed' | 'gaps' | 'ready' | 'awaiting' | 'complete';
+type BucketType = 'blocked' | 'scheduled' | 'upload_needed' | 'gaps' | 'ready' | 'awaiting' | 'complete';
 
 interface PipelineItem {
   id: string;
@@ -46,6 +46,7 @@ interface PipelineItem {
   settlement_id: string | null;
   detail?: string;
   last_activity: string | null;
+  payout_status?: string;
 }
 
 interface BookkeeperPipelineProps {
@@ -75,6 +76,7 @@ function getUploadGuidance(marketplaceCode: string): string | undefined {
 
 const BUCKET_CONFIG: Record<BucketType, { emoji: string; label: string; colorClass: string; dotClass: string }> = {
   blocked:       { emoji: '🔴', label: 'Blocked',              colorClass: 'text-destructive',        dotClass: 'bg-destructive' },
+  scheduled:     { emoji: '🕐', label: 'Scheduled / In Transit', colorClass: 'text-amber-600 dark:text-amber-400', dotClass: 'bg-amber-500' },
   upload_needed: { emoji: '🟡', label: 'Upload Needed',        colorClass: 'text-amber-600 dark:text-amber-400', dotClass: 'bg-amber-500' },
   gaps:          { emoji: '⚠️', label: 'Gaps / Mismatches',     colorClass: 'text-amber-600 dark:text-amber-400', dotClass: 'bg-amber-500' },
   ready:         { emoji: '🔵', label: 'Ready to Push to Xero', colorClass: 'text-primary',            dotClass: 'bg-primary' },
@@ -128,6 +130,7 @@ export default function BookkeeperPipeline({
     const [
       blockedRes,
       validationRes,
+      scheduledRes,
       awaitingRes,
       completeRes,
       syncTime,
@@ -148,6 +151,16 @@ export default function BookkeeperPipeline({
         .not('overall_status', 'in', '("archived","already_recorded","duplicate_suppressed","complete","reconciled")')
         .or('gap_acknowledged.is.null,gap_acknowledged.eq.false,overall_status.neq.gap_detected')
         .gte('period_end', boundaryDate),
+
+      // Scheduled / In Transit: Shopify payouts not yet arrived
+      supabase
+        .from('settlements')
+        .select('settlement_id, marketplace, period_start, period_end, bank_deposit, payout_status, deposit_date, updated_at' as any)
+        .eq('marketplace', 'shopify_payments')
+        .in('payout_status', ['scheduled', 'in_transit'])
+        .gte('period_end', boundaryDate)
+        .order('period_end', { ascending: false })
+        .limit(50),
 
       // Awaiting: pushed but not paid
       supabase
@@ -220,6 +233,28 @@ export default function BookkeeperPipeline({
         settlement_id: row.settlement_id,
         detail: bucket === 'gaps' ? `${formatAUD(Math.abs(row.reconciliation_difference ?? 0))} gap` : undefined,
         last_activity: row.updated_at,
+      });
+    });
+
+    // Scheduled / In Transit
+    (scheduledRes.data ?? []).forEach((s: any) => {
+      const payoutStatus = s.payout_status || 'scheduled';
+      const statusLabel = payoutStatus === 'in_transit' ? 'In Transit' : 'Scheduled';
+      const depositDate = s.deposit_date;
+      const arrivalHint = depositDate ? ` — arrives ~${format(new Date(depositDate), 'd MMM')}` : '';
+      pipeline.push({
+        id: `scheduled-${s.settlement_id}`,
+        bucket: 'scheduled',
+        marketplace_code: s.marketplace,
+        marketplace_label: getMarketplaceLabel(s.marketplace),
+        period_label: '',
+        period_start: s.period_start,
+        period_end: s.period_end,
+        amount: s.bank_deposit,
+        settlement_id: s.settlement_id,
+        detail: `${statusLabel}${arrivalHint}`,
+        last_activity: s.updated_at,
+        payout_status: payoutStatus,
       });
     });
 
@@ -303,7 +338,7 @@ export default function BookkeeperPipeline({
 
   // ─── Grouping ───────────────────────────────────────────────────
 
-  const bucketOrder: BucketType[] = ['blocked', 'upload_needed', 'gaps', 'ready', 'awaiting', 'complete'];
+  const bucketOrder: BucketType[] = ['blocked', 'scheduled', 'upload_needed', 'gaps', 'ready', 'awaiting', 'complete'];
   const grouped = bucketOrder.reduce((acc, bucket) => {
     acc[bucket] = items.filter(i => i.bucket === bucket);
     return acc;
@@ -520,6 +555,17 @@ function PipelineRow({
           <Button size="sm" className="h-7 text-xs gap-1" onClick={() => onPush(item)}>
             <Send className="h-3 w-3" /> Push
           </Button>
+        );
+      case 'scheduled':
+        return (
+          <Badge variant="outline" className={cn(
+            'text-[10px] h-5 px-1.5',
+            item.payout_status === 'in_transit'
+              ? 'border-blue-400 text-blue-600 dark:text-blue-400'
+              : 'border-amber-400 text-amber-600 dark:text-amber-400'
+          )}>
+            {item.payout_status === 'in_transit' ? 'In Transit' : 'Scheduled'}
+          </Badge>
         );
       case 'awaiting':
         return (
