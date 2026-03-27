@@ -198,12 +198,23 @@ export default function WoolworthsPaymentsView({ marketplace, onSwitchToUpload, 
       const totalAmount = setts.reduce((sum, s) => sum + (s.bank_deposit || 0), 0);
       const hasCsv = setts.length > 0;
       const hasPdf = false;
-      const allPushed = setts.every(s => ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified', 'already_recorded'].includes(s.status || ''));
+      const allXeroPushed = setts.every(s => ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(s.status || ''));
+      const allAlreadyRecorded = setts.every(s => s.status === 'already_recorded');
       const anyGap = setts.some(s => s.status === 'gap_detected' || s.status === 'push_failed');
 
       let overallStatus: PaymentGroup['overallStatus'] = 'ready_to_push';
-      if (allPushed) overallStatus = 'pushed';
-      else if (anyGap) overallStatus = 'gap_detected';
+      if (allXeroPushed) {
+        overallStatus = 'pushed';
+      } else if (allAlreadyRecorded) {
+        // Distinguish: has a real Xero invoice (external tool) vs pre-boundary (no invoice)
+        const anyHasXeroId = setts.some(s => s.xero_invoice_number || s.xero_journal_id);
+        overallStatus = anyHasXeroId ? 'external_xero' : 'pre_boundary';
+      } else if (setts.every(s => ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified', 'already_recorded'].includes(s.status || ''))) {
+        // Mixed: some pushed, some already_recorded
+        overallStatus = 'pushed';
+      } else if (anyGap) {
+        overallStatus = 'gap_detected';
+      }
 
       const paidDate = setts[0]?.period_end || ep?.paid_date || null;
 
