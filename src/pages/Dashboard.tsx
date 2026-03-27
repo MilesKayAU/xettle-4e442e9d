@@ -1223,6 +1223,8 @@ export default function Dashboard() {
                 <Suspense fallback={<LoadingSpinner size="lg" text="Loading..." />}>
                   <ShopifyOrdersDashboard key={selectedMarketplace} onMarketplacesChanged={loadMarketplaces} />
                 </Suspense>
+              ) : selectedUserMarketplace && ['bigw', 'everyday_market', 'mydeal', 'woolworths_marketplus'].includes(selectedUserMarketplace.marketplace_code) ? (
+                <WoolworthsPaymentsView key={selectedMarketplace} marketplace={selectedUserMarketplace} onMarketplacesChanged={loadMarketplaces} onSwitchToUpload={() => setShowUploadSheet(true)} />
               ) : selectedUserMarketplace ? (
                 <GenericMarketplaceDashboard key={selectedMarketplace} marketplace={selectedUserMarketplace} onMarketplacesChanged={loadMarketplaces} onSwitchToUpload={() => setShowUploadSheet(true)} />
               ) : null}
