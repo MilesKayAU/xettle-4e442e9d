@@ -236,6 +236,28 @@ export default function BookkeeperPipeline({
       });
     });
 
+    // Scheduled / In Transit
+    (scheduledRes.data ?? []).forEach((s: any) => {
+      const payoutStatus = s.payout_status || 'scheduled';
+      const statusLabel = payoutStatus === 'in_transit' ? 'In Transit' : 'Scheduled';
+      const depositDate = s.deposit_date;
+      const arrivalHint = depositDate ? ` — arrives ~${format(new Date(depositDate), 'd MMM')}` : '';
+      pipeline.push({
+        id: `scheduled-${s.settlement_id}`,
+        bucket: 'scheduled',
+        marketplace_code: s.marketplace,
+        marketplace_label: getMarketplaceLabel(s.marketplace),
+        period_label: '',
+        period_start: s.period_start,
+        period_end: s.period_end,
+        amount: s.bank_deposit,
+        settlement_id: s.settlement_id,
+        detail: `${statusLabel}${arrivalHint}`,
+        last_activity: s.updated_at,
+        payout_status: payoutStatus,
+      });
+    });
+
     // 5. Awaiting
     (awaitingRes.data ?? []).forEach(s => {
       pipeline.push({
