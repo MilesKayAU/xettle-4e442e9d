@@ -6,6 +6,7 @@ import { useAdminAuth } from '@/hooks/use-admin-auth';
 import SetupWizard from '@/components/onboarding/SetupWizard';
 import AccountingDashboard from '@/components/admin/accounting/AccountingDashboard';
 import GenericMarketplaceDashboard from '@/components/admin/accounting/GenericMarketplaceDashboard';
+import WoolworthsPaymentsView from '@/components/admin/accounting/WoolworthsPaymentsView';
 import MarketplaceSwitcher, { type UserMarketplace } from '@/components/admin/accounting/MarketplaceSwitcher';
 import { provisionAllMarketplaceConnections } from '@/utils/marketplace-token-map';
 import { ACTIVE_CONNECTION_STATUSES, isApiConnectionType } from '@/constants/connection-status';
