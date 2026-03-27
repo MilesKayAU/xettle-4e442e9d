@@ -46,6 +46,7 @@ interface PipelineItem {
   settlement_id: string | null;
   detail?: string;
   last_activity: string | null;
+  payout_status?: string;
 }
 
 interface BookkeeperPipelineProps {
