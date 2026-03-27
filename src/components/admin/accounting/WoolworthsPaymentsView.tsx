@@ -473,6 +473,9 @@ export default function WoolworthsPaymentsView({ marketplace, onSwitchToUpload, 
     if (group.overallStatus === 'pushed') {
       return <span className="text-xs text-muted-foreground">Complete</span>;
     }
+    if (group.overallStatus === 'pre_boundary' || group.overallStatus === 'external_xero') {
+      return <span className="text-xs text-muted-foreground">{group.overallStatus === 'pre_boundary' ? 'Pre-boundary' : 'External'}</span>;
+    }
     return null;
   }
 
