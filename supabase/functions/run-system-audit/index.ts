@@ -110,7 +110,7 @@ serve(async (req) => {
       const stg = Math.abs(Number(s.storage_fees) || 0);
 
       const includeGst = gstInclusiveMarketplaces.includes(s.marketplace || "");
-      const calculated = sp + ss + (includeGst ? gi : 0) + rb - sf - of_ - rf - ac - fba - stg - ge;
+      const calculated = sp + ss + (includeGst ? gi - ge : 0) + rb - sf - of_ - rf - ac - fba - stg;
       const diff = Math.abs(calculated - bd);
 
       if (diff > 1.00) {
