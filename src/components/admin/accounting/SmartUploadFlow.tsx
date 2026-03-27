@@ -2146,7 +2146,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                     Drop files here or click to upload
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Xettle auto-detects, previews settlements, and prepares for Xero
+                    CSV, PDF, XLSX, or ZIP — Xettle auto-detects and previews settlements
                   </p>
                 </div>
                 {!hasFiles && (
