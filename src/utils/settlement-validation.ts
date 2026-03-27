@@ -110,7 +110,7 @@ export function validateAndNormaliseSettlement(
   // ── Rule 6: Computed net vs bank_deposit variance check ──
   // Uses the canonical reconciliation formula from the service layer
   if (s.bank_deposit !== 0 && s.bank_deposit != null) {
-    const { computeReconciliation } = await import('@/services/reconciliation');
+    const recon = computeReconciliation(s);
     const recon = computeReconciliation(s);
     const variance = recon.absGap;
     const variancePct = Math.abs(variance / s.bank_deposit);
