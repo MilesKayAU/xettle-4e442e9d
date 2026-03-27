@@ -467,16 +467,37 @@ function buildWoolworthsSettlements(
   const divisor = 1 + taxRate;
 
   return groups.map(g => {
-    // Sales and refunds are GST-inclusive in the CSV
-    const grossSalesExGst = round2(g.grossSales / divisor);
-    const gstOnSales = round2(g.grossSales - grossSalesExGst);
+    // ─── FIX: Use ACTUAL GST from CSV columns, not /1.1 ────────────────
+    // Some items are GST-free so dividing by 1.1 overcounts GST.
+    // g.gstSales = sum of "GST on Net Amount" for sale rows (actual GST)
+    // g.gstRefunds = sum of "GST on Net Amount" for refund rows
+    // ────────────────────────────────────────────────────────────────────
 
-    const refundsExGst = round2(g.refunds / divisor);
-    const gstOnRefunds = round2(g.refunds - refundsExGst);
+    // Sales: use actual GST from CSV if available, else fall back to /1.1
+    const hasActualGst = g.gstSales !== 0 || g.gstRefunds !== 0;
+    const gstOnSales = hasActualGst
+      ? round2(Math.abs(g.gstSales))
+      : round2(g.grossSales - round2(g.grossSales / divisor));
+    const grossSalesExGst = round2(g.grossSales - gstOnSales);
 
-    // Commission is GST-inclusive
-    const commissionExGst = round2(g.commission / divisor);
-    const gstOnCommission = round2(g.commission - commissionExGst);
+    const gstOnRefunds = hasActualGst
+      ? round2(g.gstRefunds) // negative for refunds
+      : round2(g.refunds - round2(g.refunds / divisor));
+    const refundsExGst = round2(g.refunds - gstOnRefunds);
+
+    // Commission: use actual GST from fee rows in the CSV GST column
+    // Commission fee rows have gstOnNetAmount too, but they're mixed into gstSales/gstRefunds
+    // For fees, derive from the total: total GST = gstSales + gstRefunds + gstOnFees
+    // So gstOnFees = totalGst - gstSales - gstRefunds
+    const totalGstFromCsv = g.gst; // sum of all rows' GST on Net Amount
+    const gstOnCommission = hasActualGst
+      ? round2(totalGstFromCsv - g.gstSales - g.gstRefunds)
+      : round2(g.commission - round2(g.commission / divisor));
+    const commissionExGst = round2(g.commission - gstOnCommission);
+
+    // ─── Shipping (NEW) ────────────────────────────────────────────────
+    const shippingExGst = round2(g.shipping);       // Net Shipping Amount (ex-GST)
+    const shippingGst = round2(g.shippingGst);       // GST on Shipping
 
     // ─── CRITICAL: Woolworths pays Net Amount ONLY ──────────────────────
     // The bank deposit equals the sum of the "Net Amount" column.
@@ -497,7 +518,7 @@ function buildWoolworthsSettlements(
       period_start: g.periodStart,
       period_end: g.periodEnd,
       sales_ex_gst: grossSalesExGst,
-      gst_on_sales: round2(gstOnSales + gstOnRefunds),
+      gst_on_sales: round2(gstOnSales + Math.abs(gstOnRefunds) * (gstOnRefunds < 0 ? 1 : -1) + shippingGst),
       fees_ex_gst: -Math.abs(commissionExGst),
       gst_on_fees: Math.abs(gstOnCommission),
       net_payout: bankDeposit,
@@ -518,6 +539,8 @@ function buildWoolworthsSettlements(
         commissionInclGst: g.commission,
         commissionExGst,
         gstOnCommission,
+        shippingExGst,
+        shippingGst,
         netAmount: g.netAmount,
         gstOnNet: g.gst,
         clearingAmount,
