@@ -387,7 +387,7 @@ async function sweepUser(adminSupabase: any, userId: string) {
   // Boundary only determines what gets pushed to Xero.
     const { data: settlements } = await adminSupabase
     .from('settlements')
-    .select('settlement_id, marketplace, period_start, period_end, bank_deposit, status, reconciliation_status, xero_journal_id, xero_status, bank_verified, bank_verified_amount, created_at, source, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, gst_on_income, payout_status')
+    .select('settlement_id, marketplace, period_start, period_end, bank_deposit, status, reconciliation_status, xero_journal_id, xero_status, bank_verified, bank_verified_amount, created_at, source, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, gst_on_income, gst_on_expenses, payout_status')
     .eq('user_id', userId)
 
   const { data: reconChecks } = await adminSupabase
@@ -727,7 +727,7 @@ async function sweepUser(adminSupabase: any, userId: string) {
           // Shopify and Everyday Market bank deposits are GST-inclusive,
           // but financial fields are stored ex-GST. Include gst_on_income
           // in the formula so computed net matches the GST-inclusive deposit.
-          const includeGstInFormula = ['shopify_payments', 'everyday_market'].includes(settlement.marketplace)
+          const includeGstInFormula = ['shopify_payments', 'everyday_market', 'bigw', 'woolworths_marketplus', 'woolworths_marketplus_bigw', 'woolworths_marketplus_woolworths', 'woolworths_marketplus_mydeal', 'woolworths_marketplus_everyday_market', 'bunnings'].includes(settlement.marketplace)
           const computedNet = (parseFloat(settlement.sales_principal) || 0)
             + (parseFloat(settlement.sales_shipping) || 0)
             + (includeGstInFormula ? (parseFloat(settlement.gst_on_income) || 0) : 0)
