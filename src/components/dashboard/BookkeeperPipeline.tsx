@@ -58,6 +58,21 @@ interface BookkeeperPipelineProps {
 
 // ─── Bucket config ──────────────────────────────────────────────────
 
+/** Per-marketplace guidance for where to download settlement CSVs */
+const UPLOAD_GUIDANCE: Record<string, string> = {
+  bigw: 'Download from BigW Seller Portal → Reports → Settlements',
+  kogan: 'Download CSV + PDF from Kogan Seller Portal → Payments',
+  catch: 'Download from Catch Seller Centre → Financials → Statements',
+  mydeal: 'Download from MyDeal Seller Portal → Settlements',
+  everyday_market: 'Download from Everyday Market Seller Hub → Payments',
+  bunnings: 'Download from Bunnings MarketLink → Reports → Settlements',
+};
+
+function getUploadGuidance(marketplaceCode: string): string | undefined {
+  const key = marketplaceCode.toLowerCase();
+  return UPLOAD_GUIDANCE[key] ?? Object.entries(UPLOAD_GUIDANCE).find(([k]) => key.includes(k))?.[1];
+}
+
 const BUCKET_CONFIG: Record<BucketType, { emoji: string; label: string; colorClass: string; dotClass: string }> = {
   blocked:       { emoji: '🔴', label: 'Blocked',              colorClass: 'text-destructive',        dotClass: 'bg-destructive' },
   upload_needed: { emoji: '🟡', label: 'Upload Needed',        colorClass: 'text-amber-600 dark:text-amber-400', dotClass: 'bg-amber-500' },
