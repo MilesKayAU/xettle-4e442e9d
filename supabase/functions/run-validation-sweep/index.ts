@@ -700,6 +700,23 @@ async function sweepUser(adminSupabase: any, userId: string) {
             summary.skipped = (summary.skipped || 0) + 1
             continue
           }
+          // Guard: failed/cancelled payouts — flag as payment_failed
+          if (payoutStatus === 'failed' || payoutStatus === 'cancelled') {
+            record.overall_status = 'payment_failed'
+            record.reconciliation_status = 'failed'
+            record.processing_state = 'processed'
+            record.processing_completed_at = new Date().toISOString()
+            await adminSupabase
+              .from('marketplace_validation')
+              .upsert(record, { onConflict: 'user_id,marketplace_code,period_label' })
+            await logEvent(adminSupabase, userId, 'payment_failed', {
+              marketplace: mc,
+              settlement_id: settlement.settlement_id,
+              amount: settlement.bank_deposit,
+              payout_status: payoutStatus,
+            }, 'critical', mc, settlement.settlement_id, pl)
+            continue
+          }
         }
 
         // Step 3: Reconciliation — always compute gap from settlement financial fields when available

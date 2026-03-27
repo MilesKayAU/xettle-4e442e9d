@@ -73,7 +73,7 @@ async function syncPayoutsForUser(
   // ─── Fetch payouts from Shopify (paid + scheduled + in_transit) ─────
   const allPayouts: ShopifyPayout[] = [];
 
-  const statusesToFetch = ['paid', 'scheduled', 'in_transit'];
+  const statusesToFetch = ['paid', 'scheduled', 'in_transit', 'failed', 'cancelled'];
 
   for (const payoutStatus of statusesToFetch) {
     let nextPageUrl: string | undefined;
