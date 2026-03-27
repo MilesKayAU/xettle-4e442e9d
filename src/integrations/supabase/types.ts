@@ -647,6 +647,45 @@ export type Database = {
         }
         Relationships: []
       }
+      expected_woolworths_payments: {
+        Row: {
+          amount: number
+          bank_payment_id: string
+          created_at: string
+          csv_uploaded: boolean
+          id: string
+          paid_date: string
+          pdf_uploaded: boolean
+          source: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          bank_payment_id: string
+          created_at?: string
+          csv_uploaded?: boolean
+          id?: string
+          paid_date: string
+          pdf_uploaded?: boolean
+          source?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          bank_payment_id?: string
+          created_at?: string
+          csv_uploaded?: boolean
+          id?: string
+          paid_date?: string
+          pdf_uploaded?: boolean
+          source?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       growth_opportunities: {
         Row: {
           created_at: string
