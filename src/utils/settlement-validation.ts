@@ -114,7 +114,6 @@ export function validateAndNormaliseSettlement(
   // Uses the canonical reconciliation formula from the service layer
   if (s.bank_deposit !== 0 && s.bank_deposit != null) {
     const recon = computeReconciliation(s);
-    const recon = computeReconciliation(s);
     const variance = recon.absGap;
     const variancePct = Math.abs(variance / s.bank_deposit);
 
