@@ -90,7 +90,7 @@ export async function pushSettlementToXero(opts: {
   // ─── Reconciliation gap gate (defense-in-depth) ───────────────────
   const { data: settlement } = await supabase
     .from('settlements')
-    .select('bank_deposit, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements')
+    .select('bank_deposit, sales_principal, sales_shipping, seller_fees, fba_fees, storage_fees, advertising_costs, other_fees, refunds, reimbursements, gst_on_expenses')
     .eq('settlement_id', opts.settlementId)
     .eq('user_id', user.id)
     .maybeSingle();
@@ -101,7 +101,8 @@ export async function pushSettlementToXero(opts: {
       - Math.abs(settlement.seller_fees || 0) - Math.abs(settlement.fba_fees || 0)
       - Math.abs(settlement.storage_fees || 0) - Math.abs(settlement.advertising_costs || 0)
       - Math.abs(settlement.other_fees || 0)
-      + (settlement.refunds || 0) + (settlement.reimbursements || 0);
+      + (settlement.refunds || 0) + (settlement.reimbursements || 0)
+      - (settlement.gst_on_expenses || 0);
     const reconGap = Math.abs((settlement.bank_deposit || 0) - computedNet);
     if (reconGap > 1.00) {
       return {
