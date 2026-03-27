@@ -32,7 +32,7 @@ import type { MissingSettlement } from '@/components/dashboard/ActionCentre';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
-type BucketType = 'blocked' | 'upload_needed' | 'gaps' | 'ready' | 'awaiting' | 'complete';
+type BucketType = 'blocked' | 'scheduled' | 'upload_needed' | 'gaps' | 'ready' | 'awaiting' | 'complete';
 
 interface PipelineItem {
   id: string;
