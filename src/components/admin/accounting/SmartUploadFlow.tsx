@@ -506,11 +506,49 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
   // ── File detection ──
   const detectFiles = useCallback(async (newFiles: File[]) => {
+    // ── Step -1: Extract zip files ──────────────────────────────────────────
+    const expandedFiles: File[] = [];
+    for (const f of newFiles) {
+      if (f.name.toLowerCase().endsWith('.zip') || f.type === 'application/zip' || f.type === 'application/x-zip-compressed') {
+        try {
+          toast.info(`Zip file detected — extracting "${f.name}"...`, { duration: 4000 });
+          const zip = await JSZip.loadAsync(f);
+          const entries = Object.entries(zip.files).filter(([, entry]) => !entry.dir);
+          let extractedCount = 0;
+          for (const [filename, zipEntry] of entries) {
+            // Skip hidden/system files
+            const baseName = filename.split('/').pop() || filename;
+            if (baseName.startsWith('.') || baseName.startsWith('__MACOSX')) continue;
+            const ext = baseName.toLowerCase().split('.').pop();
+            if (!['csv', 'tsv', 'txt', 'xlsx', 'xls', 'pdf'].includes(ext || '')) continue;
+
+            const blob = await zipEntry.async('blob');
+            const mimeMap: Record<string, string> = {
+              csv: 'text/csv', tsv: 'text/tab-separated-values', txt: 'text/plain',
+              xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              xls: 'application/vnd.ms-excel', pdf: 'application/pdf',
+            };
+            const extracted = new File([blob], baseName, { type: mimeMap[ext || ''] || 'application/octet-stream' });
+            expandedFiles.push(extracted);
+            extractedCount++;
+          }
+          toast.success(`Extracted ${extractedCount} file${extractedCount !== 1 ? 's' : ''} from "${f.name}"`, { duration: 5000 });
+        } catch (zipErr: any) {
+          console.error('[SmartUpload] Zip extraction failed:', zipErr);
+          toast.error(`Failed to extract "${f.name}" — ${zipErr?.message || 'invalid zip file'}`);
+        }
+      } else {
+        expandedFiles.push(f);
+      }
+    }
+
+    if (expandedFiles.length === 0) return;
+
     // Dedup 1: if the same file is re-uploaded, replace the in-memory entry and re-parse it.
     // Only block files that are already saved or currently saving.
     const currentFiles = filesRef.current;
     const replaceableIndices: number[] = [];
-    const uniqueFiles = newFiles.filter(f => {
+    const uniqueFiles = expandedFiles.filter(f => {
       const existingIdx = currentFiles.findIndex(
         existing => existing.file.name === f.name && existing.file.size === f.size
       );
