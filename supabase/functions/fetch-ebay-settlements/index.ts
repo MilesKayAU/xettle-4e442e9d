@@ -659,13 +659,30 @@ Deno.serve(async (req) => {
 
       logger.debug(`[fetch-ebay-settlements] Found ${payouts.length} payouts for user ${userId}`)
 
-      // 3. Filter to SUCCEEDED payouts only
-      const succeededPayouts = payouts.filter(p => p.payoutStatus === 'SUCCEEDED')
+      // 3. Process all payouts (not just SUCCEEDED) — store payout_status for each
+      // eBay statuses: SUCCEEDED/COMPLETED → paid, INITIATED → in_transit,
+      // FUNDS_ON_HOLD → on_hold, RETRYABLE_FAILED/TERMINAL_FAILED → failed
+      const mapEbayPayoutStatus = (ebayStatus: string): string => {
+        switch (ebayStatus) {
+          case 'SUCCEEDED':
+          case 'COMPLETED': return 'paid'
+          case 'INITIATED': return 'in_transit'
+          case 'FUNDS_ON_HOLD': return 'on_hold'
+          case 'RETRYABLE_FAILED':
+          case 'TERMINAL_FAILED': return 'failed'
+          default: return 'paid'
+        }
+      }
+
+      // Only process payouts with known statuses
+      const processablePayouts = payouts.filter(p =>
+        ['SUCCEEDED', 'COMPLETED', 'INITIATED', 'FUNDS_ON_HOLD', 'RETRYABLE_FAILED', 'TERMINAL_FAILED'].includes(p.payoutStatus)
+      )
       let imported = 0
       let updated = 0
       let skipped = 0
 
-      for (const payout of succeededPayouts) {
+      for (const payout of processablePayouts) {
         const settlementId = `ebay_payout_${payout.payoutId}`
 
         // 4. Fetch transactions for this payout
