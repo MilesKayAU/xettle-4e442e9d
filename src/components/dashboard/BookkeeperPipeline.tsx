@@ -76,6 +76,7 @@ function getUploadGuidance(marketplaceCode: string): string | undefined {
 
 const BUCKET_CONFIG: Record<BucketType, { emoji: string; label: string; colorClass: string; dotClass: string }> = {
   blocked:       { emoji: '🔴', label: 'Blocked',              colorClass: 'text-destructive',        dotClass: 'bg-destructive' },
+  scheduled:     { emoji: '🕐', label: 'Scheduled / In Transit', colorClass: 'text-amber-600 dark:text-amber-400', dotClass: 'bg-amber-500' },
   upload_needed: { emoji: '🟡', label: 'Upload Needed',        colorClass: 'text-amber-600 dark:text-amber-400', dotClass: 'bg-amber-500' },
   gaps:          { emoji: '⚠️', label: 'Gaps / Mismatches',     colorClass: 'text-amber-600 dark:text-amber-400', dotClass: 'bg-amber-500' },
   ready:         { emoji: '🔵', label: 'Ready to Push to Xero', colorClass: 'text-primary',            dotClass: 'bg-primary' },
