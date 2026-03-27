@@ -247,9 +247,6 @@ export default function BookkeeperPipeline({
     // Scheduled / In Transit
     (scheduledRes.data ?? []).forEach((s: any) => {
       const payoutStatus = s.payout_status || 'scheduled';
-      const statusLabel = payoutStatus === 'in_transit' ? 'In Transit' : 'Scheduled';
-      const depositDate = s.deposit_date;
-      const arrivalHint = depositDate ? ` — arrives ~${format(new Date(depositDate), 'd MMM')}` : '';
       pipeline.push({
         id: `scheduled-${s.settlement_id}`,
         bucket: 'scheduled',
@@ -260,7 +257,9 @@ export default function BookkeeperPipeline({
         period_end: s.period_end,
         amount: s.bank_deposit,
         settlement_id: s.settlement_id,
-        detail: `${statusLabel}${arrivalHint}`,
+        detail: payoutStatus === 'in_transit'
+          ? 'In transit to your bank'
+          : 'Payment announced — not yet transferred',
         last_activity: s.updated_at,
         payout_status: payoutStatus,
       });
@@ -421,6 +420,11 @@ export default function BookkeeperPipeline({
                 <Badge variant="outline" className="text-[10px] h-5 px-1.5">
                   {rows.length}
                 </Badge>
+                {bucket === 'scheduled' && (
+                  <span className="text-[11px] text-muted-foreground ml-1">
+                    Payment announced — not yet in your bank. Will auto-update when received. No action needed.
+                  </span>
+                )}
               </div>
 
               {/* Rows */}
