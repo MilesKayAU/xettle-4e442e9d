@@ -497,6 +497,7 @@ function buildSettlementFromPayout(
       source_reference: 'ebay_finances_api_v1',
       sync_origin: 'scheduled',
       status: 'saved',
+      payout_status: 'paid', // default; overridden by caller for non-SUCCEEDED payouts
       parser_version: 'ebay_finances_v1',
       is_hidden: false,
       is_pre_boundary: false,
