@@ -548,14 +548,21 @@ function PipelineRow({
               <span className="text-xs text-muted-foreground">{periodStr}</span>
             )}
           </div>
-          {(item.detail || timeAgo) && (
-            <div className="flex items-center gap-2 mt-0.5">
-              {item.detail && (
-                <span className="text-xs text-muted-foreground">{item.detail}</span>
+          {(item.detail || timeAgo || (item.bucket === 'upload_needed' && getUploadGuidance(item.marketplace_code))) && (
+            <div className="flex flex-col gap-0.5 mt-0.5">
+              {item.bucket === 'upload_needed' && getUploadGuidance(item.marketplace_code) && (
+                <span className="text-xs text-amber-600 dark:text-amber-400">
+                  {getUploadGuidance(item.marketplace_code)}
+                </span>
               )}
-              {timeAgo && (
-                <span className="text-[10px] text-muted-foreground/60">{timeAgo}</span>
-              )}
+              <div className="flex items-center gap-2">
+                {item.detail && (
+                  <span className="text-xs text-muted-foreground">{item.detail}</span>
+                )}
+                {timeAgo && (
+                  <span className="text-[10px] text-muted-foreground/60">{timeAgo}</span>
+                )}
+              </div>
             </div>
           )}
         </div>
