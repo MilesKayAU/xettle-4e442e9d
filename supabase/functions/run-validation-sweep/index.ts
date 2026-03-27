@@ -687,11 +687,12 @@ async function sweepUser(adminSupabase: any, userId: string) {
             // Let the trigger compute overall_status naturally — don't force ready_to_push
             // The trigger will set settlement_needed since xero_pushed=false and reconciliation may not be matched
           }
-          // Guard: scheduled/in_transit payouts skip reconciliation — money hasn't arrived yet
+          // Guard: scheduled/in_transit/open payouts skip reconciliation — money hasn't arrived yet
           const payoutStatus = (settlement as any).payout_status;
-          if (payoutStatus === 'scheduled' || payoutStatus === 'in_transit') {
-            record.overall_status = 'scheduled'
+          if (payoutStatus === 'scheduled' || payoutStatus === 'in_transit' || payoutStatus === 'open') {
+            record.overall_status = payoutStatus === 'open' ? 'open_period' : 'scheduled'
             record.reconciliation_status = 'pending'
+            record.reconciliation_difference = null
             record.processing_state = 'processed'
             record.processing_completed_at = new Date().toISOString()
             await adminSupabase
@@ -857,6 +858,63 @@ async function sweepUser(adminSupabase: any, userId: string) {
           .eq('user_id', userId).eq('marketplace_code', mc).eq('period_label', pl)
         
         await logEvent(adminSupabase, userId, 'validation_sweep_error', { error: String(rowErr), marketplace: mc, period: pl }, 'error', mc, null, pl)
+      }
+    }
+
+    // ── Amazon AU: Detect open period (current accumulating settlement) ──
+    if (mc === 'amazon_au') {
+      const amazonSettlements = (settlements || [])
+        .filter((s: any) => s.marketplace === 'amazon_au' && s.status !== 'duplicate_suppressed')
+        .sort((a: any, b: any) => (b.period_end || '').localeCompare(a.period_end || ''));
+
+      if (amazonSettlements.length > 0) {
+        const lastEnd = amazonSettlements[0].period_end;
+        const today = new Date().toISOString().split('T')[0];
+        const daysSinceLastClose = (Date.now() - new Date(lastEnd + 'T00:00:00Z').getTime()) / (1000 * 60 * 60 * 24);
+
+        // If last settlement closed within 14 days, there's likely an open period accumulating
+        if (daysSinceLastClose > 0 && daysSinceLastClose <= 14) {
+          const openPeriodLabel = `${lastEnd} → ${today}`;
+
+          await adminSupabase.from('marketplace_validation').upsert({
+            user_id: userId,
+            marketplace_code: 'amazon_au',
+            period_label: openPeriodLabel,
+            period_start: lastEnd,
+            period_end: today,
+            overall_status: 'open_period',
+            settlement_uploaded: false,
+            settlement_net: 0,
+            reconciliation_status: 'pending',
+            reconciliation_difference: null,
+            processing_state: 'processed',
+            processing_completed_at: new Date().toISOString(),
+          }, { onConflict: 'user_id,marketplace_code,period_label' });
+
+          console.log(`[validation-sweep] Amazon AU open period detected: ${openPeriodLabel}`);
+        }
+      }
+
+      // Clean up phantom monthly validation rows for Amazon AU
+      // These are created by legacy smart-sync and don't correspond to real settlement periods
+      const { data: phantomRows } = await adminSupabase
+        .from('marketplace_validation')
+        .select('id, period_label, overall_status')
+        .eq('user_id', userId)
+        .eq('marketplace_code', 'amazon_au')
+        .in('overall_status', ['missing', 'settlement_needed']);
+
+      for (const phantom of (phantomRows || [])) {
+        // If this period_label doesn't match any real settlement period, delete it
+        const matchesReal = amazonSettlements.some((s: any) =>
+          phantom.period_label === `${s.period_start} → ${s.period_end}`
+        );
+        if (!matchesReal) {
+          await adminSupabase.from('marketplace_validation')
+            .delete()
+            .eq('id', phantom.id);
+          console.log(`[validation-sweep] Deleted phantom Amazon AU validation row: ${phantom.period_label}`);
+        }
       }
     }
   }

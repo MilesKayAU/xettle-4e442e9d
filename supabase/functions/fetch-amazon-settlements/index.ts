@@ -544,6 +544,7 @@ async function handleSync(supabaseAdmin: any, syncFromParam?: string): Promise<{
             bank_deposit: summary.bankDeposit,
             reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
             status: 'ingested',
+            payout_status: 'paid',
             is_pre_boundary: !!isBeforeCutoff,
             source: 'api',
             is_split_month: splitMonth.isSplitMonth,
@@ -942,6 +943,7 @@ async function _executeSmartSync(supabase: any, userId: string, smartSyncFrom?: 
         bank_deposit: summary.bankDeposit,
         reconciliation_status: summary.reconciliationMatch ? 'matched' : 'failed',
         status: settlementStatus,
+        payout_status: 'paid',
         is_pre_boundary: isPreBoundary,
         source: 'api',
         is_split_month: splitMonth.isSplitMonth,
@@ -1074,62 +1076,8 @@ async function _executeSmartSync(supabase: any, userId: string, smartSyncFrom?: 
         })));
       }
 
-      // Upsert marketplace_validation
-      const periodMonth = header.periodEnd.substring(0, 7);
-      const monthStart = `${periodMonth}-01`;
-      const monthEnd = new Date(
-        parseInt(periodMonth.split('-')[0]),
-        parseInt(periodMonth.split('-')[1]),
-        0
-      ).toISOString().split('T')[0];
-      const periodLabel = new Date(header.periodEnd + 'T00:00:00').toLocaleDateString('en-AU', {
-        month: 'short',
-        year: 'numeric',
-      });
-
-      const { data: existingVal } = await supabase
-        .from('marketplace_validation')
-        .select('id, settlement_net')
-        .eq('user_id', userId)
-        .eq('marketplace_code', 'amazon_au')
-        .eq('period_start', monthStart)
-        .maybeSingle();
-
-      // Derive settlement_net from settlements table (never accumulate additively)
-      const { data: monthSettlements } = await supabase
-        .from('settlements')
-        .select('bank_deposit')
-        .eq('user_id', userId)
-        .eq('marketplace', 'amazon_au')
-        .gte('period_end', monthStart)
-        .lte('period_end', monthEnd);
-      const derivedSettlementNet = round2((monthSettlements || []).reduce((sum: number, s: any) => sum + (s.bank_deposit || 0), 0));
-
-      if (existingVal) {
-        await supabase
-          .from('marketplace_validation')
-          .update({
-            settlement_uploaded: true,
-            settlement_uploaded_at: new Date().toISOString(),
-            settlement_id: header.settlementId,
-            settlement_net: derivedSettlementNet,
-            overall_status: isBeforeBoundary ? 'pre_boundary' : 'ready_to_push',
-          })
-          .eq('id', existingVal.id);
-      } else {
-        await supabase.from('marketplace_validation').insert({
-          user_id: userId,
-          marketplace_code: 'amazon_au',
-          period_label: periodLabel,
-          period_start: monthStart,
-          period_end: monthEnd,
-          settlement_uploaded: true,
-          settlement_uploaded_at: new Date().toISOString(),
-          settlement_id: header.settlementId,
-          settlement_net: derivedSettlementNet,
-          overall_status: isBeforeBoundary ? 'pre_boundary' : 'ready_to_push',
-        } as any);
-      }
+      // Validation rows are created/updated by run-validation-sweep — not here.
+      // This prevents the monthly vs per-settlement period_label conflict.
 
       // Log system event
       await supabase.from('system_events').insert({

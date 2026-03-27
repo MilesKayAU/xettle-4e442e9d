@@ -131,6 +131,7 @@ export default function BookkeeperPipeline({
       blockedRes,
       validationRes,
       scheduledRes,
+      amazonOpenRes,
       awaitingRes,
       completeRes,
       syncTime,
@@ -148,7 +149,7 @@ export default function BookkeeperPipeline({
         .from('marketplace_validation')
         .select('id, marketplace_code, period_label, period_start, period_end, settlement_id, settlement_net, overall_status, reconciliation_difference, gap_acknowledged, updated_at, bank_amount')
         .eq('user_id', userId)
-        .not('overall_status', 'in', '("archived","already_recorded","duplicate_suppressed","complete","reconciled")')
+        .not('overall_status', 'in', '("archived","already_recorded","duplicate_suppressed","complete","reconciled","open_period")')
         .or('gap_acknowledged.is.null,gap_acknowledged.eq.false,overall_status.neq.gap_detected')
         .gte('period_end', boundaryDate),
 
@@ -161,6 +162,16 @@ export default function BookkeeperPipeline({
         .gte('period_end', boundaryDate)
         .order('period_end', { ascending: false })
         .limit(50),
+
+      // Amazon AU open periods (from validation, not settlements — no settlement exists yet)
+      supabase
+        .from('marketplace_validation')
+        .select('id, marketplace_code, period_label, period_start, period_end, settlement_net, overall_status, updated_at')
+        .eq('marketplace_code', 'amazon_au')
+        .eq('overall_status', 'open_period')
+        .gte('period_end', boundaryDate)
+        .order('period_end', { ascending: false })
+        .limit(10),
 
       // Awaiting: pushed but not paid
       supabase
@@ -262,6 +273,24 @@ export default function BookkeeperPipeline({
           : 'Payment announced — not yet transferred',
         last_activity: s.updated_at,
         payout_status: payoutStatus,
+      });
+    });
+
+    // Amazon AU open periods
+    (amazonOpenRes.data ?? []).forEach((row: any) => {
+      pipeline.push({
+        id: `open-${row.id}`,
+        bucket: 'scheduled',
+        marketplace_code: row.marketplace_code,
+        marketplace_label: getMarketplaceLabel(row.marketplace_code),
+        period_label: row.period_label || '',
+        period_start: row.period_start,
+        period_end: row.period_end,
+        amount: null, // No confirmed amount yet
+        settlement_id: null,
+        detail: 'Settlement period still accumulating — amount not yet confirmed',
+        last_activity: row.updated_at,
+        payout_status: 'open',
       });
     });
 
@@ -572,11 +601,13 @@ function PipelineRow({
         return (
           <Badge variant="outline" className={cn(
             'text-[10px] h-5 px-1.5',
-            item.payout_status === 'in_transit'
-              ? 'border-blue-400 text-blue-600 dark:text-blue-400'
-              : 'border-amber-400 text-amber-600 dark:text-amber-400'
+            item.payout_status === 'open'
+              ? 'border-muted-foreground/50 text-muted-foreground'
+              : item.payout_status === 'in_transit'
+                ? 'border-blue-400 text-blue-600 dark:text-blue-400'
+                : 'border-amber-400 text-amber-600 dark:text-amber-400'
           )}>
-            {item.payout_status === 'in_transit' ? 'In Transit' : 'Scheduled'}
+            {item.payout_status === 'open' ? 'Open Period' : item.payout_status === 'in_transit' ? 'In Transit' : 'Scheduled'}
           </Badge>
         );
       case 'awaiting':
