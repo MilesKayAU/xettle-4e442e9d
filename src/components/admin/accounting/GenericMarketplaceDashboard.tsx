@@ -357,9 +357,36 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
       </div>
 
 
-      <Separator />
+      {/* Requirements banner — shown for new users or when few settlements */}
+      {!isApiConnected && settlements.length < 3 && (
+        <Card className="border border-primary/20 bg-primary/5">
+          <CardContent className="py-3 px-4 flex items-center gap-3 flex-wrap">
+            <span className="text-sm">📋</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground">
+                {marketplaceName} requires: {(() => {
+                  const guides: Record<string, string> = {
+                    kogan: 'CSV (payout report) + PDF (remittance advice)',
+                    amazon_au: 'TSV or CSV (settlement report)',
+                    ebay_au: 'CSV (transaction report)',
+                    bunnings: 'PDF (billing cycle summary)',
+                    shopify_payments: 'CSV (payout export)',
+                    woolworths_marketplus: 'CSV (MarketPlus report)',
+                  };
+                  return guides[code] || 'CSV or PDF settlement file';
+                })()}
+              </p>
+            </div>
+            {onSwitchToUpload && (
+              <Button size="sm" variant="outline" className="gap-1.5 text-xs shrink-0" onClick={onSwitchToUpload}>
+                Upload <ArrowRight className="h-3 w-3" />
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Reconciliation Status — moved above settlement list */}
+      <Separator />
       <div className="space-y-3">
         <h4 className="text-base font-semibold text-foreground flex items-center gap-2">
           <Scale className="h-4 w-4 text-primary" />
