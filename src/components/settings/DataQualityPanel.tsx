@@ -25,6 +25,11 @@ export default function DataQualityPanel() {
   const [rlsLoading, setRlsLoading] = useState(false);
   const [rlsInventory, setRlsInventory] = useState<RlsTableEntry[] | null>(null);
   const [rlsError, setRlsError] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    supabase.rpc('has_role', { _role: 'admin' }).then(({ data }) => setIsAdmin(!!data));
+  }, []);
 
   const handleSweep = async () => {
     setSweeping(true);
