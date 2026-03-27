@@ -1093,49 +1093,15 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                                       </div>
                                     )}
 
-                                    {/* Transaction table */}
-                                    <div className="overflow-x-auto">
-                                      <table className="w-full text-xs">
-                                        <thead>
-                                          <tr className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                                            <th className="text-left py-1 pr-2">Order ID</th>
-                                            <th className="text-left py-1 pr-2">SKU</th>
-                                            <th className="text-left py-1 pr-2">Type</th>
-                                            <th className="text-left py-1 pr-2">Description</th>
-                                            <th className="text-right py-1">Amount</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {lines.map((line: any, lIdx: number) => {
-                                            const isRefund = line.transaction_type?.toLowerCase().includes('refund');
-                                            const isFee = (line.amount || 0) < 0 && !isRefund;
-                                            return (
-                                              <tr
-                                                key={lIdx}
-                                                className={`border-t border-border/50 ${
-                                                  isRefund ? 'text-orange-600 dark:text-orange-400' :
-                                                  isFee ? 'text-destructive' :
-                                                  (line.amount || 0) > 0 ? 'text-emerald-600 dark:text-emerald-400' :
-                                                  ''
-                                                }`}
-                                              >
-                                                <td className="py-1 pr-2 font-mono">{line.order_id || '—'}</td>
-                                                <td className="py-1 pr-2">{line.sku || '—'}</td>
-                                                <td className="py-1 pr-2">{line.transaction_type || '—'}</td>
-                                                <td className="py-1 pr-2 max-w-[200px] truncate">{line.amount_description || '—'}</td>
-                                                <td className="py-1 text-right font-mono font-medium">{formatAUD(line.amount || 0)}</td>
-                                              </tr>
-                                            );
-                                          })}
-                                          <tr className="border-t-2 border-border font-semibold">
-                                            <td colSpan={4} className="py-1.5 pr-2">Total ({lines.length} lines)</td>
-                                            <td className="py-1.5 text-right font-mono">
-                                              {formatAUD(linesTotal)}
-                                            </td>
-                                          </tr>
-                                        </tbody>
-                                      </table>
-                                    </div>
+                                    {/* Transaction table — collapsed by default, summary shown */}
+                                    <TransactionDrilldown
+                                      lines={lines}
+                                      linesTotal={linesTotal}
+                                      salesTotal={salesTotal}
+                                      feesTotal={feesTotal}
+                                      refundsTotal={refundsTotal}
+                                      uniqueOrders={uniqueOrders}
+                                    />
                                   </div>
                                 );
                               })()}
