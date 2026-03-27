@@ -20,13 +20,10 @@ export {
 import { computeSupportTier, getAutomationEligibility, getSupportWarnings, type SupportTier, type TaxMode, type TaxProfile, type AutomationEligibility, type SupportWarning } from '@/policy/supportPolicy';
 
 /**
- * The minimum categories required for a safe push.
- * 
- * CANONICAL SOURCE: This is the single source of truth.
- * The server-side copy in sync-settlement-to-xero/index.ts MUST match.
- * See: src/actions/__tests__/required-categories-sync.test.ts
+ * Re-exported from the canonical service layer.
+ * @see src/services/xeroService.ts
  */
-export const REQUIRED_CATEGORIES = ['Sales', 'Seller Fees', 'Refunds', 'Other Fees', 'Shipping'] as const;
+export { REQUIRED_CATEGORIES } from '@/services/xeroService';
 
 // ─── Rail Posting Eligibility ────────────────────────────────────────────────
 
