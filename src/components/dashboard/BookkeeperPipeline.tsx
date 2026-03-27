@@ -130,6 +130,7 @@ export default function BookkeeperPipeline({
     const [
       blockedRes,
       validationRes,
+      scheduledRes,
       awaitingRes,
       completeRes,
       syncTime,
@@ -150,6 +151,16 @@ export default function BookkeeperPipeline({
         .not('overall_status', 'in', '("archived","already_recorded","duplicate_suppressed","complete","reconciled")')
         .or('gap_acknowledged.is.null,gap_acknowledged.eq.false,overall_status.neq.gap_detected')
         .gte('period_end', boundaryDate),
+
+      // Scheduled / In Transit: Shopify payouts not yet arrived
+      supabase
+        .from('settlements')
+        .select('settlement_id, marketplace, period_start, period_end, bank_deposit, payout_status, deposit_date, updated_at' as any)
+        .eq('marketplace', 'shopify_payments')
+        .in('payout_status', ['scheduled', 'in_transit'])
+        .gte('period_end', boundaryDate)
+        .order('period_end', { ascending: false })
+        .limit(50),
 
       // Awaiting: pushed but not paid
       supabase
