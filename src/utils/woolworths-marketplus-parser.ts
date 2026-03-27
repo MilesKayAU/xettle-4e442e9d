@@ -31,6 +31,8 @@ export interface WoolworthsOrderRow {
   commissionFee: number;
   netAmount: number;
   gstOnNetAmount: number;
+  netShippingAmount: number;   // Net Shipping Amount (ex-GST shipping income)
+  gstOnShipping: number;       // GST on Shipping
   originalOrderId: string;
   invoiceRef: string;
   orderSource: string;      // 'BigW' | 'EverydayMarket' | 'MyDeal'
@@ -50,6 +52,12 @@ export interface WoolworthsMarketplaceGroup {
   commission: number;       // Sum of Commission Fee
   netAmount: number;        // Sum of Net Amount
   gst: number;              // Sum of GST on Net Amount
+  shipping: number;         // Sum of Net Shipping Amount (ex-GST)
+  shippingGst: number;      // Sum of GST on Shipping
+  /** GST on Net Amount from sale rows only (totalSalePrice > 0) */
+  gstSales: number;
+  /** GST on Net Amount from refund rows only (totalSalePrice < 0) */
+  gstRefunds: number;
   periodStart: string;
   periodEnd: string;
 }
@@ -149,6 +157,8 @@ interface ColumnMap {
   commissionFee: number;
   netAmount: number;
   gstOnNetAmount: number;
+  netShippingAmount: number;
+  gstOnShipping: number;
   originalOrderId: number;
   invoiceRef: number;
   orderSource: number;
@@ -157,23 +167,25 @@ interface ColumnMap {
 }
 
 const COL_PATTERNS: Record<keyof ColumnMap, RegExp[]> = {
-  orderId:         [/^order\s*id$/i],
-  orderedDate:     [/^ordered\s*date$/i],
-  sku:             [/^sku$/i],
-  product:         [/^product$/i],
-  customerName:    [/^name$/i],
-  quantity:        [/^quantity$/i],
-  pricePerUnit:    [/^price\s*\(per\s*unit\)$/i, /^price\s*per\s*unit$/i, /^unit\s*price$/i],
-  totalShipping:   [/^total\s*shipping$/i],
-  totalSalePrice:  [/^total\s*sale\s*price$/i],
-  commissionFee:   [/^commission\s*fee$/i],
-  netAmount:       [/^net\s*amount$/i],
-  gstOnNetAmount:  [/^gst\s*on\s*net\s*amount$/i],
-  originalOrderId: [/^original\s*order\s*id$/i],
-  invoiceRef:      [/^invoiceref$/i, /^invoice\s*ref$/i],
-  orderSource:     [/^order\s*source$/i],
-  bankPaymentRef:  [/^bank\s*payment\s*ref$/i],
-  bankPaymentDate: [/^bank\s*payment\s*date$/i],
+  orderId:            [/^order\s*id$/i],
+  orderedDate:        [/^ordered\s*date$/i],
+  sku:                [/^sku$/i],
+  product:            [/^product$/i],
+  customerName:       [/^name$/i],
+  quantity:           [/^quantity$/i],
+  pricePerUnit:       [/^price\s*\(per\s*unit\)$/i, /^price\s*per\s*unit$/i, /^unit\s*price$/i],
+  totalShipping:      [/^total\s*shipping$/i],
+  totalSalePrice:     [/^total\s*sale\s*price$/i],
+  commissionFee:      [/^commission\s*fee$/i],
+  netAmount:          [/^net\s*amount$/i],
+  gstOnNetAmount:     [/^gst\s*on\s*net\s*amount$/i, /^gst$/i],
+  netShippingAmount:  [/^net\s*shipping\s*amount$/i],
+  gstOnShipping:      [/^gst\s*on\s*shipping$/i, /^shipping\s*gst$/i],
+  originalOrderId:    [/^original\s*order\s*id$/i],
+  invoiceRef:         [/^invoiceref$/i, /^invoice\s*ref$/i],
+  orderSource:        [/^order\s*source$/i],
+  bankPaymentRef:     [/^bank\s*payment\s*ref$/i],
+  bankPaymentDate:    [/^bank\s*payment\s*date$/i],
 };
 
 function matchColumns(headers: string[]): ColumnMap | null {
@@ -193,23 +205,25 @@ function matchColumns(headers: string[]): ColumnMap | null {
     return null;
   }
   return {
-    orderId:         map.orderId ?? -1,
-    orderedDate:     map.orderedDate ?? -1,
-    sku:             map.sku ?? -1,
-    product:         map.product ?? -1,
-    customerName:    map.customerName ?? -1,
-    quantity:        map.quantity ?? -1,
-    pricePerUnit:    map.pricePerUnit ?? -1,
-    totalShipping:   map.totalShipping ?? -1,
-    totalSalePrice:  map.totalSalePrice!,
-    commissionFee:   map.commissionFee ?? -1,
-    netAmount:       map.netAmount!,
-    gstOnNetAmount:  map.gstOnNetAmount ?? -1,
-    originalOrderId: map.originalOrderId ?? -1,
-    invoiceRef:      map.invoiceRef ?? -1,
-    orderSource:     map.orderSource!,
-    bankPaymentRef:  map.bankPaymentRef!,
-    bankPaymentDate: map.bankPaymentDate ?? -1,
+    orderId:           map.orderId ?? -1,
+    orderedDate:       map.orderedDate ?? -1,
+    sku:               map.sku ?? -1,
+    product:           map.product ?? -1,
+    customerName:      map.customerName ?? -1,
+    quantity:           map.quantity ?? -1,
+    pricePerUnit:      map.pricePerUnit ?? -1,
+    totalShipping:     map.totalShipping ?? -1,
+    totalSalePrice:    map.totalSalePrice!,
+    commissionFee:     map.commissionFee ?? -1,
+    netAmount:         map.netAmount!,
+    gstOnNetAmount:    map.gstOnNetAmount ?? -1,
+    netShippingAmount: map.netShippingAmount ?? -1,
+    gstOnShipping:     map.gstOnShipping ?? -1,
+    originalOrderId:   map.originalOrderId ?? -1,
+    invoiceRef:        map.invoiceRef ?? -1,
+    orderSource:       map.orderSource!,
+    bankPaymentRef:    map.bankPaymentRef!,
+    bankPaymentDate:   map.bankPaymentDate ?? -1,
   };
 }
 
@@ -281,6 +295,8 @@ export function parseWoolworthsMarketPlusCSV(csvContent: string): WoolworthsResu
         commissionFee:   colMap.commissionFee >= 0 ? parseAmount(fields[colMap.commissionFee] || '') : 0,
         netAmount:       parseAmount(fields[colMap.netAmount] || ''),
         gstOnNetAmount:  colMap.gstOnNetAmount >= 0 ? parseAmount(fields[colMap.gstOnNetAmount] || '') : 0,
+        netShippingAmount: colMap.netShippingAmount >= 0 ? parseAmount(fields[colMap.netShippingAmount] || '') : 0,
+        gstOnShipping:   colMap.gstOnShipping >= 0 ? parseAmount(fields[colMap.gstOnShipping] || '') : 0,
         originalOrderId: colMap.originalOrderId >= 0 ? fields[colMap.originalOrderId] || '' : '',
         invoiceRef:      colMap.invoiceRef >= 0 ? fields[colMap.invoiceRef] || '' : '',
         orderSource:     orderSource,
@@ -317,6 +333,9 @@ export function parseWoolworthsMarketPlusCSV(csvContent: string): WoolworthsResu
         .filter(d => d && d >= '2020-01-01')
         .sort();
 
+      const saleRows = rows.filter(r => r.totalSalePrice > 0);
+      const refundRows = rows.filter(r => r.totalSalePrice < 0);
+
       groups.push({
         orderSource: source,
         marketplaceCode: resolved.code,
@@ -324,11 +343,15 @@ export function parseWoolworthsMarketPlusCSV(csvContent: string): WoolworthsResu
         contactName: resolved.contact,
         orders: rows,
         orderCount: rows.length,
-        grossSales: round2(rows.filter(r => r.totalSalePrice > 0).reduce((s, r) => s + r.totalSalePrice, 0)),
-        refunds: round2(rows.filter(r => r.totalSalePrice < 0).reduce((s, r) => s + r.totalSalePrice, 0)),
+        grossSales: round2(saleRows.reduce((s, r) => s + r.totalSalePrice, 0)),
+        refunds: round2(refundRows.reduce((s, r) => s + r.totalSalePrice, 0)),
         commission: round2(rows.reduce((s, r) => s + r.commissionFee, 0)),
         netAmount: round2(rows.reduce((s, r) => s + r.netAmount, 0)),
         gst: round2(rows.reduce((s, r) => s + r.gstOnNetAmount, 0)),
+        shipping: round2(rows.reduce((s, r) => s + r.netShippingAmount, 0)),
+        shippingGst: round2(rows.reduce((s, r) => s + r.gstOnShipping, 0)),
+        gstSales: round2(saleRows.reduce((s, r) => s + r.gstOnNetAmount, 0)),
+        gstRefunds: round2(refundRows.reduce((s, r) => s + r.gstOnNetAmount, 0)),
         periodStart: dates[0] || bankPaymentDate || '',
         periodEnd: dates[dates.length - 1] || bankPaymentDate || '',
       });
@@ -444,16 +467,37 @@ function buildWoolworthsSettlements(
   const divisor = 1 + taxRate;
 
   return groups.map(g => {
-    // Sales and refunds are GST-inclusive in the CSV
-    const grossSalesExGst = round2(g.grossSales / divisor);
-    const gstOnSales = round2(g.grossSales - grossSalesExGst);
+    // ─── FIX: Use ACTUAL GST from CSV columns, not /1.1 ────────────────
+    // Some items are GST-free so dividing by 1.1 overcounts GST.
+    // g.gstSales = sum of "GST on Net Amount" for sale rows (actual GST)
+    // g.gstRefunds = sum of "GST on Net Amount" for refund rows
+    // ────────────────────────────────────────────────────────────────────
 
-    const refundsExGst = round2(g.refunds / divisor);
-    const gstOnRefunds = round2(g.refunds - refundsExGst);
+    // Sales: use actual GST from CSV if available, else fall back to /1.1
+    const hasActualGst = g.gstSales !== 0 || g.gstRefunds !== 0;
+    const gstOnSales = hasActualGst
+      ? round2(Math.abs(g.gstSales))
+      : round2(g.grossSales - round2(g.grossSales / divisor));
+    const grossSalesExGst = round2(g.grossSales - gstOnSales);
 
-    // Commission is GST-inclusive
-    const commissionExGst = round2(g.commission / divisor);
-    const gstOnCommission = round2(g.commission - commissionExGst);
+    const gstOnRefunds = hasActualGst
+      ? round2(g.gstRefunds) // negative for refunds
+      : round2(g.refunds - round2(g.refunds / divisor));
+    const refundsExGst = round2(g.refunds - gstOnRefunds);
+
+    // Commission: use actual GST from fee rows in the CSV GST column
+    // Commission fee rows have gstOnNetAmount too, but they're mixed into gstSales/gstRefunds
+    // For fees, derive from the total: total GST = gstSales + gstRefunds + gstOnFees
+    // So gstOnFees = totalGst - gstSales - gstRefunds
+    const totalGstFromCsv = g.gst; // sum of all rows' GST on Net Amount
+    const gstOnCommission = hasActualGst
+      ? round2(totalGstFromCsv - g.gstSales - g.gstRefunds)
+      : round2(g.commission - round2(g.commission / divisor));
+    const commissionExGst = round2(g.commission - gstOnCommission);
+
+    // ─── Shipping (NEW) ────────────────────────────────────────────────
+    const shippingExGst = round2(g.shipping);       // Net Shipping Amount (ex-GST)
+    const shippingGst = round2(g.shippingGst);       // GST on Shipping
 
     // ─── CRITICAL: Woolworths pays Net Amount ONLY ──────────────────────
     // The bank deposit equals the sum of the "Net Amount" column.
@@ -474,7 +518,7 @@ function buildWoolworthsSettlements(
       period_start: g.periodStart,
       period_end: g.periodEnd,
       sales_ex_gst: grossSalesExGst,
-      gst_on_sales: round2(gstOnSales + gstOnRefunds),
+      gst_on_sales: round2(gstOnSales + gstOnRefunds + shippingGst),
       fees_ex_gst: -Math.abs(commissionExGst),
       gst_on_fees: Math.abs(gstOnCommission),
       net_payout: bankDeposit,
@@ -495,6 +539,8 @@ function buildWoolworthsSettlements(
         commissionInclGst: g.commission,
         commissionExGst,
         gstOnCommission,
+        shippingExGst,
+        shippingGst,
         netAmount: g.netAmount,
         gstOnNet: g.gst,
         clearingAmount,
