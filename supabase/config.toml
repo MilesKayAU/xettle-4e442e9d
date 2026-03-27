@@ -57,3 +57,5 @@ project_id = "cegwclxbqvitkqxikpss"
     verify_jwt = false
   [functions.report-mirakl-issue]
     verify_jwt = false
+  [functions.ai-gap-suggest-reason]
+    verify_jwt = true
