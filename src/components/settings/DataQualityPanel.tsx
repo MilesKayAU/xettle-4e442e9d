@@ -4,7 +4,7 @@
  * an RLS policy audit inventory, and a full system audit for admin users.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, CheckCircle2, Package, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
