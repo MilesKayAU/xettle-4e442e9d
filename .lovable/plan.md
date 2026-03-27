@@ -1,38 +1,58 @@
 
 
-## Fix: Use Mirakl IV01 Invoices API for Settlement Verification
+## Woolworths Dedicated Upload UX
 
-### Problem
-The current `verifyMirakl` function queries `/api/sellerpayment/transactions_logs` and tries to reconstruct settlement totals from individual transactions. This returns 0 transactions for Bunnings `BUN-2301-2026-03-14` due to date format and filtering issues. The data exists — the Mirakl billing screen shows it — but we're using the wrong endpoint.
+### The Problem
+Currently, the "Upload" button on the Woolworths payments view sends users to the generic Smart Upload page — a completely different context. Users lose sight of which Payment IDs need files, and the Smart Upload doesn't understand the Woolworths payment structure.
 
-### Solution
-Use the IV01 accounting documents API (`/api/invoices`) as the **primary** verification method. This returns billing cycle documents directly with `amount_due_to_seller` already calculated. Fall back to transaction logs only if IV01 returns nothing.
+### The Design
 
-### Changes
+Embed a Woolworths-specific upload zone directly inside `WoolworthsPaymentsView`, replacing the current "Smart Upload →" redirect. Two modes:
 
-**File: `supabase/functions/verify-settlement/index.ts`**
+**Mode A — Bulk upload (top of page)**
+A compact drop zone replaces the current dashed card at the bottom. Sits between the stats row and the table:
 
-Insert an IV01 verification attempt inside `verifyMirakl()`, after auth succeeds but before the existing transaction logs code:
+```text
+┌──────────────────────────────────────────────────────┐
+│  📦 Upload Woolworths Files                          │
+│                                                      │
+│  ┌────────────────────────────────────────────────┐  │
+│  │  Drop ZIP, CSV, or PDF files here              │  │
+│  │  Xettle extracts and matches automatically     │  │
+│  │              [Browse files]                     │  │
+│  └────────────────────────────────────────────────┘  │
+│                                                      │
+│  After drop:                                         │
+│  ✅ Extracted 4 files from zip                       │
+│  ✅ CSV → matched to Payment 293603                  │
+│  ✅ BigW PDF → matched to 293603                     │
+│  ✅ EM PDF → matched to 293603                       │
+│  ✅ MyDeal PDF → matched to 293603                   │
+│  [Confirm & Process]                                 │
+└──────────────────────────────────────────────────────┘
+```
 
-1. **Extract billing cycle number** from settlement_id using regex `(\d{4,})`:
-   - `BUN-2301-2026-03-14` → `2301`
-   - `291854_MyDeal` → `291854`
+**Mode B — Per-row upload (inline)**
+When a payment row shows ❌ for CSV or PDF, clicking the Upload button on that row opens a small inline drop zone scoped to that Payment ID only. Files dropped there are tagged to that specific payment.
 
-2. **Call IV01** at `{base_url}/api/invoices?accounting_document_number={number}&type=ALL` using the same auth header/fallback logic already in place.
+### Key UX Improvements
 
-3. **If IV01 returns an invoice**: compare `amount_due_to_seller` (or `total_amount`) against `settlement.bank_deposit`. Build a StandardResponse with `filter_method: "iv01_invoice"`. If `auto_correct` is true and discrepancy > $1 and settlement is not pushed, correct `bank_deposit` and log `gap_auto_corrected`.
+1. **Upload zone lives on the Woolworths page** — no context switch to Smart Upload
+2. **Zip extraction happens inline** with a file-by-file progress list showing what was found
+3. **Auto-matching** — extracted files are matched to Payment IDs using the CSV's `Bank Payment Ref` column and PDF filenames
+4. **Per-row upload** for targeted "just need this one PDF" scenarios
+5. **Processing feedback** stays on the same page — the table updates in real-time as settlements are created
 
-4. **If IV01 returns nothing or errors**: fall through to existing transaction logs path (with the date format fix from the previous plan also applied — `T00:00:00Z` without milliseconds + `end_date` parameter).
+### Technical Approach
 
-5. **Diagnostic logging**: The existing `gap_resolve_attempt` log at the end of the function will capture `filter_method: "iv01_invoice"` and the IV01-specific data.
+**File: `WoolworthsPaymentsView.tsx`**
 
-### Key details
-- IV01 response structure: `{ invoices: [{ accounting_document_number, amount_due_to_seller, total_amount, ... }] }`
-- The auth fallback candidates array already handles multiple auth modes — reuse it for the IV01 call
-- Same safety guards apply: never correct `pushed_to_xero`/`already_recorded`, always log before writing, never touch `overall_status`
-- Transaction logs path remains as fallback for settlements where the billing cycle number can't be extracted or IV01 returns empty
+1. Add a collapsible upload zone between the stats cards and the payments table
+2. Import `JSZip` and reuse the zip extraction logic from `SmartUploadFlow.tsx`
+3. Reuse existing parsers (`parseWoolworthsMarketPlusCSV`, PDF detection) — just call them directly instead of going through the full SmartUpload pipeline
+4. After processing, call `loadData()` to refresh the table — settlements appear immediately in their correct Payment ID rows
+5. Replace the bottom "Smart Upload →" card with the inline upload zone
+6. Add per-row upload: when `onSwitchToUpload` is clicked on a specific row, expand an inline file input for that payment
 
-### Expected outcome
-- `BUN-2301-2026-03-14` → IV01 returns invoice 2301 with `amount_due_to_seller = 526.44` → auto-corrects `bank_deposit` from `-50.00` to `526.44` → validation sweep clears the gap
-- Other Mirakl settlements (MyDeal, etc.) also benefit from IV01 as primary path
+**No new components needed** — the upload zone is embedded directly in the existing view. The existing parsers and `saveSettlement` utility handle all the backend logic.
 
