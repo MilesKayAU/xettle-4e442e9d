@@ -2121,7 +2121,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           <input
             ref={inputRef}
             type="file"
-            accept=".csv,.tsv,.txt,.xlsx,.xls,.pdf"
+            accept=".csv,.tsv,.txt,.xlsx,.xls,.pdf,.zip"
             multiple
             onChange={handleFileSelect}
             className="hidden"
