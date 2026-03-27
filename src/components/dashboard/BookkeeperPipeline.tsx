@@ -276,6 +276,24 @@ export default function BookkeeperPipeline({
       });
     });
 
+    // Amazon AU open periods
+    (amazonOpenRes.data ?? []).forEach((row: any) => {
+      pipeline.push({
+        id: `open-${row.id}`,
+        bucket: 'scheduled',
+        marketplace_code: row.marketplace_code,
+        marketplace_label: getMarketplaceLabel(row.marketplace_code),
+        period_label: row.period_label || '',
+        period_start: row.period_start,
+        period_end: row.period_end,
+        amount: null, // No confirmed amount yet
+        settlement_id: null,
+        detail: 'Settlement period still accumulating — amount not yet confirmed',
+        last_activity: row.updated_at,
+        payout_status: 'open',
+      });
+    });
+
     // 5. Awaiting
     (awaitingRes.data ?? []).forEach(s => {
       pipeline.push({
