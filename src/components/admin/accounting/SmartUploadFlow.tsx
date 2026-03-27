@@ -2562,7 +2562,77 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
             </Card>
           )}
 
-          {files.map((df, idx) => (
+          {/* Woolworths Group Summary — shown when woolworths_marketplus files are saved */}
+          {(() => {
+            const woolworthsSaved = files.filter(
+              f => f.status === 'saved' && f.detection?.marketplace === 'woolworths_marketplus' && f.settlements && f.settlements.length > 0
+            );
+            if (woolworthsSaved.length === 0) return null;
+            const WOOLWORTHS_LABELS: Record<string, string> = {
+              bigw: 'Big W', everyday_market: 'Everyday Market', mydeal: 'MyDeal', catch: 'Catch',
+            };
+            const groups: Array<{ marketplaceCode: string; displayName: string; bankDeposit: number; status: 'saved' | 'gap'; hasPdf: boolean; settlementId: string; statusLabel: string }> = [];
+            for (const wf of woolworthsSaved) {
+              for (const s of wf.settlements || []) {
+                const subCode = (s.metadata as any)?.marketplaceCode || s.marketplace;
+                groups.push({
+                  marketplaceCode: subCode,
+                  displayName: WOOLWORTHS_LABELS[subCode] || subCode,
+                  bankDeposit: s.bank_deposit || 0,
+                  status: 'saved',
+                  hasPdf: false,
+                  settlementId: s.settlement_id,
+                  statusLabel: 'Saved',
+                });
+              }
+            }
+            if (groups.length <= 1) return null; // Not a multi-marketplace upload
+            const total = groups.reduce((sum, g) => sum + g.bankDeposit, 0);
+            return (
+              <Card className="border-primary/20 bg-primary/5">
+                <CardContent className="py-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Package className="h-5 w-5 text-primary" />
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">Woolworths Group Payment</p>
+                        <p className="text-xs text-muted-foreground">{groups.length} marketplace{groups.length !== 1 ? 's' : ''} processed</p>
+                      </div>
+                    </div>
+                    <span className="text-lg font-bold text-foreground tabular-nums">
+                      {total < 0 ? '-' : ''}${Math.abs(total).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {groups.map(g => (
+                      <div key={g.settlementId} className="flex items-center justify-between py-2 px-3 rounded-lg bg-background/60 border border-border/50">
+                        <div className="flex items-center gap-3">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                          <div>
+                            <span className="text-sm font-medium text-foreground">{g.displayName}</span>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0">Saved</Badge>
+                            </div>
+                          </div>
+                        </div>
+                        <span className="text-sm font-semibold text-foreground tabular-nums">
+                          {g.bankDeposit < 0 ? '-' : ''}${Math.abs(g.bankDeposit).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {onViewSettlements && (
+                    <div className="flex justify-end pt-2 border-t border-border/50">
+                      <Button variant="outline" size="sm" className="gap-1.5" onClick={onViewSettlements}>
+                        View Settlements <ArrowRight className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })()}
+
             // Skip Kogan files that are shown in the pairing card
             koganPairings?.koganIndices.has(idx) ? null :
             df.status === 'multi_split' && df.splitResult ? (
