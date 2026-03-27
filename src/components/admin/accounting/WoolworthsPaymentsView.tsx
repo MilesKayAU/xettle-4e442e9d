@@ -38,6 +38,8 @@ interface SettlementRow {
   bank_deposit: number | null;
   status: string | null;
   created_at: string;
+  gst_on_income: number | null;
+  gst_on_expenses: number | null;
   raw_payload: any;
   source: string | null;
   xero_invoice_number: string | null;
