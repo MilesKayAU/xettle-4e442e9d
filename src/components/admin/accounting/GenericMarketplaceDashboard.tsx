@@ -875,21 +875,28 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                             {/* Actions */}
                             <div className="flex items-center gap-1 justify-end">
                               {/* Push to Xero */}
-                              {isReconBlocked && !isPreBoundary && (
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger>
-                                      <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-[10px] cursor-default">
-                                        <AlertTriangle className="h-3 w-3 mr-1" />
-                                        Fix recon first
-                                      </Badge>
-                                    </TooltipTrigger>
-                                    <TooltipContent className="text-xs max-w-[200px]">
-                                      Sales − Fees ≠ Net — review line items before pushing to Xero
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              )}
+                              {isReconBlocked && !isPreBoundary && (() => {
+                                const gapAmt = reconGap != null ? reconGap : 0;
+                                const diagnosis = diagnoseGapReason(
+                                  { source: s.source || undefined, marketplace: s.marketplace, seller_fees: s.seller_fees || 0, bank_deposit: s.bank_deposit || 0, sales_principal: s.sales_principal || 0, gst_on_income: s.gst_on_income || 0, gst_on_expenses: s.gst_on_expenses || 0 },
+                                  gapAmt
+                                );
+                                return (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger>
+                                        <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 text-[10px] cursor-default">
+                                          <AlertTriangle className="h-3 w-3 mr-1" />
+                                          Gap: {formatAUD(Math.abs(gapAmt))}
+                                        </Badge>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="text-xs max-w-[280px]">
+                                        {diagnosis || 'Sales − Fees ≠ Net — review line items before pushing to Xero'}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                );
+                              })()}
                               {isSyncable && !isPreBoundary && (
                                 <>
                                   <TooltipProvider>
