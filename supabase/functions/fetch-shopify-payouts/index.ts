@@ -133,12 +133,44 @@ async function syncPayoutsForUser(
   const payoutIds = allPayouts.map((p) => String(p.id));
   const { data: existingSettlements } = await supabase
     .from("settlements")
-    .select("settlement_id, bank_deposit, period_end")
+    .select("settlement_id, bank_deposit, period_end, payout_status")
     .eq("user_id", userId)
     .eq("marketplace", "shopify_payments")
     .in("settlement_id", payoutIds);
 
-  const existingIds = new Set((existingSettlements || []).map((e: any) => e.settlement_id));
+  const existingMap = new Map((existingSettlements || []).map((e: any) => [e.settlement_id, e]));
+  const existingIds = new Set(existingMap.keys());
+
+  // ─── Auto-promote: detect scheduled/in_transit → paid transitions ──
+  for (const payout of allPayouts) {
+    const numericId = String(payout.id);
+    const existing = existingMap.get(numericId);
+    if (!existing) continue;
+    const oldStatus = existing.payout_status || 'paid';
+    const newStatus = payout.status;
+    if ((oldStatus === 'scheduled' || oldStatus === 'in_transit') && newStatus === 'paid') {
+      console.log(`[fetch-shopify-payouts] Auto-promoting payout ${numericId}: ${oldStatus} → paid`);
+      const isBeforeBoundary = dateMin && payout.date < dateMin;
+      await supabase.from("settlements").update({
+        payout_status: 'paid',
+        status: isBeforeBoundary ? 'ingested' : 'ready_to_push',
+      } as any).eq("settlement_id", numericId).eq("user_id", userId).eq("marketplace", "shopify_payments");
+      // Log promotion event
+      await supabase.from("system_events").insert({
+        user_id: userId,
+        event_type: "shopify_payout_arrived",
+        marketplace_code: "shopify_payments",
+        settlement_id: numericId,
+        severity: "info",
+        details: { old_status: oldStatus, new_status: 'paid', amount: parseFloat(payout.amount) || 0 },
+      } as any);
+    } else if (oldStatus !== newStatus && (newStatus === 'failed' || newStatus === 'cancelled')) {
+      // Handle failed/cancelled transitions
+      await supabase.from("settlements").update({
+        payout_status: newStatus,
+      } as any).eq("settlement_id", numericId).eq("user_id", userId).eq("marketplace", "shopify_payments");
+    }
+  }
 
   // Also check alias registry for cross-format matches (bank_ref → numeric ID)
   const { data: aliasMatches } = await supabase
