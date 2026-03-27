@@ -68,7 +68,7 @@ interface PaymentGroup {
   hasPdf: boolean;
   settlements: SettlementRow[];
   marketplaceBreakdown: { code: string; name: string; amount: number; status: string | null }[];
-  overallStatus: 'ready_to_push' | 'pushed' | 'gap_detected' | 'upload_csv' | 'upload_pdf' | 'missing';
+  overallStatus: 'ready_to_push' | 'pushed' | 'pre_boundary' | 'external_xero' | 'gap_detected' | 'upload_csv' | 'upload_pdf' | 'missing';
   isFromExpected: boolean;
 }
 
