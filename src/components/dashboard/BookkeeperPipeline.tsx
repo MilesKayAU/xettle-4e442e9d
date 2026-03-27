@@ -61,11 +61,11 @@ interface BookkeeperPipelineProps {
 
 /** Per-marketplace guidance for where to download settlement CSVs */
 const UPLOAD_GUIDANCE: Record<string, string> = {
-  bigw: 'Download from BigW Seller Portal → Reports → Settlements',
+  bigw: 'Woolworths MarketPlus → Reports → Download zip (covers BigW, Everyday Market, MyDeal)',
   kogan: 'Download CSV + PDF from Kogan Seller Portal → Payments',
   catch: 'Download from Catch Seller Centre → Financials → Statements',
-  mydeal: 'Download from MyDeal Seller Portal → Settlements',
-  everyday_market: 'Download from Everyday Market Seller Hub → Payments',
+  mydeal: 'Woolworths MarketPlus → Reports → Download zip (covers BigW, Everyday Market, MyDeal)',
+  everyday_market: 'Woolworths MarketPlus → Reports → Download zip (covers BigW, Everyday Market, MyDeal)',
   bunnings: 'Download from Bunnings MarketLink → Reports → Settlements',
 };
 

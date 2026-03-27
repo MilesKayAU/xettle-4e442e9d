@@ -8,6 +8,7 @@
  */
 
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import JSZip from 'jszip';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -23,7 +24,7 @@ import {
   Upload, CheckCircle2, XCircle, AlertTriangle, Loader2,
   Sparkles, ArrowRight, Info, Trash2, FileSpreadsheet, FileText,
   DollarSign, Calendar, HelpCircle, ChevronDown, ExternalLink, Eye, LayoutDashboard,
-  MapPin, RefreshCw, ShoppingBag, Link2, Search,
+  MapPin, RefreshCw, ShoppingBag, Link2, Search, Package,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { detectUnknownEntities, type UnknownEntity } from '@/utils/entity-detection';
@@ -505,11 +506,49 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
 
   // ── File detection ──
   const detectFiles = useCallback(async (newFiles: File[]) => {
+    // ── Step -1: Extract zip files ──────────────────────────────────────────
+    const expandedFiles: File[] = [];
+    for (const f of newFiles) {
+      if (f.name.toLowerCase().endsWith('.zip') || f.type === 'application/zip' || f.type === 'application/x-zip-compressed') {
+        try {
+          toast.info(`Zip file detected — extracting "${f.name}"...`, { duration: 4000 });
+          const zip = await JSZip.loadAsync(f);
+          const entries = Object.entries(zip.files).filter(([, entry]) => !entry.dir);
+          let extractedCount = 0;
+          for (const [filename, zipEntry] of entries) {
+            // Skip hidden/system files
+            const baseName = filename.split('/').pop() || filename;
+            if (baseName.startsWith('.') || baseName.startsWith('__MACOSX')) continue;
+            const ext = baseName.toLowerCase().split('.').pop();
+            if (!['csv', 'tsv', 'txt', 'xlsx', 'xls', 'pdf'].includes(ext || '')) continue;
+
+            const blob = await zipEntry.async('blob');
+            const mimeMap: Record<string, string> = {
+              csv: 'text/csv', tsv: 'text/tab-separated-values', txt: 'text/plain',
+              xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              xls: 'application/vnd.ms-excel', pdf: 'application/pdf',
+            };
+            const extracted = new File([blob], baseName, { type: mimeMap[ext || ''] || 'application/octet-stream' });
+            expandedFiles.push(extracted);
+            extractedCount++;
+          }
+          toast.success(`Extracted ${extractedCount} file${extractedCount !== 1 ? 's' : ''} from "${f.name}"`, { duration: 5000 });
+        } catch (zipErr: any) {
+          console.error('[SmartUpload] Zip extraction failed:', zipErr);
+          toast.error(`Failed to extract "${f.name}" — ${zipErr?.message || 'invalid zip file'}`);
+        }
+      } else {
+        expandedFiles.push(f);
+      }
+    }
+
+    if (expandedFiles.length === 0) return;
+
     // Dedup 1: if the same file is re-uploaded, replace the in-memory entry and re-parse it.
     // Only block files that are already saved or currently saving.
     const currentFiles = filesRef.current;
     const replaceableIndices: number[] = [];
-    const uniqueFiles = newFiles.filter(f => {
+    const uniqueFiles = expandedFiles.filter(f => {
       const existingIdx = currentFiles.findIndex(
         existing => existing.file.name === f.name && existing.file.size === f.size
       );
@@ -2082,7 +2121,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
           <input
             ref={inputRef}
             type="file"
-            accept=".csv,.tsv,.txt,.xlsx,.xls,.pdf"
+            accept=".csv,.tsv,.txt,.xlsx,.xls,.pdf,.zip"
             multiple
             onChange={handleFileSelect}
             className="hidden"
@@ -2107,7 +2146,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
                     Drop files here or click to upload
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Xettle auto-detects, previews settlements, and prepares for Xero
+                    CSV, PDF, XLSX, or ZIP — Xettle auto-detects and previews settlements
                   </p>
                 </div>
                 {!hasFiles && (
@@ -2522,6 +2561,77 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
               </CardContent>
             </Card>
           )}
+
+          {/* Woolworths Group Summary — shown when woolworths_marketplus files are saved */}
+          {(() => {
+            const woolworthsSaved = files.filter(
+              f => f.status === 'saved' && f.detection?.marketplace === 'woolworths_marketplus' && f.settlements && f.settlements.length > 0
+            );
+            if (woolworthsSaved.length === 0) return null;
+            const WOOLWORTHS_LABELS: Record<string, string> = {
+              bigw: 'Big W', everyday_market: 'Everyday Market', mydeal: 'MyDeal', catch: 'Catch',
+            };
+            const groups: Array<{ marketplaceCode: string; displayName: string; bankDeposit: number; status: 'saved' | 'gap'; hasPdf: boolean; settlementId: string; statusLabel: string }> = [];
+            for (const wf of woolworthsSaved) {
+              for (const s of wf.settlements || []) {
+                const subCode = (s.metadata as any)?.marketplaceCode || s.marketplace;
+                groups.push({
+                  marketplaceCode: subCode,
+                  displayName: WOOLWORTHS_LABELS[subCode] || subCode,
+                  bankDeposit: s.net_payout || 0,
+                  status: 'saved',
+                  hasPdf: false,
+                  settlementId: s.settlement_id,
+                  statusLabel: 'Saved',
+                });
+              }
+            }
+            if (groups.length <= 1) return null; // Not a multi-marketplace upload
+            const total = groups.reduce((sum, g) => sum + g.bankDeposit, 0);
+            return (
+              <Card className="border-primary/20 bg-primary/5">
+                <CardContent className="py-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Package className="h-5 w-5 text-primary" />
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">Woolworths Group Payment</p>
+                        <p className="text-xs text-muted-foreground">{groups.length} marketplace{groups.length !== 1 ? 's' : ''} processed</p>
+                      </div>
+                    </div>
+                    <span className="text-lg font-bold text-foreground tabular-nums">
+                      {total < 0 ? '-' : ''}${Math.abs(total).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {groups.map(g => (
+                      <div key={g.settlementId} className="flex items-center justify-between py-2 px-3 rounded-lg bg-background/60 border border-border/50">
+                        <div className="flex items-center gap-3">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                          <div>
+                            <span className="text-sm font-medium text-foreground">{g.displayName}</span>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0">Saved</Badge>
+                            </div>
+                          </div>
+                        </div>
+                        <span className="text-sm font-semibold text-foreground tabular-nums">
+                          {g.bankDeposit < 0 ? '-' : ''}${Math.abs(g.bankDeposit).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {onViewSettlements && (
+                    <div className="flex justify-end pt-2 border-t border-border/50">
+                      <Button variant="outline" size="sm" className="gap-1.5" onClick={onViewSettlements}>
+                        View Settlements <ArrowRight className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           {files.map((df, idx) => (
             // Skip Kogan files that are shown in the pairing card
