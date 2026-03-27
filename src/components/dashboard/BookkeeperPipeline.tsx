@@ -420,6 +420,11 @@ export default function BookkeeperPipeline({
                 <Badge variant="outline" className="text-[10px] h-5 px-1.5">
                   {rows.length}
                 </Badge>
+                {bucket === 'scheduled' && (
+                  <span className="text-[11px] text-muted-foreground ml-1">
+                    Payment announced — not yet in your bank. Will auto-update when received. No action needed.
+                  </span>
+                )}
               </div>
 
               {/* Rows */}
