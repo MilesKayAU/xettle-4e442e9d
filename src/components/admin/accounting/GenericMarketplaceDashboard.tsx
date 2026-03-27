@@ -216,6 +216,32 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
   const [includeGateways, setIncludeGateways] = useState(false);
   const [accountingBoundary, setAccountingBoundary] = useState<string | null>(null);
   const [validationStatusMap, setValidationStatusMap] = useState<Record<string, string>>({});
+  const [resyncingSettlementId, setResyncingSettlementId] = useState<string | null>(null);
+
+  const handleResyncViaApi = useCallback(async (settlementId: string) => {
+    setResyncingSettlementId(settlementId);
+    try {
+      const { data: resp, error: fnError } = await supabase.functions.invoke('verify-settlement', {
+        body: { settlement_id: settlementId },
+      });
+      if (fnError) {
+        toast.error('Re-sync failed', { description: fnError.message || 'Could not fetch corrected data from API' });
+        return;
+      }
+      if (resp?.corrected) {
+        toast.success('Settlement corrected via API', { description: `Updated values fetched from ${code} API` });
+      } else if (resp?.matched) {
+        toast.info('Already matched', { description: 'API data matches stored figures — no changes needed' });
+      } else {
+        toast.success('Re-sync complete', { description: resp?.message || 'Settlement verified against API' });
+      }
+      await loadSettlements();
+    } catch (err: any) {
+      toast.error('Re-sync failed', { description: err.message || 'Unexpected error' });
+    } finally {
+      setResyncingSettlementId(null);
+    }
+  }, [code, loadSettlements]);
 
   // Auto-audit Xero status once settlements are loaded (with session-level cooldown)
   const [hasAutoAudited, setHasAutoAudited] = useState(false);
