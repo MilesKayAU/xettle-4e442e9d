@@ -272,6 +272,9 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
     }
   }, []);
 
+  const activeRows = useMemo(() => rows.filter(r => !r.gap_acknowledged), [rows]);
+  const acknowledgedRows = useMemo(() => rows.filter(r => r.gap_acknowledged), [rows]);
+
   // --- Auto-Scan All ---
   const handleAutoScanAll = useCallback(async () => {
     const toScan = activeRows.filter(r => !aiSuggestions[r.settlement_id]);
@@ -290,7 +293,6 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
       await handleAiSuggest(row.settlement_id);
       scanned++;
       setBatchProgress({ current: scanned, total: toScan.length });
-      // Rate limit: 1s delay between calls
       if (scanned < toScan.length && !batchAbortRef.current) {
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
@@ -301,9 +303,6 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
       toast.success(`Scanned ${scanned} gap${scanned !== 1 ? 's' : ''}`);
     }
   }, [activeRows, aiSuggestions, handleAiSuggest]);
-
-  const activeRows = useMemo(() => rows.filter(r => !r.gap_acknowledged), [rows]);
-  const acknowledgedRows = useMemo(() => rows.filter(r => r.gap_acknowledged), [rows]);
 
   // --- One-click accept (high confidence only) ---
   const handleOneClickAccept = useCallback(async (row: GapRow, suggestion: AiSuggestion) => {
