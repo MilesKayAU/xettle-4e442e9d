@@ -34,12 +34,15 @@ export default function AmazonCallback() {
       }
 
       try {
-        // Retrieve selected region from sessionStorage (set during OAuth initiation)
-        const storedMarketplaceId = sessionStorage.getItem('amazon_marketplace_id');
-        const storedRegion = sessionStorage.getItem('amazon_region');
+        // Parse marketplace_id and region from the state param (format: uuid:marketplaceId:region)
+        const stateParam = searchParams.get('state') || '';
+        const stateParts = stateParam.split(':');
+        const storedMarketplaceId = stateParts.length >= 3 ? stateParts[1] : null;
+        const storedRegion = stateParts.length >= 3 ? stateParts[2] : null;
 
-        const marketplace_id = storedMarketplaceId || DEFAULT_AMAZON_REGION.marketplaceId;
-        const region = storedRegion || DEFAULT_AMAZON_REGION.region;
+        // Fallback to sessionStorage for backward compat, then defaults
+        const marketplace_id = storedMarketplaceId || sessionStorage.getItem('amazon_marketplace_id') || DEFAULT_AMAZON_REGION.marketplaceId;
+        const region = storedRegion || sessionStorage.getItem('amazon_region') || DEFAULT_AMAZON_REGION.region;
 
         const { data, error } = await supabase.functions.invoke('amazon-auth', {
           headers: { 'x-action': 'connect' },

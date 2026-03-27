@@ -68,14 +68,14 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
     try {
       const currentOrigin = window.location.origin;
       const redirectUri = `${currentOrigin}/amazon/callback`;
-      
-      // Store selected region for the callback to use
-      sessionStorage.setItem('amazon_marketplace_id', selectedRegion.marketplaceId);
-      sessionStorage.setItem('amazon_region', selectedRegion.region);
 
       const { data, error } = await supabase.functions.invoke('amazon-auth', {
         headers: { 'x-action': 'authorize' },
-        body: { redirect_uri: redirectUri },
+        body: {
+          redirect_uri: redirectUri,
+          marketplace_id: selectedRegion.marketplaceId,
+          region: selectedRegion.region,
+        },
       });
 
       if (error) throw error;
