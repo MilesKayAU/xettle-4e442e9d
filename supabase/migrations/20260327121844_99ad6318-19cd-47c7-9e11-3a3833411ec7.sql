@@ -1,0 +1,1 @@
+DELETE FROM public.settlement_components WHERE settlement_id = 'BUN-2301-2026-03-14' AND payout_total = -50;

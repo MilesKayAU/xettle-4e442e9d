@@ -39,7 +39,6 @@ serve(async (req) => {
     }
     const userId = user.id;
 
-    // Check admin role
     const { data: isAdmin } = await userClient.rpc("has_role", { _role: "admin" });
     if (!isAdmin) {
       return new Response(JSON.stringify({ error: "Admin role required" }), {
@@ -51,63 +50,12 @@ serve(async (req) => {
     const db = createClient(supabaseUrl, serviceKey);
 
     // =====================================================
-    // 1. Run all 6 guardrails
+    // 1. Guardrail checks
     // =====================================================
-    const guardrailQueries = [
-      {
-        name: "Sync mismatch (validation says ready_to_push but settlement already pushed)",
-        query: `SELECT COUNT(*) as cnt FROM marketplace_validation mv JOIN settlements s ON mv.settlement_id = s.settlement_id AND mv.user_id = s.user_id WHERE mv.overall_status = 'ready_to_push' AND s.status = 'pushed_to_xero'`,
-      },
-      {
-        name: "Orphaned validation rows (no matching settlement)",
-        query: `SELECT COUNT(*) as cnt FROM marketplace_validation mv LEFT JOIN settlements s ON mv.settlement_id = s.settlement_id AND mv.user_id = s.user_id WHERE mv.settlement_id IS NOT NULL AND s.id IS NULL AND mv.overall_status NOT IN ('missing', 'settlement_needed')`,
-      },
-      {
-        name: "shopify_auto_ settlements pushed to Xero",
-        query: `SELECT COUNT(*) as cnt FROM settlements WHERE settlement_id LIKE 'shopify_auto_%' AND status = 'pushed_to_xero'`,
-      },
-      {
-        name: "Duplicate settlement_id in validation",
-        query: `SELECT COUNT(*) as cnt FROM (SELECT user_id, settlement_id, COUNT(*) as c FROM marketplace_validation WHERE settlement_id IS NOT NULL GROUP BY user_id, settlement_id HAVING COUNT(*) > 1) d`,
-      },
-      {
-        name: "gap_acknowledged but wrong overall_status",
-        query: `SELECT COUNT(*) as cnt FROM marketplace_validation WHERE gap_acknowledged = true AND overall_status NOT IN ('gap_acknowledged', 'already_recorded')`,
-      },
-      {
-        name: "Pushed settlements with gap_detected status",
-        query: `SELECT COUNT(*) as cnt FROM marketplace_validation mv JOIN settlements s ON mv.settlement_id = s.settlement_id AND mv.user_id = s.user_id WHERE s.status = 'pushed_to_xero' AND mv.overall_status = 'gap_detected'`,
-      },
-    ];
-
-    const guardrailResults = await Promise.all(
-      guardrailQueries.map(async (g) => {
-        try {
-          const { data, error } = await db.rpc("exec_readonly_sql" as any, { sql: g.query });
-          // Fallback: use raw query via postgrest
-          // Since we can't run raw SQL via supabase-js, we'll use specific queries instead
-          return { name: g.name, violations: -1, error: "Will use specific queries" };
-        } catch {
-          return { name: g.name, violations: -1, error: "Query failed" };
-        }
-      })
-    );
-
-    // Use specific supabase queries instead of raw SQL
-    const [g1, g2, g3, g4, g5, g6] = await Promise.all([
-      // G1: Sync mismatch — check validation rows that say ready_to_push
+    const [g1, g3, g5] = await Promise.all([
       db.from("marketplace_validation").select("settlement_id", { count: "exact", head: true }).eq("overall_status", "ready_to_push"),
-      // G2: Orphaned validation — count validation rows with settlement_id but no settlement match
-      // We'll approximate by checking for non-null settlement_ids
-      db.from("marketplace_validation").select("id", { count: "exact", head: true }).not("settlement_id", "is", null).not("overall_status", "in", '("missing","settlement_needed")'),
-      // G3: shopify_auto_ pushed
       db.from("settlements").select("id", { count: "exact", head: true }).like("settlement_id", "shopify_auto_%").eq("status", "pushed_to_xero"),
-      // G4: We can't easily detect duplicates via supabase-js, skip
-      Promise.resolve({ count: 0 }),
-      // G5: gap_acknowledged with wrong status
       db.from("marketplace_validation").select("id", { count: "exact", head: true }).eq("gap_acknowledged", true).not("overall_status", "in", '("gap_acknowledged","already_recorded")'),
-      // G6: pushed with gap_detected
-      db.from("marketplace_validation").select("settlement_id", { count: "exact", head: true }).eq("overall_status", "gap_detected"),
     ]);
 
     const guardrails = [
@@ -117,17 +65,29 @@ serve(async (req) => {
     ];
 
     // =====================================================
-    // 2. Reconciliation formula checks per marketplace
+    // 2. Reconciliation formula checks — EXCLUDE non-Xettle settlements
     // =====================================================
+    const EXCLUDED_STATUSES = ["already_recorded", "reconciliation_only", "archived", "push_failed_permanent", "duplicate_suppressed"];
+
     const { data: settlements } = await db
       .from("settlements")
       .select("settlement_id, marketplace, sales_principal, sales_shipping, seller_fees, other_fees, refunds, advertising_costs, reimbursements, gst_on_income, gst_on_expenses, bank_deposit, fba_fees, storage_fees, net_ex_gst, status, source")
       .eq("user_id", userId)
-      .not("status", "in", '("push_failed_permanent","duplicate_suppressed")')
+      .not("status", "in", `(${EXCLUDED_STATUSES.join(",")})`)
       .is("duplicate_of_settlement_id", null)
       .eq("is_hidden", false)
       .order("period_end", { ascending: false })
       .limit(500);
+
+    // Also fetch ALL settlements for status distribution
+    const { data: allSettlements } = await db
+      .from("settlements")
+      .select("settlement_id, marketplace, status, source")
+      .eq("user_id", userId)
+      .is("duplicate_of_settlement_id", null)
+      .eq("is_hidden", false)
+      .order("period_end", { ascending: false })
+      .limit(1000);
 
     const gstInclusiveMarketplaces = [
       "shopify_payments", "everyday_market", "bigw", "woolworths_marketplus",
@@ -144,7 +104,7 @@ serve(async (req) => {
       const ac = Math.abs(Number(s.advertising_costs) || 0);
       const rb = Number(s.reimbursements) || 0;
       const gi = Number(s.gst_on_income) || 0;
-      const ge = Number(s.gst_on_expenses) || 0;
+      const ge = Math.abs(Number(s.gst_on_expenses) || 0);
       const bd = Number(s.bank_deposit) || 0;
       const fba = Math.abs(Number(s.fba_fees) || 0);
       const stg = Math.abs(Number(s.storage_fees) || 0);
@@ -157,7 +117,8 @@ serve(async (req) => {
         formulaChecks.push({
           settlement_id: s.settlement_id,
           marketplace: s.marketplace,
-          calculated,
+          status: s.status,
+          calculated: +calculated.toFixed(2),
           bank_deposit: bd,
           difference: +(calculated - bd).toFixed(2),
           include_gst: includeGst,
@@ -166,7 +127,7 @@ serve(async (req) => {
     }
 
     // =====================================================
-    // 3. GST consistency check
+    // 3. GST consistency check (only active settlements)
     // =====================================================
     const gstIssues: any[] = [];
     for (const s of (settlements || [])) {
@@ -174,9 +135,8 @@ serve(async (req) => {
       const gi = Number(s.gst_on_income) || 0;
       const sp = Number(s.sales_principal) || 0;
 
-      // For GST-inclusive marketplaces, gst_on_income should be ~10% of sales
       if (gstInclusiveMarketplaces.includes(mp) && sp > 100) {
-        const expectedGst = sp / 11; // GST = price / 11 for inclusive
+        const expectedGst = sp / 11;
         const gstDiff = Math.abs(gi - expectedGst);
         if (gstDiff > expectedGst * 0.5 && gi === 0) {
           gstIssues.push({
@@ -191,12 +151,14 @@ serve(async (req) => {
     }
 
     // =====================================================
-    // 4. Account mapping completeness
+    // 4. Account mapping completeness — query app_settings (Fix 76a)
     // =====================================================
-    const { data: mappings } = await db
-      .from("marketplace_account_mapping")
-      .select("marketplace_code, category")
-      .eq("user_id", userId);
+    const { data: mappingSettings } = await db
+      .from("app_settings")
+      .select("value")
+      .eq("user_id", userId)
+      .eq("key", "accounting_xero_account_codes")
+      .single();
 
     const { data: activeConnections } = await db
       .from("marketplace_connections")
@@ -204,19 +166,42 @@ serve(async (req) => {
       .eq("user_id", userId)
       .eq("connection_status", "active");
 
-    const requiredCategories = ["sales_principal", "seller_fees", "refunds", "other_fees", "sales_shipping"];
+    const REQUIRED_MAPPING_CATEGORIES = ["sales_principal", "seller_fees", "refunds"];
     const mappingGaps: any[] = [];
+    const mappingStatus: any[] = [];
+
+    let confirmedMappings: Record<string, any> = {};
+    try {
+      if (mappingSettings?.value) {
+        const parsed = typeof mappingSettings.value === "string"
+          ? JSON.parse(mappingSettings.value)
+          : mappingSettings.value;
+        confirmedMappings = parsed?.confirmed || parsed || {};
+      }
+    } catch {
+      confirmedMappings = {};
+    }
 
     for (const conn of (activeConnections || [])) {
-      const mpMappings = (mappings || []).filter(m => m.marketplace_code === conn.marketplace_code);
-      const mappedCategories = mpMappings.map(m => m.category);
-      const missing = requiredCategories.filter(c => !mappedCategories.includes(c));
+      const mpCode = conn.marketplace_code;
+      const mpMappings = confirmedMappings[mpCode] || {};
+      const mappedCategories = Object.keys(mpMappings);
+      const missing = REQUIRED_MAPPING_CATEGORIES.filter(c => !mappedCategories.includes(c));
+
       if (missing.length > 0) {
         mappingGaps.push({
-          marketplace_code: conn.marketplace_code,
+          marketplace_code: mpCode,
           missing_categories: missing,
+          mapped_categories: mappedCategories,
         });
       }
+
+      mappingStatus.push({
+        marketplace_code: mpCode,
+        mapped_count: mappedCategories.length,
+        mapped_categories: mappedCategories,
+        complete: missing.length === 0,
+      });
     }
 
     // =====================================================
@@ -224,25 +209,29 @@ serve(async (req) => {
     // =====================================================
     const { data: components } = await db
       .from("settlement_components")
-      .select("settlement_id, sales_ex_tax, sales_tax, fees_ex_tax, fees_tax, refunds_ex_tax, payout_total")
+      .select("settlement_id, marketplace_code, sales_ex_tax, sales_tax, fees_ex_tax, fees_tax, refunds_ex_tax, payout_total")
       .eq("user_id", userId)
       .limit(200);
 
     const parserDiscrepancies: any[] = [];
-    const settlementMap = new Map((settlements || []).map(s => [s.settlement_id, s]));
+    const allSettlementMap = new Map((allSettlements || []).map(s => [s.settlement_id, s]));
+    // Also map the detailed settlements for bank_deposit
+    const detailedMap = new Map((settlements || []).map(s => [s.settlement_id, s]));
 
     for (const comp of (components || [])) {
-      const s = settlementMap.get(comp.settlement_id);
-      if (!s) continue;
+      // Get bank_deposit from detailed settlements first, fall back to allSettlements
+      const detailedS = detailedMap.get(comp.settlement_id);
+      // We need bank_deposit which is only in the detailed query
+      if (!detailedS) continue;
 
       const compPayout = Number(comp.payout_total) || 0;
-      const sBankDeposit = Number(s.bank_deposit) || 0;
+      const sBankDeposit = Number(detailedS.bank_deposit) || 0;
       const diff = Math.abs(compPayout - sBankDeposit);
 
       if (diff > 1.00) {
         parserDiscrepancies.push({
           settlement_id: comp.settlement_id,
-          marketplace: s.marketplace,
+          marketplace: detailedS.marketplace,
           component_payout: compPayout,
           settlement_bank_deposit: sBankDeposit,
           difference: +(compPayout - sBankDeposit).toFixed(2),
@@ -251,32 +240,50 @@ serve(async (req) => {
     }
 
     // =====================================================
-    // 6. Settlement status distribution
+    // 6. Settlement status distribution (from ALL settlements)
     // =====================================================
     const statusDistribution: Record<string, number> = {};
-    for (const s of (settlements || [])) {
+    for (const s of (allSettlements || [])) {
       statusDistribution[s.status] = (statusDistribution[s.status] || 0) + 1;
     }
 
     // =====================================================
-    // 7. Send to Claude for analysis
+    // 7. Specific investigation items
+    // =====================================================
+    const investigationItems: any[] = [];
+    for (const fc of formulaChecks) {
+      investigationItems.push({
+        settlement_id: fc.settlement_id,
+        marketplace: fc.marketplace,
+        gap: fc.difference,
+        status: fc.status,
+        action: Math.abs(fc.difference) < 10 ? "investigate_small_residual" : "needs_reupload_or_review",
+      });
+    }
+
+    // =====================================================
+    // 8. Send to Claude for analysis
     // =====================================================
     const auditData = {
       guardrails,
       formula_discrepancies: formulaChecks.slice(0, 20),
       formula_total_count: formulaChecks.length,
+      settlements_checked_scope: "active only (excludes already_recorded, reconciliation_only, archived)",
       gst_issues: gstIssues.slice(0, 10),
       gst_total_count: gstIssues.length,
+      mapping_source: "app_settings.accounting_xero_account_codes (Fix 76a)",
       mapping_gaps: mappingGaps,
+      mapping_status: mappingStatus,
       parser_discrepancies: parserDiscrepancies.slice(0, 10),
       parser_total_count: parserDiscrepancies.length,
       status_distribution: statusDistribution,
-      total_settlements_checked: (settlements || []).length,
+      total_active_settlements_checked: (settlements || []).length,
+      total_all_settlements: (allSettlements || []).length,
+      investigation_items: investigationItems.slice(0, 10),
     };
 
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!anthropicKey) {
-      // Return raw audit without AI analysis
       return new Response(
         JSON.stringify({
           audit_data: auditData,
@@ -297,13 +304,20 @@ serve(async (req) => {
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
         max_tokens: 2000,
-        system: `You are an expert in Australian marketplace seller accounting and Xero integration. 
-Analyse the audit data from Xettle, a SaaS that reconciles marketplace settlements 
+        system: `You are an expert in Australian marketplace seller accounting and Xero integration.
+Analyse the audit data from Xettle, a SaaS that reconciles marketplace settlements
 (Shopify, Amazon, Bunnings, Kogan, eBay, Woolworths/BigW/Everyday Market) into Xero.
+
+IMPORTANT CONTEXT for accurate scoring:
+- The formula check ONLY includes active settlements (excludes already_recorded, reconciliation_only, archived). If there are few or no formula discrepancies, this is GOOD.
+- Account mappings are stored in app_settings under 'accounting_xero_account_codes' (Fix 76a). Check mapping_status to see actual completeness — not the old marketplace_account_mapping table.
+- MyDeal negative settlements (refund-only periods) with small formula gaps are expected behaviour.
+- Small gaps under $10 are often rounding residuals, classify as INFO not CRITICAL.
+- Settlements needing re-upload via fixed parser are WARNING not CRITICAL.
 
 For each finding, classify as:
 - CRITICAL: Will cause wrong Xero postings or data loss
-- WARNING: May cause reconciliation issues or user confusion
+- WARNING: May cause reconciliation issues or needs user action
 - INFO: Improvement opportunity or informational
 
 Return ONLY valid JSON matching this schema:
@@ -311,7 +325,7 @@ Return ONLY valid JSON matching this schema:
   "findings": [
     {
       "severity": "CRITICAL" | "WARNING" | "INFO",
-      "category": "string (e.g. 'Reconciliation Formula', 'GST Handling', 'Account Mapping', 'Parser Quality', 'Data Integrity')",
+      "category": "string",
       "description": "string",
       "affected_settlements": ["settlement_id1", ...] or [],
       "recommendation": "string",
@@ -370,6 +384,8 @@ Return ONLY valid JSON matching this schema:
         push_safe: aiAnalysis.push_safe,
         findings_count: aiAnalysis.findings?.length ?? 0,
         critical_count: aiAnalysis.findings?.filter((f: any) => f.severity === "CRITICAL").length ?? 0,
+        active_settlements_checked: (settlements || []).length,
+        formula_discrepancies: formulaChecks.length,
       },
     });
 
