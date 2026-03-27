@@ -679,7 +679,7 @@ export default function WoolworthsPaymentsView({ marketplace, onSwitchToUpload, 
                       {ef.type === 'csv' ? (
                         <FileText className="h-4 w-4 text-emerald-500 shrink-0" />
                       ) : ef.type === 'pdf' ? (
-                        <File className="h-4 w-4 text-red-500 shrink-0" />
+                        <FileIcon className="h-4 w-4 text-red-500 shrink-0" />
                       ) : (
                         <File className="h-4 w-4 text-muted-foreground shrink-0" />
                       )}
