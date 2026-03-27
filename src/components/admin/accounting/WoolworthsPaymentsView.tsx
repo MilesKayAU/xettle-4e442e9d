@@ -15,7 +15,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import {
   CheckCircle2, XCircle, Upload, ArrowRight, Send, Eye, Package,
   ChevronDown, ChevronUp, CloudUpload, FileText, Loader2, BarChart3,
-  AlertTriangle, RefreshCw, FolderArchive, File, X,
+  AlertTriangle, RefreshCw, FolderArchive, File as FileIcon, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
