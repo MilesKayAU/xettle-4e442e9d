@@ -252,6 +252,22 @@ interface IV01Invoice {
   }>;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// Map Mirakl IV01 invoice state + payment state to canonical payout_status
+// IV01 state values: COMPLETE, PENDING, CANCELLED
+// payment.state values: PAID, PENDING, null
+// ═══════════════════════════════════════════════════════════════
+function mapMiraklPayoutStatus(invoiceState?: string, paymentState?: string): string {
+  const state = (invoiceState || "").toUpperCase();
+  const pState = (paymentState || "").toUpperCase();
+
+  if (state === "CANCELLED") return "cancelled";
+  if (pState === "PAID" || state === "COMPLETE") return "paid";
+  if (state === "PENDING" && pState === "PENDING") return "in_transit"; // validated, payment processing
+  if (state === "PENDING") return "scheduled"; // billing cycle created, not yet validated
+  return "paid"; // safe default for unknown states
+}
+
 async function fetchSettlementsForConnection(
   adminClient: any,
   userId: string,
