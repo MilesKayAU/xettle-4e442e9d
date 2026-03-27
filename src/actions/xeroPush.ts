@@ -115,7 +115,7 @@ export async function pushSettlementToXero(opts: {
     if (!recon.withinTolerance) {
       return {
         success: false,
-        error: `Reconciliation gap of $${reconGap.toFixed(2)} exceeds $1.00 tolerance. Edit figures to resolve before pushing.`,
+        error: `Reconciliation gap of $${recon.absGap.toFixed(2)} exceeds $${RECONCILIATION_TOLERANCE.toFixed(2)} tolerance. Edit figures to resolve before pushing.`,
         errorCode: 'RECON_GAP',
       };
     }
