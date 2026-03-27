@@ -49,6 +49,10 @@ export default function FileReconciliationStatus({ settlements, onSettlementClic
     const dbStatus = (s.reconciliation_status || '').toLowerCase();
     const reconciles = dbStatus === 'reconciled' || dbStatus === 'matched';
 
+    // Compute gap for display
+    const computedNet = sales + fees + refunds;
+    const gap = bankDeposit - computedNet;
+
     return {
       settlement_id: s.settlement_id,
       period: `${s.period_start} → ${s.period_end}`,
@@ -59,6 +63,7 @@ export default function FileReconciliationStatus({ settlements, onSettlementClic
       gstExpenses,
       bankDeposit,
       reconciles,
+      gap,
     };
   });
 
@@ -89,7 +94,10 @@ export default function FileReconciliationStatus({ settlements, onSettlementClic
             <div className="flex items-center gap-2 text-xs">
               <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
               <span className="text-amber-700 dark:text-amber-400 font-medium">
-                {failCount} settlement{failCount !== 1 ? 's' : ''} — internal figures don't balance, click to review
+                {failCount} settlement{failCount !== 1 ? 's' : ''} {failCount === 1 ? 'has' : 'have'} a gap — {failCount === 1 
+                  ? `${fmt(Math.abs(results.find(r => !r.reconciles)?.gap || 0))} difference`
+                  : 'click to review'
+                }
               </span>
             </div>
           )}
@@ -124,6 +132,11 @@ export default function FileReconciliationStatus({ settlements, onSettlementClic
                 )}
                 <span className="text-muted-foreground">Fees: -{fmt(r.fees)}</span>
                 <span className="text-muted-foreground">Net: {fmt(r.bankDeposit)}</span>
+                {!r.reconciles && Math.abs(r.gap) > 0.01 && (
+                  <span className="text-amber-700 dark:text-amber-400 font-medium">
+                    Gap: {fmt(Math.abs(r.gap))}
+                  </span>
+                )}
                 <span className={r.reconciles ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>
                   {r.reconciles ? '✅' : '⚠️'}
                 </span>
