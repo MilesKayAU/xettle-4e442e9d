@@ -423,7 +423,11 @@ export default function WoolworthsPaymentsView({ marketplace, onSwitchToUpload, 
   function getStatusBadge(status: PaymentGroup['overallStatus']) {
     switch (status) {
       case 'pushed':
-        return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 text-[11px]">Pushed to Xero</Badge>;
+        return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 text-[11px]">In Xero ✓</Badge>;
+      case 'external_xero':
+        return <Badge variant="outline" className="text-muted-foreground text-[11px]">In Xero (external)</Badge>;
+      case 'pre_boundary':
+        return <Badge variant="secondary" className="text-[11px]">Pre-boundary</Badge>;
       case 'ready_to_push':
         return <Badge className="bg-primary/10 text-primary border-primary/20 text-[11px]">Ready to Push</Badge>;
       case 'gap_detected':
