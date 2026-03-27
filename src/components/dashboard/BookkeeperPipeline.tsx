@@ -131,6 +131,7 @@ export default function BookkeeperPipeline({
       blockedRes,
       validationRes,
       scheduledRes,
+      amazonOpenRes,
       awaitingRes,
       completeRes,
       syncTime,
@@ -148,7 +149,7 @@ export default function BookkeeperPipeline({
         .from('marketplace_validation')
         .select('id, marketplace_code, period_label, period_start, period_end, settlement_id, settlement_net, overall_status, reconciliation_difference, gap_acknowledged, updated_at, bank_amount')
         .eq('user_id', userId)
-        .not('overall_status', 'in', '("archived","already_recorded","duplicate_suppressed","complete","reconciled")')
+        .not('overall_status', 'in', '("archived","already_recorded","duplicate_suppressed","complete","reconciled","open_period")')
         .or('gap_acknowledged.is.null,gap_acknowledged.eq.false,overall_status.neq.gap_detected')
         .gte('period_end', boundaryDate),
 
