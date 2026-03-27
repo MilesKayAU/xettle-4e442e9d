@@ -1026,6 +1026,58 @@ export default function GenericMarketplaceDashboard({ marketplace, onMarketplace
                             </div>
                           </div>
 
+                          {/* Inline Gap Diagnosis Panel — shows gap amount, cause, and actions */}
+                          {isReconBlocked && !isPreBoundary && (() => {
+                            const gapAmt = reconGap != null ? reconGap : 0;
+                            const diagnosis = diagnoseGapReason(
+                              { source: s.source || undefined, marketplace: s.marketplace, seller_fees: s.seller_fees || 0, bank_deposit: s.bank_deposit || 0, sales_principal: s.sales_principal || 0, gst_on_income: s.gst_on_income || 0, gst_on_expenses: s.gst_on_expenses || 0 },
+                              gapAmt
+                            );
+                            return (
+                              <div className="px-4 pb-3 pt-2 border-t border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/10 space-y-2">
+                                <div className="flex items-start gap-2">
+                                  <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                                      Reconciliation gap: {formatAUD(Math.abs(gapAmt))}
+                                    </p>
+                                    {diagnosis && (
+                                      <p className="text-xs text-amber-700/80 dark:text-amber-400/70 mt-0.5">
+                                        <span className="font-medium">Likely cause:</span> {diagnosis}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 pl-6">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 px-3 text-xs gap-1 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+                                    onClick={() => {
+                                      setDrawerSettlementId(s.settlement_id);
+                                      setDrawerOpen(true);
+                                    }}
+                                  >
+                                    <Eye className="h-3 w-3" />
+                                    Edit Figures
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 px-3 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                                    onClick={() => {
+                                      setDrawerSettlementId(s.settlement_id);
+                                      setDrawerOpen(true);
+                                    }}
+                                  >
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Acknowledge Gap
+                                  </Button>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
                           {/* Bank Verification Panel — inline below the row */}
                           {verifyingId === s.id && isSyncable && (() => {
                             const enteredAmount = parseFloat(bankAmountInput);
