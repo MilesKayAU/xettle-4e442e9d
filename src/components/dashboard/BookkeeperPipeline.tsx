@@ -230,10 +230,11 @@ export default function BookkeeperPipeline({
       });
     });
 
-    // Collect scheduled settlement IDs for deduplication
-    const scheduledSettlementIds = new Set(
-      (scheduledRes.data ?? []).map((s: any) => String(s.settlement_id))
-    );
+    // Collect scheduled settlement IDs for deduplication (Shopify + eBay)
+    const scheduledSettlementIds = new Set([
+      ...(scheduledRes.data ?? []).map((s: any) => String(s.settlement_id)),
+      ...(ebayScheduledRes.data ?? []).map((s: any) => String(s.settlement_id)),
+    ]);
 
     // 2–4. From validation rows (exclude scheduled/in_transit settlements)
     (validationRes.data ?? []).forEach(row => {
