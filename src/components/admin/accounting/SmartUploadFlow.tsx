@@ -2633,6 +2633,7 @@ export default function SmartUploadFlow({ onSettlementsSaved, onMarketplacesChan
             );
           })()}
 
+          {files.map((df, idx) => (
             // Skip Kogan files that are shown in the pairing card
             koganPairings?.koganIndices.has(idx) ? null :
             df.status === 'multi_split' && df.splitResult ? (
