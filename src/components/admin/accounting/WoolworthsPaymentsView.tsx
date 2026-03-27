@@ -68,7 +68,7 @@ interface PaymentGroup {
   hasPdf: boolean;
   settlements: SettlementRow[];
   marketplaceBreakdown: { code: string; name: string; amount: number; status: string | null }[];
-  overallStatus: 'ready_to_push' | 'pushed' | 'gap_detected' | 'upload_csv' | 'upload_pdf' | 'missing';
+  overallStatus: 'ready_to_push' | 'pushed' | 'pre_boundary' | 'external_xero' | 'gap_detected' | 'upload_csv' | 'upload_pdf' | 'missing';
   isFromExpected: boolean;
 }
 
@@ -198,12 +198,23 @@ export default function WoolworthsPaymentsView({ marketplace, onSwitchToUpload, 
       const totalAmount = setts.reduce((sum, s) => sum + (s.bank_deposit || 0), 0);
       const hasCsv = setts.length > 0;
       const hasPdf = false;
-      const allPushed = setts.every(s => ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified', 'already_recorded'].includes(s.status || ''));
+      const allXeroPushed = setts.every(s => ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified'].includes(s.status || ''));
+      const allAlreadyRecorded = setts.every(s => s.status === 'already_recorded');
       const anyGap = setts.some(s => s.status === 'gap_detected' || s.status === 'push_failed');
 
       let overallStatus: PaymentGroup['overallStatus'] = 'ready_to_push';
-      if (allPushed) overallStatus = 'pushed';
-      else if (anyGap) overallStatus = 'gap_detected';
+      if (allXeroPushed) {
+        overallStatus = 'pushed';
+      } else if (allAlreadyRecorded) {
+        // Distinguish: has a real Xero invoice (external tool) vs pre-boundary (no invoice)
+        const anyHasXeroId = setts.some(s => s.xero_invoice_number || s.xero_journal_id);
+        overallStatus = anyHasXeroId ? 'external_xero' : 'pre_boundary';
+      } else if (setts.every(s => ['pushed_to_xero', 'reconciled_in_xero', 'bank_verified', 'already_recorded'].includes(s.status || ''))) {
+        // Mixed: some pushed, some already_recorded
+        overallStatus = 'pushed';
+      } else if (anyGap) {
+        overallStatus = 'gap_detected';
+      }
 
       const paidDate = setts[0]?.period_end || ep?.paid_date || null;
 
@@ -412,7 +423,11 @@ export default function WoolworthsPaymentsView({ marketplace, onSwitchToUpload, 
   function getStatusBadge(status: PaymentGroup['overallStatus']) {
     switch (status) {
       case 'pushed':
-        return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 text-[11px]">Pushed to Xero</Badge>;
+        return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 text-[11px]">In Xero ✓</Badge>;
+      case 'external_xero':
+        return <Badge variant="outline" className="text-muted-foreground text-[11px]">In Xero (external)</Badge>;
+      case 'pre_boundary':
+        return <Badge variant="secondary" className="text-[11px]">Pre-boundary</Badge>;
       case 'ready_to_push':
         return <Badge className="bg-primary/10 text-primary border-primary/20 text-[11px]">Ready to Push</Badge>;
       case 'gap_detected':
@@ -457,6 +472,9 @@ export default function WoolworthsPaymentsView({ marketplace, onSwitchToUpload, 
     }
     if (group.overallStatus === 'pushed') {
       return <span className="text-xs text-muted-foreground">Complete</span>;
+    }
+    if (group.overallStatus === 'pre_boundary' || group.overallStatus === 'external_xero') {
+      return <span className="text-xs text-muted-foreground">{group.overallStatus === 'pre_boundary' ? 'Pre-boundary' : 'External'}</span>;
     }
     return null;
   }
@@ -555,7 +573,7 @@ export default function WoolworthsPaymentsView({ marketplace, onSwitchToUpload, 
     );
   };
 
-  const needsAttentionCount = activeGroups.filter(g => g.overallStatus !== 'pushed').length;
+  const needsAttentionCount = activeGroups.filter(g => !['pushed', 'pre_boundary', 'external_xero'].includes(g.overallStatus)).length;
   const readyCount = activeGroups.filter(g => g.overallStatus === 'ready_to_push').length;
   const missingCount = activeGroups.filter(g => g.overallStatus === 'missing').length;
 
