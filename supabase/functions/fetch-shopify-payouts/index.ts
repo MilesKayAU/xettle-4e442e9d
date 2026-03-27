@@ -70,57 +70,63 @@ async function syncPayoutsForUser(
     dateMin = boundarySetting.value;
   }
 
-  // ─── Fetch paid payouts from Shopify ──────────────────────────────
+  // ─── Fetch payouts from Shopify (paid + scheduled + in_transit) ─────
   const allPayouts: ShopifyPayout[] = [];
-  let nextPageUrl: string | undefined;
-  let page = 0;
-  const MAX_PAGES = 10;
 
-  const buildInitialUrl = () => {
-    const params = new URLSearchParams({ status: "paid" });
-    // Smart sync window: use sync_from if provided, otherwise use boundary date
-    // This prevents downloading hundreds of historical payouts on first connect
-    if (syncFromParam) {
-      params.set("date_min", syncFromParam);
-      console.log(`[fetch-shopify-payouts] Using sync_from filter: date_min=${syncFromParam}`);
-    } else if (dateMin) {
-      params.set("date_min", dateMin);
-      console.log(`[fetch-shopify-payouts] Using boundary date filter: date_min=${dateMin}`);
-    }
-    return buildShopifyUrl(shopDomain, 'shopify_payments/payouts', params);
-  };
+  const statusesToFetch = ['paid', 'scheduled', 'in_transit'];
 
-  let url: string = buildInitialUrl();
+  for (const payoutStatus of statusesToFetch) {
+    let nextPageUrl: string | undefined;
+    let page = 0;
+    const MAX_PAGES = 10;
 
-  do {
-    const res = await fetch(url, {
-      headers: getShopifyHeaders(accessToken),
-    });
+    const buildInitialUrl = () => {
+      const params = new URLSearchParams({ status: payoutStatus });
+      if (syncFromParam) {
+        params.set("date_min", syncFromParam);
+        console.log(`[fetch-shopify-payouts] Using sync_from filter: date_min=${syncFromParam} status=${payoutStatus}`);
+      } else if (dateMin) {
+        params.set("date_min", dateMin);
+        console.log(`[fetch-shopify-payouts] Using boundary date filter: date_min=${dateMin} status=${payoutStatus}`);
+      }
+      return buildShopifyUrl(shopDomain, 'shopify_payments/payouts', params);
+    };
 
-    if (res.status === 401) {
-      return { synced: 0, skipped: 0, errors: ["Shopify token invalid or expired"] };
-    }
-    if (res.status === 429) {
-      return { synced: 0, skipped: 0, errors: ["Shopify rate limit exceeded"] };
-    }
-    if (!res.ok) {
-      const body = await res.text();
-      return { synced: 0, skipped: 0, errors: [`Shopify API error ${res.status}: ${body}`] };
-    }
+    let url: string = buildInitialUrl();
 
-    const data = await res.json();
-    allPayouts.push(...(data.payouts || []));
+    do {
+      const res = await fetch(url, {
+        headers: getShopifyHeaders(accessToken),
+      });
 
-    nextPageUrl = undefined;
-    const linkHeader = res.headers.get("Link");
-    if (linkHeader) {
-      const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
-      if (nextMatch) nextPageUrl = nextMatch[1];
-    }
+      if (res.status === 401) {
+        return { synced: 0, skipped: 0, errors: ["Shopify token invalid or expired"] };
+      }
+      if (res.status === 429) {
+        return { synced: 0, skipped: 0, errors: ["Shopify rate limit exceeded"] };
+      }
+      if (!res.ok) {
+        const body = await res.text();
+        errors.push(`Shopify API error ${res.status} for status=${payoutStatus}: ${body}`);
+        break;
+      }
 
-    if (nextPageUrl) url = nextPageUrl;
-    page++;
-  } while (nextPageUrl && page < MAX_PAGES);
+      const data = await res.json();
+      allPayouts.push(...(data.payouts || []));
+
+      nextPageUrl = undefined;
+      const linkHeader = res.headers.get("Link");
+      if (linkHeader) {
+        const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+        if (nextMatch) nextPageUrl = nextMatch[1];
+      }
+
+      if (nextPageUrl) url = nextPageUrl;
+      page++;
+    } while (nextPageUrl && page < MAX_PAGES);
+
+    await sleep(RATE_LIMIT_DELAY_MS);
+  }
 
   // ─── Dedup: filter out already-imported payouts ────────────────────
   // Check by exact settlement_id match (numeric payout ID)
