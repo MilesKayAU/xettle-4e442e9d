@@ -132,6 +132,11 @@ export default function FileReconciliationStatus({ settlements, onSettlementClic
                 )}
                 <span className="text-muted-foreground">Fees: -{fmt(r.fees)}</span>
                 <span className="text-muted-foreground">Net: {fmt(r.bankDeposit)}</span>
+                {!r.reconciles && Math.abs(r.gap) > 0.01 && (
+                  <span className="text-amber-700 dark:text-amber-400 font-medium">
+                    Gap: {fmt(Math.abs(r.gap))}
+                  </span>
+                )}
                 <span className={r.reconciles ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>
                   {r.reconciles ? '✅' : '⚠️'}
                 </span>
