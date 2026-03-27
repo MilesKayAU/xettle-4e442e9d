@@ -681,7 +681,7 @@ export default function WoolworthsPaymentsView({ marketplace, onSwitchToUpload, 
                       ) : ef.type === 'pdf' ? (
                         <FileIcon className="h-4 w-4 text-red-500 shrink-0" />
                       ) : (
-                        <File className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <FileIcon className="h-4 w-4 text-muted-foreground shrink-0" />
                       )}
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-foreground truncate">{ef.name}</p>
