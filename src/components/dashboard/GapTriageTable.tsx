@@ -1,7 +1,8 @@
 /**
  * GapTriageTable — Focused worklist of settlements with reconciliation gaps.
  * Reads exclusively from marketplace_validation (source of truth).
- * Provides inline diagnosis, edit access, and AI scan per row.
+ * Provides inline diagnosis, edit access, AI scan per row, and AI-powered
+ * auto-suggestion of acknowledgement reasons.
  */
 
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
@@ -13,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { AlertTriangle, Check, ChevronDown, ChevronUp, Pencil, Sparkles, Undo2 } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, ChevronUp, Loader2, Pencil, Sparkles, Undo2, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import { toast } from 'sonner';
@@ -38,7 +39,6 @@ interface GapRow {
   period_label: string;
   reconciliation_difference: number | null;
   overall_status: string;
-  // Settlement financial fields for diagnosis
   source?: string;
   marketplace?: string;
   seller_fees?: number;
@@ -52,6 +52,25 @@ interface GapRow {
   gap_acknowledged_reason?: string | null;
 }
 
+interface AiSuggestion {
+  suggested_reason: string;
+  confidence: 'high' | 'medium' | 'low';
+  explanation: string;
+}
+
+// Map AI reasons to the existing dropdown values
+const AI_REASON_TO_DROPDOWN: Record<string, string> = {
+  'Rounding difference': 'Rounding difference — within acceptable tolerance',
+  'Marketplace no longer active': 'Marketplace no longer active (MyDeal, Catch etc)',
+  'Bank timing difference': 'Pending payout — not yet paid',
+  'Fee not in settlement data': 'Other',
+  'GST calculation difference': 'Other',
+  'Open settlement period': 'Pending payout — not yet paid',
+  'Duplicate transaction': 'Already reconciled externally',
+  'Manual entry in Xero': 'Already reconciled externally',
+  'Other': 'Other',
+};
+
 export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps) {
   const [rows, setRows] = useState<GapRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,8 +78,12 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
   const [ackExpanded, setAckExpanded] = useState(false);
   const [aiScanning, setAiScanning] = useState<string | null>(null);
   const [aiResults, setAiResults] = useState<Record<string, string>>({});
+  const [aiSuggestions, setAiSuggestions] = useState<Record<string, AiSuggestion>>({});
+  const [batchScanning, setBatchScanning] = useState(false);
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowsSignatureRef = useRef('');
+  const batchAbortRef = useRef(false);
   // Acknowledge modal state
   const [ackTarget, setAckTarget] = useState<GapRow | null>(null);
   const [ackReason, setAckReason] = useState('');
@@ -70,7 +93,6 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
   const fetchGaps = useCallback(async ({ background = false }: { background?: boolean } = {}) => {
     if (!background) setLoading(true);
     try {
-      // Get gap_detected validation rows
       const { data: validationRows } = await supabase
         .from('marketplace_validation')
         .select('settlement_id, marketplace_code, period_label, reconciliation_difference, overall_status, gap_acknowledged, gap_acknowledged_reason')
@@ -86,7 +108,6 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
         return;
       }
 
-      // Get settlement details for diagnosis
       const settlementIds = validationRows.map(v => v.settlement_id).filter(Boolean);
       const { data: settlements } = await supabase
         .from('settlements' as any)
@@ -100,7 +121,6 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
         return { ...v, ...s };
       });
 
-      // Sort by absolute gap descending
       merged.sort((a, b) => Math.abs(b.reconciliation_difference || 0) - Math.abs(a.reconciliation_difference || 0));
 
       const nextSignature = JSON.stringify(
@@ -152,6 +172,7 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
     };
   }, [fetchGaps]);
 
+  // --- Existing full AI scan (forensic markdown) ---
   const handleAiScan = useCallback(async (settlementId: string) => {
     setAiScanning(settlementId);
     try {
@@ -166,7 +187,7 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
             'Content-Type': 'application/json',
             Authorization: `Bearer ${session.access_token}`,
           },
-           body: JSON.stringify({
+          body: JSON.stringify({
             messages: [
               {
                 role: 'user',
@@ -184,7 +205,6 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
         return;
       }
 
-      // Collect full response without streaming state updates to avoid scroll thrashing
       const reader = resp.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -219,8 +239,130 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
     }
   }, []);
 
+  // --- AI Gap Suggest Reason (new Anthropic-powered) ---
+  const handleAiSuggest = useCallback(async (settlementId: string): Promise<AiSuggestion | null> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return null;
+
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-gap-suggest-reason`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ settlement_id: settlementId }),
+        }
+      );
+
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        console.error('AI suggest failed:', errData);
+        return null;
+      }
+
+      const suggestion: AiSuggestion = await resp.json();
+      setAiSuggestions(prev => ({ ...prev, [settlementId]: suggestion }));
+      return suggestion;
+    } catch (err) {
+      console.error('AI suggest error:', err);
+      return null;
+    }
+  }, []);
+
   const activeRows = useMemo(() => rows.filter(r => !r.gap_acknowledged), [rows]);
   const acknowledgedRows = useMemo(() => rows.filter(r => r.gap_acknowledged), [rows]);
+
+  // --- Auto-Scan All ---
+  const handleAutoScanAll = useCallback(async () => {
+    const toScan = activeRows.filter(r => !aiSuggestions[r.settlement_id]);
+    if (toScan.length === 0) {
+      toast.info('All gaps already scanned');
+      return;
+    }
+
+    setBatchScanning(true);
+    setBatchProgress({ current: 0, total: toScan.length });
+    batchAbortRef.current = false;
+
+    let scanned = 0;
+    for (const row of toScan) {
+      if (batchAbortRef.current) break;
+      await handleAiSuggest(row.settlement_id);
+      scanned++;
+      setBatchProgress({ current: scanned, total: toScan.length });
+      if (scanned < toScan.length && !batchAbortRef.current) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    setBatchScanning(false);
+    if (!batchAbortRef.current) {
+      toast.success(`Scanned ${scanned} gap${scanned !== 1 ? 's' : ''}`);
+    }
+  }, [activeRows, aiSuggestions, handleAiSuggest]);
+
+  // --- One-click accept (high confidence only) ---
+  const handleOneClickAccept = useCallback(async (row: GapRow, suggestion: AiSuggestion) => {
+    setAckSubmitting(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const fullReason = suggestion.suggested_reason + ` — AI suggested (${suggestion.confidence} confidence)`;
+
+      const { error } = await supabase
+        .from('marketplace_validation')
+        .update({
+          gap_acknowledged: true,
+          gap_acknowledged_reason: fullReason,
+          gap_acknowledged_at: new Date().toISOString(),
+          gap_acknowledged_by: user.id,
+        } as any)
+        .eq('settlement_id', row.settlement_id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      // Log AI suggestion accepted to system_events
+      await supabase.from('system_events' as any).insert({
+        user_id: user.id,
+        event_type: 'ai_gap_suggestion_accepted',
+        severity: 'info',
+        marketplace_code: row.marketplace_code,
+        settlement_id: row.settlement_id,
+        details: {
+          settlement_id: row.settlement_id,
+          suggested_reason: suggestion.suggested_reason,
+          confidence: suggestion.confidence,
+          explanation: suggestion.explanation,
+          accepted_by: user.id,
+        },
+      } as any);
+
+      toast.success(`Gap acknowledged: ${suggestion.suggested_reason}`);
+      void fetchGaps({ background: true });
+    } catch (err: any) {
+      toast.error(`Failed: ${err.message}`);
+    } finally {
+      setAckSubmitting(false);
+    }
+  }, [fetchGaps]);
+
+  // --- Open modal pre-filled with AI suggestion ---
+  const openAckModal = useCallback((row: GapRow, suggestion?: AiSuggestion) => {
+    setAckTarget(row);
+    if (suggestion) {
+      const dropdownValue = AI_REASON_TO_DROPDOWN[suggestion.suggested_reason] || 'Other';
+      setAckReason(dropdownValue);
+      setAckNotes(suggestion.explanation || '');
+    } else {
+      setAckReason('');
+      setAckNotes('');
+    }
+  }, []);
 
   const handleAcknowledge = useCallback(async () => {
     if (!ackTarget || !ackReason) return;
@@ -244,9 +386,13 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
 
       if (error) throw error;
 
+      // Check if this was AI-suggested
+      const suggestion = aiSuggestions[ackTarget.settlement_id];
+      const eventType = suggestion ? 'ai_gap_suggestion_accepted' : 'gap_acknowledged';
+
       await supabase.from('system_events' as any).insert({
         user_id: user.id,
-        event_type: 'gap_acknowledged',
+        event_type: eventType,
         severity: 'info',
         marketplace_code: ackTarget.marketplace_code,
         settlement_id: ackTarget.settlement_id,
@@ -255,6 +401,11 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
           marketplace: ackTarget.marketplace_code,
           gap_amount: ackTarget.reconciliation_difference,
           reason: fullReason,
+          ...(suggestion ? {
+            suggested_reason: suggestion.suggested_reason,
+            confidence: suggestion.confidence,
+            accepted_by: user.id,
+          } : {}),
         },
       } as any);
 
@@ -268,7 +419,7 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
     } finally {
       setAckSubmitting(false);
     }
-  }, [ackTarget, ackReason, ackNotes, fetchGaps]);
+  }, [ackTarget, ackReason, ackNotes, fetchGaps, aiSuggestions]);
 
   const handleRevokeAck = useCallback(async (row: GapRow) => {
     try {
@@ -319,11 +470,35 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
           <h3 className="font-semibold text-sm text-foreground">Gaps to Resolve</h3>
           <Badge variant="destructive" className="text-xs">{activeRows.length}</Badge>
         </div>
-        {hasMore && (
-          <Button variant="ghost" size="sm" onClick={() => setExpanded(!expanded)} className="text-xs text-muted-foreground">
-            {expanded ? <><ChevronUp className="h-3 w-3 mr-1" /> Show less</> : <><ChevronDown className="h-3 w-3 mr-1" /> Show all {rows.length}</>}
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Auto-Scan All button */}
+          {activeRows.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-3 text-xs gap-1"
+              onClick={handleAutoScanAll}
+              disabled={batchScanning || !!aiScanning}
+            >
+              {batchScanning ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Scanning {batchProgress.current} of {batchProgress.total}…
+                </>
+              ) : (
+                <>
+                  <Zap className="h-3 w-3" />
+                  Auto-Scan All
+                </>
+              )}
+            </Button>
+          )}
+          {hasMore && (
+            <Button variant="ghost" size="sm" onClick={() => setExpanded(!expanded)} className="text-xs text-muted-foreground">
+              {expanded ? <><ChevronUp className="h-3 w-3 mr-1" /> Show less</> : <><ChevronDown className="h-3 w-3 mr-1" /> Show all {rows.length}</>}
+            </Button>
+          )}
+        </div>
       </div>
 
       <Table>
@@ -348,6 +523,7 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
             const label = MARKETPLACE_LABELS[row.marketplace_code] || row.marketplace_code;
             const aiResult = aiResults[row.settlement_id];
             const isScanning = aiScanning === row.settlement_id;
+            const suggestion = aiSuggestions[row.settlement_id];
 
             return (
               <React.Fragment key={row.settlement_id}>
@@ -361,7 +537,21 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
                     {gap !== null ? formatAUD(gap) : '—'}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground max-w-[240px] truncate" title={diagnosis || ''}>
-                    {diagnosis || '—'}
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate">{diagnosis || '—'}</span>
+                      {suggestion && (
+                        <Badge
+                          variant={suggestion.confidence === 'high' ? 'default' : 'secondary'}
+                          className={cn(
+                            "text-[10px] px-1.5 py-0 shrink-0",
+                            suggestion.confidence === 'high' && "bg-emerald-600 hover:bg-emerald-700 text-white"
+                          )}
+                          title={suggestion.explanation}
+                        >
+                          AI: {suggestion.suggested_reason}
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
@@ -384,15 +574,28 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
                         <Sparkles className="h-3 w-3 mr-1" />
                         {isScanning ? 'Scanning…' : 'AI Scan'}
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs text-muted-foreground"
-                        onClick={() => { setAckTarget(row); setAckReason(''); setAckNotes(''); }}
-                      >
-                        <Check className="h-3 w-3 mr-1" />
-                        Acknowledge
-                      </Button>
+                      {/* Confidence-gated accept button */}
+                      {suggestion && suggestion.confidence === 'high' ? (
+                        <Button
+                          size="sm"
+                          className="h-7 px-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                          onClick={() => handleOneClickAccept(row, suggestion)}
+                          disabled={ackSubmitting}
+                        >
+                          <Check className="h-3 w-3 mr-1" />
+                          Accept: {suggestion.suggested_reason}
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs text-muted-foreground"
+                          onClick={() => openAckModal(row, suggestion)}
+                        >
+                          <Check className="h-3 w-3 mr-1" />
+                          Acknowledge
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -481,6 +684,19 @@ export default function GapTriageTable({ onEditSettlement }: GapTriageTableProps
                 <span className="text-muted-foreground">Gap</span>
                 <span className="font-mono font-semibold text-destructive">{formatAUD(ackTarget.reconciliation_difference || 0)}</span>
               </div>
+              {/* Show AI suggestion context if available */}
+              {aiSuggestions[ackTarget.settlement_id] && (
+                <div className="rounded-md bg-muted/50 p-3 text-xs space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="h-3 w-3 text-primary" />
+                    <span className="font-medium">AI Suggestion</span>
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                      {aiSuggestions[ackTarget.settlement_id].confidence}
+                    </Badge>
+                  </div>
+                  <p className="text-muted-foreground">{aiSuggestions[ackTarget.settlement_id].explanation}</p>
+                </div>
+              )}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Reason</label>
                 <Select value={ackReason} onValueChange={setAckReason}>

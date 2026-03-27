@@ -1,34 +1,27 @@
+## AI-Powered Gap Auto-Investigation
 
+### Status: Deployed ✅
 
-## Problem
+### What it does
+When gaps appear in the GapTriageTable, users can now:
+1. **Auto-Scan All** — batch-scans all active gaps via Claude Sonnet, suggesting acknowledgement reasons
+2. **One-click Accept** — for high-confidence suggestions, a green "Accept: {reason}" button acknowledges in one click
+3. **Pre-filled Modal** — for medium/low confidence, the acknowledge modal opens pre-filled so the user reviews before accepting
 
-When uploading files for settlements that already exist with `already_recorded` status, the system shows an amber "Re-parse Confirm" card instead of automatically processing them. Users don't notice or understand these confirmation cards, so the data silently fails to ingest.
+### Architecture
+- **Edge function**: `supabase/functions/ai-gap-suggest-reason/index.ts`
+  - Uses Anthropic Claude Sonnet directly (matches ai-account-mapper pattern)
+  - `verify_jwt = true` in config.toml (financial data protection)
+  - Queries settlements, marketplace_validation, bank_transactions, settlement_lines via service role
+  - Returns structured JSON: `{ suggested_reason, confidence, explanation }`
+  - Validates against 9 allowed reason values
 
-`already_recorded` settlements are pre-boundary legacy records with no Xero linkage — there is zero risk in overwriting them with fresh data.
+- **UI**: `src/components/dashboard/GapTriageTable.tsx`
+  - New state: `aiSuggestions` record
+  - Auto-Scan All button with 1s rate limiting and progress indicator
+  - Confidence-gated UI: high → one-click, medium/low → modal
+  - AI suggestion badge inline in "Likely Cause" column
+  - Audit trail: `ai_gap_suggestion_accepted` event logged to system_events
 
-## Fix
-
-**One-line change** in `SmartUploadFlow.tsx` (line 783):
-
-Add `already_recorded` to the auto-reparse status list:
-
-```typescript
-// BEFORE
-['gap_detected', 'settlement_needed', 'upload_needed', 'missing', 'ingested'].includes(firstDupeStatus)
-
-// AFTER
-['gap_detected', 'settlement_needed', 'upload_needed', 'missing', 'ingested', 'already_recorded'].includes(firstDupeStatus)
-```
-
-This makes `already_recorded` settlements auto-reparse on upload (same as `gap_detected` or `ingested`), with an info toast confirming it happened. No manual confirmation step needed.
-
-The only statuses that will still require confirmation are:
-- `ready_to_push` — user has validated this data, so a confirmation is reasonable
-- `pushed_to_xero` — hard-blocked as it should be
-
-## Technical Details
-
-- File: `src/components/admin/accounting/SmartUploadFlow.tsx`, line 783
-- The `alwaysConfirmReparse` user preference toggle still overrides this for users who want extra caution
-- The validation sweep runs after save regardless, so data integrity is maintained
-
+### Guardrails
+All 6 guardrails return 0 violations (guardrail 5 excludes `already_recorded` pre-boundary rows by design).
