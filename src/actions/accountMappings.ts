@@ -93,7 +93,7 @@ export async function getMappingsRaw(): Promise<Record<string, string> | null> {
     .maybeSingle();
 
   if (data?.value) {
-    try { return JSON.parse(data.value); } catch { /* */ }
+    try { return JSON.parse(data.value); } catch (e) { console.warn('Failed to parse raw account mappings JSON', e); }
   }
   return null;
 }

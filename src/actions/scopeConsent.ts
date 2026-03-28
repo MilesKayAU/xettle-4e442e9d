@@ -70,6 +70,10 @@ export async function getOrgTaxProfile(): Promise<{ profile: TaxProfile; authent
 }
 
 export async function setOrgTaxProfile(profile: TaxProfile): Promise<{ success: boolean; error?: string }> {
+  if (!SUPPORTED_TAX_PROFILES.includes(profile as any)) {
+    return { success: false, error: 'Unsupported tax profile' };
+  }
+
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, error: 'Not authenticated' };
 
