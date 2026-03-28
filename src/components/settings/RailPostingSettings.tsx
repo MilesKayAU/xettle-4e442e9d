@@ -106,7 +106,7 @@ export default function RailPostingSettings() {
         getOrgTaxProfile(),
       ]);
 
-      setTaxProfile(orgTaxProfile);
+      setTaxProfile(orgTaxProfile.profile);
 
       if (settingsRes.data) {
         const map = new Map<string, RailSetting>();
