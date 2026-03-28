@@ -103,6 +103,8 @@ export default function Admin() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [activeTab, setActiveTab] = useState('users');
+  const [passwordTarget, setPasswordTarget] = useState<UserRow | null>(null);
+  const [newPassword, setNewPassword] = useState('');
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
