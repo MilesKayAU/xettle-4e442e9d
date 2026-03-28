@@ -72,6 +72,12 @@ export async function runFullUserSync(): Promise<SyncActionResult> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return { success: false, error: 'Not authenticated' };
 
+  // Guard: skip if user has no active marketplace connections
+  const hasConnections = await hasActiveMarketplaceConnections(session.user.id);
+  if (!hasConnections) {
+    return { success: true, detail: 'No marketplace connections configured — skipped sync.' };
+  }
+
   const result = await callEdgeFunctionSafe(
     'scheduled-sync',
     session.access_token,
