@@ -192,7 +192,25 @@ export default function Admin() {
     }
   };
 
-  if (isLoading || isAdmin === null) {
+  const handleSetPassword = async () => {
+    if (!passwordTarget || !newPassword || newPassword.length < 6) return;
+    setActionLoading(passwordTarget.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-manage-users', {
+        body: { action: 'set_password', userId: passwordTarget.id, password: newPassword },
+      });
+      if (error) throw error;
+      toast({ title: 'Password Updated', description: `Password changed for ${passwordTarget.email}` });
+      setPasswordTarget(null);
+      setNewPassword('');
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to set password', variant: 'destructive' });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+
     return (
       <div className="flex items-center justify-center min-h-screen">
         <LoadingSpinner size="lg" text="Loading..." />
