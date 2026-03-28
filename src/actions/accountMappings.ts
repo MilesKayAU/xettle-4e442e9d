@@ -64,7 +64,7 @@ export async function getMappings(): Promise<AccountMappings> {
   if (confirmedRes.data?.value) {
     try {
       return { codes: JSON.parse(confirmedRes.data.value), isDraft: false };
-    } catch { /* fall through */ }
+    } catch (e) { console.warn('Failed to parse confirmed account mappings JSON', e); }
   }
 
   if (draftRes.data?.value) {
