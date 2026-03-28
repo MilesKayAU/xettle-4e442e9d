@@ -53,9 +53,9 @@ export async function acknowledgeScopeConsent(): Promise<{ success: boolean; err
 
 // ─── Org Tax Profile ─────────────────────────────────────────────────────────
 
-export async function getOrgTaxProfile(): Promise<TaxProfile> {
+export async function getOrgTaxProfile(): Promise<{ profile: TaxProfile; authenticated: boolean }> {
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return 'AU_GST';
+  if (!user) return { profile: 'AU_GST', authenticated: false };
 
   const { data } = await supabase
     .from('app_settings')
