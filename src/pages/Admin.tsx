@@ -308,12 +308,22 @@ export default function Admin() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                title="Send password reset"
-                                aria-label="Send password reset"
+                                title="Set password"
+                                aria-label="Set password"
+                                disabled={actionLoading === u.id}
+                                onClick={() => { setPasswordTarget(u); setNewPassword(''); }}
+                              >
+                                <KeyRound className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Send password reset email"
+                                aria-label="Send password reset email"
                                 disabled={actionLoading === u.id}
                                 onClick={() => handleSendReset(u)}
                               >
-                                <KeyRound className="h-4 w-4" />
+                                <Mail className="h-4 w-4" />
                               </Button>
                               <Button
                                 variant="ghost"
