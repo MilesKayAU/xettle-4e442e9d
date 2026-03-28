@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
       })
     }
 
-    const { action, userId, email } = await req.json()
+    const { action, userId, email, password } = await req.json()
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL')!,
@@ -73,6 +73,18 @@ Deno.serve(async (req) => {
         if (error) throw error
         
         return new Response(JSON.stringify({ success: true, message: 'Password reset email sent' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      case 'set_password': {
+        if (!userId) throw new Error('userId required')
+        if (!password || password.length < 6) throw new Error('password must be at least 6 characters')
+        
+        const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, { password })
+        if (error) throw error
+        
+        return new Response(JSON.stringify({ success: true, message: 'Password updated' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
       }

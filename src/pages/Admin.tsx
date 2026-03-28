@@ -103,6 +103,8 @@ export default function Admin() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [activeTab, setActiveTab] = useState('users');
+  const [passwordTarget, setPasswordTarget] = useState<UserRow | null>(null);
+  const [newPassword, setNewPassword] = useState('');
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -190,7 +192,25 @@ export default function Admin() {
     }
   };
 
-  if (isLoading || isAdmin === null) {
+  const handleSetPassword = async () => {
+    if (!passwordTarget || !newPassword || newPassword.length < 6) return;
+    setActionLoading(passwordTarget.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-manage-users', {
+        body: { action: 'set_password', userId: passwordTarget.id, password: newPassword },
+      });
+      if (error) throw error;
+      toast({ title: 'Password Updated', description: `Password changed for ${passwordTarget.email}` });
+      setPasswordTarget(null);
+      setNewPassword('');
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Failed to set password', variant: 'destructive' });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+
     return (
       <div className="flex items-center justify-center min-h-screen">
         <LoadingSpinner size="lg" text="Loading..." />
@@ -306,12 +326,22 @@ export default function Admin() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                title="Send password reset"
-                                aria-label="Send password reset"
+                                title="Set password"
+                                aria-label="Set password"
+                                disabled={actionLoading === u.id}
+                                onClick={() => { setPasswordTarget(u); setNewPassword(''); }}
+                              >
+                                <KeyRound className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Send password reset email"
+                                aria-label="Send password reset email"
                                 disabled={actionLoading === u.id}
                                 onClick={() => handleSendReset(u)}
                               >
-                                <KeyRound className="h-4 w-4" />
+                                <Mail className="h-4 w-4" />
                               </Button>
                               <Button
                                 variant="ghost"
@@ -459,6 +489,32 @@ export default function Admin() {
             <Button onClick={handleInviteUser} disabled={actionLoading === 'invite' || !inviteEmail.trim()}>
               <Mail className="h-4 w-4 mr-1" />
               Send Invite
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Set Password dialog */}
+      <Dialog open={!!passwordTarget} onOpenChange={(open) => { if (!open) { setPasswordTarget(null); setNewPassword(''); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set Password</DialogTitle>
+            <DialogDescription>
+              Set a new password for <strong>{passwordTarget?.email}</strong>. Minimum 6 characters.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            type="password"
+            placeholder="New password (min 6 characters)"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && newPassword.length >= 6 && handleSetPassword()}
+            autoComplete="new-password"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setPasswordTarget(null); setNewPassword(''); }}>Cancel</Button>
+            <Button onClick={handleSetPassword} disabled={actionLoading === passwordTarget?.id || newPassword.length < 6}>
+              <KeyRound className="h-4 w-4 mr-1" />
+              Set Password
             </Button>
           </DialogFooter>
         </DialogContent>
