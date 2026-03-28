@@ -65,8 +65,8 @@ export async function getOrgTaxProfile(): Promise<{ profile: TaxProfile; authent
     .maybeSingle();
 
   const val = data?.value as TaxProfile | null;
-  if (val && SUPPORTED_TAX_PROFILES.includes(val as any)) return val;
-  return 'AU_GST';
+  if (val && SUPPORTED_TAX_PROFILES.includes(val as any)) return { profile: val, authenticated: true };
+  return { profile: 'AU_GST', authenticated: true };
 }
 
 export async function setOrgTaxProfile(profile: TaxProfile): Promise<{ success: boolean; error?: string }> {
