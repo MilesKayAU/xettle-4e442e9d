@@ -1,40 +1,28 @@
 
 
-# Add "Re-sync via API" Button for Gap Resolution
+## Fix Valid Scanner Findings in xettle
 
-## Problem
-The `verify-settlement` edge function already exists and can auto-correct settlement figures by fetching live data from marketplace APIs (Mirakl/Bunnings, eBay, Amazon). However, this button is only available in the admin `SettlementsOverview` page — it's never surfaced in the per-marketplace `GenericMarketplaceDashboard` where users actually see and manage their gaps.
+Three targeted fixes to improve data integrity and consistency. All are small, low-risk changes.
 
-## What Changes
+---
 
-### 1. Add a "Re-sync" button on settlement rows with gaps (API-connected marketplaces only)
+### 1. Add input validation to `setOrgTaxProfile`
+**File:** `src/actions/scopeConsent.ts`
 
-In `GenericMarketplaceDashboard.tsx`, next to the existing "Edit Figures" and "Acknowledge Gap" actions on settlements that have a reconciliation gap, add a **"Re-sync via API"** button — but **only** when the marketplace is API-capable (using the existing `API_CAPABLE_CODES` set + `isCsvOnly` check).
+Add a guard at the top of `setOrgTaxProfile` that checks `SUPPORTED_TAX_PROFILES.includes(profile)` before the upsert. Return `{ success: false, error: 'Unsupported tax profile' }` if invalid.
 
-The button will:
-- Call `supabase.functions.invoke('verify-settlement', { body: { settlement_id } })`
-- Show a loading spinner while running
-- On success: toast the result (corrected values or "already matched"), reload settlements
-- On failure: toast error with guidance
+### 2. Make `getOrgTaxProfile` return consistent error signal
+**File:** `src/actions/scopeConsent.ts`
 
-### 2. Update the gap diagnosis panel
+Change the return type to include an error case (e.g., `{ profile: TaxProfile; authenticated: boolean }`) or throw when unauthenticated, matching the pattern used by other functions in this file. This prevents downstream code from silently using a default `'AU_GST'` for logged-out users.
 
-When a gap is detected and the marketplace is API-connected, the "Likely cause" section will include a note like:
-> "This marketplace has an API connection — try **Re-sync** to fetch corrected figures automatically."
+### 3. Add warning logs for failed JSON parsing in accountMappings
+**File:** `src/actions/accountMappings.ts`
 
-For CSV-only marketplaces (Kogan, MyDeal), the existing guidance stays unchanged (upload PDF, edit figures manually).
+In `getMappings()` and `getMappingsRaw()`, add `console.warn('Failed to parse account mappings JSON', e)` inside the catch blocks so corrupt data is visible in logs rather than silently swallowed.
 
-### 3. Add Bunnings to API_CAPABLE_CODES
+---
 
-The current `API_CAPABLE_CODES` set is missing `bunnings` (which uses Mirakl API). Add it so Bunnings settlements show the re-sync option.
-
-## Files to modify
-
-- **`src/components/admin/accounting/GenericMarketplaceDashboard.tsx`**:
-  - Add `bunnings` to `API_CAPABLE_CODES`
-  - Add re-sync button with loading state in the gap actions area
-  - Update gap diagnosis tooltip to mention API re-sync when available
-
-## No new files needed
-The `verify-settlement` edge function and all API routing logic already exist.
+### Not included (lower priority)
+- **N+1 deletion** in settlements — valid but requires a new RPC function and is a larger refactor. Can be tackled separately.
 
