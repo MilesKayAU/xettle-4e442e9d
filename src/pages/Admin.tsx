@@ -475,6 +475,32 @@ export default function Admin() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Set Password dialog */}
+      <Dialog open={!!passwordTarget} onOpenChange={(open) => { if (!open) { setPasswordTarget(null); setNewPassword(''); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set Password</DialogTitle>
+            <DialogDescription>
+              Set a new password for <strong>{passwordTarget?.email}</strong>. Minimum 6 characters.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            type="password"
+            placeholder="New password (min 6 characters)"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && newPassword.length >= 6 && handleSetPassword()}
+            autoComplete="new-password"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setPasswordTarget(null); setNewPassword(''); }}>Cancel</Button>
+            <Button onClick={handleSetPassword} disabled={actionLoading === passwordTarget?.id || newPassword.length < 6}>
+              <KeyRound className="h-4 w-4 mr-1" />
+              Set Password
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
