@@ -7,6 +7,23 @@
 import { callEdgeFunctionSafe } from '@/utils/sync-capabilities';
 import { supabase } from '@/integrations/supabase/client';
 
+const ACTIVE_CONNECTION_STATUSES = ['active', 'connected'];
+
+/**
+ * Quick check: does this user have at least one active marketplace connection
+ * (API token or connected marketplace)? If not, there's nothing to sync.
+ */
+async function hasActiveMarketplaceConnections(userId: string): Promise<boolean> {
+  // Check marketplace_connections for any active connection
+  const { count } = await supabase
+    .from('marketplace_connections')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .in('connection_status', ACTIVE_CONNECTION_STATUSES);
+
+  return (count ?? 0) > 0;
+}
+
 export interface SyncActionResult {
   success: boolean;
   error?: string;
@@ -42,6 +59,12 @@ export async function runMarketplaceSync(rail?: string): Promise<SyncActionResul
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return { success: false, error: 'Not authenticated' };
 
+  // Guard: skip if user has no active marketplace connections
+  const hasConnections = await hasActiveMarketplaceConnections(session.user.id);
+  if (!hasConnections) {
+    return { success: true, detail: 'No marketplace connections configured — skipped sync.' };
+  }
+
   const result = await callEdgeFunctionSafe(
     'scheduled-sync',
     session.access_token,
@@ -65,6 +88,12 @@ export async function runMarketplaceSync(rail?: string): Promise<SyncActionResul
 export async function runFullUserSync(): Promise<SyncActionResult> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return { success: false, error: 'Not authenticated' };
+
+  // Guard: skip if user has no active marketplace connections
+  const hasConnections = await hasActiveMarketplaceConnections(session.user.id);
+  if (!hasConnections) {
+    return { success: true, detail: 'No marketplace connections configured — skipped sync.' };
+  }
 
   const result = await callEdgeFunctionSafe(
     'scheduled-sync',
