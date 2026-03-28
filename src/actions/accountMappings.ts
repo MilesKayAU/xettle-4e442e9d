@@ -70,7 +70,7 @@ export async function getMappings(): Promise<AccountMappings> {
   if (draftRes.data?.value) {
     try {
       return { codes: JSON.parse(draftRes.data.value), isDraft: true };
-    } catch { /* fall through */ }
+    } catch (e) { console.warn('Failed to parse draft account mappings JSON', e); }
   }
 
   return { codes: {}, isDraft: false };
