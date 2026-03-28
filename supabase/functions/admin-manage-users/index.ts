@@ -77,6 +77,23 @@ Deno.serve(async (req) => {
         })
       }
 
+      case 'set_password': {
+        if (!userId) throw new Error('userId required')
+        const { password } = await req.clone().then(() => ({ password: (await req.json()).password })).catch(() => ({ password: undefined }))
+        // password was already parsed above with the initial req.json(), re-read from the destructured body
+        const body = { action, userId, email, password: (await req.clone().json?.())?.password }
+        if (!body.password || body.password.length < 6) throw new Error('password must be at least 6 characters')
+        
+        const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+          password: body.password,
+        })
+        if (error) throw error
+        
+        return new Response(JSON.stringify({ success: true, message: 'Password updated' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
       case 'invite_user': {
         if (!email) throw new Error('email required')
         

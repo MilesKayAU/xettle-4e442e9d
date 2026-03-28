@@ -20,8 +20,12 @@ export default function ResetPassword() {
 
   useEffect(() => {
     // Listen for the PASSWORD_RECOVERY event from the auth redirect
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
+        setIsRecovery(true);
+      }
+      // Also treat SIGNED_IN with a session as recovery-ready (user landed via recovery link)
+      if (event === 'SIGNED_IN' && session) {
         setIsRecovery(true);
       }
     });
@@ -32,7 +36,22 @@ export default function ResetPassword() {
       setIsRecovery(true);
     }
 
-    return () => subscription.unsubscribe();
+    // Check if user already has a session (recovery link already processed)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setIsRecovery(true);
+      }
+    });
+
+    // Fallback timeout — if after 5s we still haven't detected recovery, show the form anyway
+    const timeout = setTimeout(() => {
+      setIsRecovery(true);
+    }, 5000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, []);
 
   const handleReset = async (e: React.FormEvent) => {
