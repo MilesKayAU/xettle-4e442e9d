@@ -10,18 +10,29 @@ import { supabase } from '@/integrations/supabase/client';
 const ACTIVE_CONNECTION_STATUSES = ['active', 'connected'];
 
 /**
- * Quick check: does this user have at least one active marketplace connection
- * (API token or connected marketplace)? If not, there's nothing to sync.
+ * Quick check: does this user have at least one active API marketplace connection
+ * OR at least one API token (eBay, Amazon, Mirakl)? If not, there's nothing for
+ * scheduled-sync to do, so we skip the call entirely to avoid timeouts.
  */
 async function hasActiveMarketplaceConnections(userId: string): Promise<boolean> {
-  // Check marketplace_connections for any active connection
-  const { count } = await supabase
+  // Check 1: marketplace_connections with API connection type
+  const { count: apiConns } = await supabase
     .from('marketplace_connections')
     .select('id', { count: 'exact', head: true })
     .eq('user_id', userId)
-    .in('connection_status', ACTIVE_CONNECTION_STATUSES);
+    .in('connection_status', ACTIVE_CONNECTION_STATUSES)
+    .eq('connection_type', 'api');
 
-  return (count ?? 0) > 0;
+  if ((apiConns ?? 0) > 0) return true;
+
+  // Check 2: direct API tokens (eBay, Amazon, Mirakl)
+  const [ebay, amazon, mirakl] = await Promise.all([
+    supabase.from('ebay_tokens').select('id', { count: 'exact', head: true }).eq('user_id', userId),
+    supabase.from('amazon_tokens').select('id', { count: 'exact', head: true }).eq('user_id', userId),
+    supabase.from('mirakl_tokens').select('id', { count: 'exact', head: true }).eq('user_id', userId),
+  ]);
+
+  return ((ebay.count ?? 0) + (amazon.count ?? 0) + (mirakl.count ?? 0)) > 0;
 }
 
 export interface SyncActionResult {
