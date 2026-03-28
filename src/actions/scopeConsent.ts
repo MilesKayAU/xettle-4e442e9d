@@ -53,9 +53,9 @@ export async function acknowledgeScopeConsent(): Promise<{ success: boolean; err
 
 // ─── Org Tax Profile ─────────────────────────────────────────────────────────
 
-export async function getOrgTaxProfile(): Promise<TaxProfile> {
+export async function getOrgTaxProfile(): Promise<{ profile: TaxProfile; authenticated: boolean }> {
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return 'AU_GST';
+  if (!user) return { profile: 'AU_GST', authenticated: false };
 
   const { data } = await supabase
     .from('app_settings')
@@ -65,11 +65,15 @@ export async function getOrgTaxProfile(): Promise<TaxProfile> {
     .maybeSingle();
 
   const val = data?.value as TaxProfile | null;
-  if (val && SUPPORTED_TAX_PROFILES.includes(val as any)) return val;
-  return 'AU_GST';
+  if (val && SUPPORTED_TAX_PROFILES.includes(val as any)) return { profile: val, authenticated: true };
+  return { profile: 'AU_GST', authenticated: true };
 }
 
 export async function setOrgTaxProfile(profile: TaxProfile): Promise<{ success: boolean; error?: string }> {
+  if (!SUPPORTED_TAX_PROFILES.includes(profile as any)) {
+    return { success: false, error: 'Unsupported tax profile' };
+  }
+
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, error: 'Not authenticated' };
 

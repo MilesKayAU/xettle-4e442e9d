@@ -64,13 +64,13 @@ export async function getMappings(): Promise<AccountMappings> {
   if (confirmedRes.data?.value) {
     try {
       return { codes: JSON.parse(confirmedRes.data.value), isDraft: false };
-    } catch { /* fall through */ }
+    } catch (e) { console.warn('Failed to parse confirmed account mappings JSON', e); }
   }
 
   if (draftRes.data?.value) {
     try {
       return { codes: JSON.parse(draftRes.data.value), isDraft: true };
-    } catch { /* fall through */ }
+    } catch (e) { console.warn('Failed to parse draft account mappings JSON', e); }
   }
 
   return { codes: {}, isDraft: false };
@@ -93,7 +93,7 @@ export async function getMappingsRaw(): Promise<Record<string, string> | null> {
     .maybeSingle();
 
   if (data?.value) {
-    try { return JSON.parse(data.value); } catch { /* */ }
+    try { return JSON.parse(data.value); } catch (e) { console.warn('Failed to parse raw account mappings JSON', e); }
   }
   return null;
 }
