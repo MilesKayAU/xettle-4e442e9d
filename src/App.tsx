@@ -9,6 +9,7 @@ import LoadingSpinner from "@/components/ui/loading-spinner";
 import PinGate from "@/components/PinGate";
 import BugReportButton from "@/components/bug-report/BugReportButton";
 import AuthenticatedLayout from "@/components/AuthenticatedLayout";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { lazyWithRetry } from "@/utils/lazy-with-retry";
 
 const Landing = lazyWithRetry(() => import("@/pages/Landing"));
