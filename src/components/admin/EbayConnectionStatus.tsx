@@ -28,9 +28,7 @@ export default function EbayConnectionStatus() {
         setConnection(data.connection || null);
 
         // Ensure marketplace_connections row exists via universal helper
-        if (data.connected) {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
+        if (data.connected && user) {
             await upsertMarketplaceConnection({
               userId: user.id,
               marketplaceCode: 'ebay_au',
@@ -46,7 +44,7 @@ export default function EbayConnectionStatus() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     checkStatus();
