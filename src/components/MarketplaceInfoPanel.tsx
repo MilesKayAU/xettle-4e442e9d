@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { Store, Calendar, Receipt, Clock, TrendingUp } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
 
 interface MarketplaceInfo {
   name: string;
@@ -79,8 +80,13 @@ export default function MarketplaceInfoPanel({ marketplaceCode }: MarketplaceInf
           }));
           setAverages(avgs);
         }
-      } catch {
-        // silent
+      } catch (err: any) {
+        console.error('[MarketplaceInfoPanel] Failed to load data:', err);
+        toast({
+          title: 'Marketplace data unavailable',
+          description: 'Could not load marketplace profile. Try refreshing.',
+          variant: 'destructive',
+        });
       } finally {
         setLoading(false);
       }
