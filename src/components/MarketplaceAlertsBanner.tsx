@@ -34,14 +34,22 @@ export default function MarketplaceAlertsBanner({ marketplaceCode }: Marketplace
   useEffect(() => {
     let isMounted = true;
     const load = async () => {
-      const { data } = await supabase
-        .from('marketplace_fee_alerts')
-        .select('id, fee_type, expected_rate, observed_rate, deviation_pct, settlement_id, marketplace_code')
-        .eq('marketplace_code', marketplaceCode)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false })
-        .limit(5);
-      if (isMounted && data) setAlerts(data as FeeAlert[]);
+      try {
+        const { data, error } = await supabase
+          .from('marketplace_fee_alerts')
+          .select('id, fee_type, expected_rate, observed_rate, deviation_pct, settlement_id, marketplace_code')
+          .eq('marketplace_code', marketplaceCode)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+          .limit(5);
+        if (error) {
+          console.warn('[MarketplaceAlertsBanner] fetch failed:', error.message);
+          return;
+        }
+        if (isMounted && data) setAlerts(data as FeeAlert[]);
+      } catch (err) {
+        console.warn('[MarketplaceAlertsBanner] unexpected error:', err);
+      }
     };
     load();
     return () => { isMounted = false; };

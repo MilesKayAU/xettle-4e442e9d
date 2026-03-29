@@ -64,7 +64,6 @@ export function useSettingsPin() {
   }, []);
 
   const verifyPin = useCallback(async (pin: string): Promise<boolean> => {
-    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
     const { data } = await supabase
       .from('app_settings')
@@ -75,7 +74,7 @@ export function useSettingsPin() {
     if (!data?.value) return false;
     const inputHash = await hashPin(pin);
     return inputHash === data.value;
-  }, []);
+  }, [user]);
 
   return {
     isUnlocked,

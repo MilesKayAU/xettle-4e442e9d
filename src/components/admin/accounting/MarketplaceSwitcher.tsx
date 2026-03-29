@@ -141,6 +141,7 @@ export const MARKETPLACE_CATALOG: MarketplaceDefinition[] = [
     connectionMethods: ['manual_csv'],
     phase: 'csv_ready',
     description: 'Shopify Orders export — creates gateway clearing invoices for PayPal, Afterpay, Stripe, etc.',
+    settlementFrequencyDays: 3,
   },
 ];
 

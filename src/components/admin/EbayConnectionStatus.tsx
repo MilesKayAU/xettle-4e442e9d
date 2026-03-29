@@ -39,7 +39,6 @@ export default function EbayConnectionStatus() {
               connectionStatus: 'active',
               countryCode: 'AU',
             });
-          }
         }
       }
     } catch (err) {

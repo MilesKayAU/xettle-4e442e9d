@@ -45,6 +45,9 @@ export default function AccountResetButton() {
       queryClient.clear();
       queryClient.removeQueries();
 
+      // Sign out to clear in-memory Supabase session
+      await supabase.auth.signOut();
+
       if (errors.length > 0) {
         console.warn('Reset errors:', Object.fromEntries(errors));
       }

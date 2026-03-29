@@ -9,11 +9,7 @@ interface NextExpectedSettlementsProps {
 function getNextExpectedDate(code: string): string {
   const now = new Date();
   const catalog = MARKETPLACE_CATALOG.find(m => m.code === code);
-  
-  // Estimate based on typical settlement frequencies
-  const freq = catalog?.code.includes('shopify') ? 3 : 
-               catalog?.code.includes('bunnings') ? 15 :
-               catalog?.code.includes('woolworths') ? 14 : 7;
+  const freq = catalog?.settlementFrequencyDays ?? 7;
   
   const next = new Date(now);
   next.setDate(now.getDate() + Math.max(1, freq - (now.getDate() % freq)));
