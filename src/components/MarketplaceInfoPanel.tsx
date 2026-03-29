@@ -80,8 +80,13 @@ export default function MarketplaceInfoPanel({ marketplaceCode }: MarketplaceInf
           }));
           setAverages(avgs);
         }
-      } catch {
-        // silent
+      } catch (err: any) {
+        console.error('[MarketplaceInfoPanel] Failed to load data:', err);
+        toast({
+          title: 'Marketplace data unavailable',
+          description: 'Could not load marketplace profile. Try refreshing.',
+          variant: 'destructive',
+        });
       } finally {
         setLoading(false);
       }

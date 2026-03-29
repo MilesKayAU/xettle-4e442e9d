@@ -55,7 +55,9 @@ export default function AmazonCallback() {
         const expectedNonce = expectedState.split(':')[0] || '';
         if (!csrfNonce || csrfNonce !== expectedNonce) {
           console.warn('[AmazonCallback] State nonce mismatch — possible CSRF or stale session');
-          // Don't hard-block: the user may have cleared storage, but log the warning
+          setStatus('error');
+          setErrorMessage('Security validation failed. Please try connecting your Amazon account again from the dashboard.');
+          return;
         }
         // Clean up stored state
         sessionStorage.removeItem('amazon_oauth_state');
