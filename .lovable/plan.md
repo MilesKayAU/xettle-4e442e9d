@@ -1,28 +1,36 @@
 
 
-## Fix Valid Scanner Findings in xettle
+## Fix Valid CleanVibes Findings (Round 2)
 
-Three targeted fixes to improve data integrity and consistency. All are small, low-risk changes.
+### Finding 1: Move AuthProvider to App root
+**File:** `src/App.tsx`, `src/components/AuthenticatedLayout.tsx`
 
----
+The `AuthProvider` currently only wraps authenticated routes. Moving it to `App.tsx` (wrapping all routes) means any component anywhere can use `useAuth()` without independent `getUser()` calls. Remove the `AuthProvider` wrapper from `AuthenticatedLayout.tsx`.
 
-### 1. Add input validation to `setOrgTaxProfile`
-**File:** `src/actions/scopeConsent.ts`
+### Finding 2: Add isMounted guard to MarketplaceAlertsBanner
+**File:** `src/components/MarketplaceAlertsBanner.tsx`
 
-Add a guard at the top of `setOrgTaxProfile` that checks `SUPPORTED_TAX_PROFILES.includes(profile)` before the upsert. Return `{ success: false, error: 'Unsupported tax profile' }` if invalid.
+Add `let isMounted = true` + cleanup return in the `useEffect` to prevent state updates after unmount.
 
-### 2. Make `getOrgTaxProfile` return consistent error signal
-**File:** `src/actions/scopeConsent.ts`
+### Finding 7: Add AbortController to SettlementsSummaryStrip
+**File:** `src/components/admin/accounting/SettlementsSummaryStrip.tsx`
 
-Change the return type to include an error case (e.g., `{ profile: TaxProfile; authenticated: boolean }`) or throw when unauthenticated, matching the pattern used by other functions in this file. This prevents downstream code from silently using a default `'AU_GST'` for logged-out users.
-
-### 3. Add warning logs for failed JSON parsing in accountMappings
-**File:** `src/actions/accountMappings.ts`
-
-In `getMappings()` and `getMappingsRaw()`, add `console.warn('Failed to parse account mappings JSON', e)` inside the catch blocks so corrupt data is visible in logs rather than silently swallowed.
+Add an `AbortController` in the `useEffect` so rapid month changes cancel stale requests. Use Supabase's `.abortSignal(signal)` method.
 
 ---
 
-### Not included (lower priority)
-- **N+1 deletion** in settlements — valid but requires a new RPC function and is a larger refactor. Can be tackled separately.
+### Not fixing (with rationale)
+
+- **Finding 3 (DashboardConnectionStrip)**: The parallel queries are valid — they don't cause lock contention. The `Promise.all` pattern is correct and doesn't need an RPC. The component already has a session guard.
+- **Findings 4 & 5 (pdfjs-dist / xlsx)**: Major version upgrades with breaking APIs. Neither causes the lock errors. Previously assessed as skip.
+- **Finding 6 (NextExpectedSettlements)**: The date estimation is intentionally approximate for a UI hint. Not a bug — it's a design choice. The lock error cited as "runtime evidence" is unrelated.
+
+### Summary: 3 files modified
+
+| File | Change |
+|------|--------|
+| `src/App.tsx` | Wrap routes in `AuthProvider` |
+| `src/components/AuthenticatedLayout.tsx` | Remove `AuthProvider` wrapper |
+| `src/components/MarketplaceAlertsBanner.tsx` | Add `isMounted` cleanup |
+| `src/components/admin/accounting/SettlementsSummaryStrip.tsx` | Add `AbortController` cancellation |
 
