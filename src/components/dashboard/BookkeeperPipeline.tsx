@@ -709,4 +709,4 @@ const PipelineRow = React.memo(function PipelineRow({
       </div>
     </div>
   );
-}
+});
