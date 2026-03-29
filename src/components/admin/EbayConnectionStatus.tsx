@@ -7,8 +7,10 @@ import { CheckCircle2, XCircle, Loader2, ExternalLink, Unplug } from "lucide-rea
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { upsertMarketplaceConnection } from '@/utils/marketplace-connections';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function EbayConnectionStatus() {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [connection, setConnection] = useState<any>(null);
