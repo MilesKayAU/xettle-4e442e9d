@@ -411,10 +411,10 @@ export default function BookkeeperPipeline({
   // ─── Grouping ───────────────────────────────────────────────────
 
   const bucketOrder: BucketType[] = ['blocked', 'scheduled', 'upload_needed', 'gaps', 'ready', 'awaiting', 'complete'];
-  const grouped = bucketOrder.reduce((acc, bucket) => {
+  const grouped = useMemo(() => bucketOrder.reduce((acc, bucket) => {
     acc[bucket] = items.filter(i => i.bucket === bucket);
     return acc;
-  }, {} as Record<BucketType, PipelineItem[]>);
+  }, {} as Record<BucketType, PipelineItem[]>), [items]);
 
   const actionableCount = grouped.blocked.length + grouped.upload_needed.length + grouped.gaps.length + grouped.ready.length;
   const displayName = userName?.split('@')[0] || 'there';

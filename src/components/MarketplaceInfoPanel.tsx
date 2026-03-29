@@ -88,7 +88,18 @@ export default function MarketplaceInfoPanel({ marketplaceCode }: MarketplaceInf
     load();
   }, [marketplaceCode]);
 
-  if (loading || !info) return null;
+  if (loading) return null;
+
+  if (!info) {
+    return (
+      <Card className="border-border/50">
+        <CardContent className="py-6 text-center text-sm text-muted-foreground">
+          <Store className="h-5 w-5 mx-auto mb-2 text-muted-foreground/60" />
+          No marketplace profile found for <strong>{marketplaceCode}</strong>.
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="border-border/50">
