@@ -12,12 +12,17 @@ export function useContactClassification() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('user_contact_classifications')
       .select('classification, category, notes, xero_contact_id')
       .eq('user_id', user.id)
       .eq('contact_name', contactName)
       .maybeSingle();
+
+    if (error) {
+      console.error('[useContactClassification] getClassification failed:', error.message);
+      return null;
+    }
 
     return data;
   };
