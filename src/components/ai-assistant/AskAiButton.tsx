@@ -1,45 +1,24 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 import AiChatPanel from './AiChatPanel';
 
 /**
  * AskAiButton — Floating AI assistant button.
  * Reads context from AiContextProvider (no props needed).
  * Mounted in AuthenticatedLayout for sitewide availability.
+ * Uses centralized AuthContext — no direct supabase.auth calls.
  */
 export default function AskAiButton() {
   const [open, setOpen] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isPro, setIsPro] = useState<boolean | null>(null);
+  const { user, hasAccess, loading } = useAuth();
 
-  useEffect(() => {
-    let mounted = true;
-    const check = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !mounted) return;
-      setIsAuthenticated(true);
-
-      const [proRes, adminRes, starterRes] = await Promise.all([
-        supabase.rpc('has_role', { _role: 'pro' }),
-        supabase.rpc('has_role', { _role: 'admin' }),
-        supabase.rpc('has_role', { _role: 'starter' }),
-      ]);
-
-      if (mounted) setIsPro(!!proRes.data || !!adminRes.data || !!starterRes.data);
-    };
-
-    check();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => { check(); });
-    return () => { mounted = false; subscription.unsubscribe(); };
-  }, []);
-
-  if (!isAuthenticated) return null;
+  if (!user || loading) return null;
 
   const handleClick = () => {
-    if (isPro === false) {
+    if (!hasAccess) {
       toast.error('AI Assistant is a Pro feature — upgrade to unlock', {
         action: {
           label: 'View Plans',

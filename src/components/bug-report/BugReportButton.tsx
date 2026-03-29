@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Bug } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import BugReportModal from './BugReportModal';
 
 interface ConsoleError {
@@ -11,26 +11,9 @@ interface ConsoleError {
 }
 
 export default function BugReportButton() {
-  const [visible, setVisible] = useState(false);
+  const { user, isAdmin } = useAuth();
   const [open, setOpen] = useState(false);
-  const [userEmail, setUserEmail] = useState('');
   const errorsRef = useRef<ConsoleError[]>([]);
-
-  // Check if user has admin role
-  useEffect(() => {
-    let mounted = true;
-    const check = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || !mounted) return;
-      setUserEmail(user.email || '');
-      const { data } = await supabase.rpc('has_role', { _role: 'admin' });
-      if (mounted) setVisible(!!data);
-    };
-
-    check();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => { check(); });
-    return () => { mounted = false; subscription.unsubscribe(); };
-  }, []);
 
   // Intercept console errors
   useEffect(() => {
@@ -64,7 +47,7 @@ export default function BugReportButton() {
 
   const getErrors = useCallback(() => [...errorsRef.current], []);
 
-  if (!visible) return null;
+  if (!isAdmin) return null;
 
   return (
     <>
@@ -81,7 +64,7 @@ export default function BugReportButton() {
         open={open}
         onClose={() => setOpen(false)}
         getErrors={getErrors}
-        userEmail={userEmail}
+        userEmail={user?.email || ''}
       />
     </>
   );
