@@ -130,6 +130,7 @@ export const MARKETPLACE_CATALOG: MarketplaceDefinition[] = [
     connectionMethods: ['manual_csv'],
     phase: 'csv_ready',
     description: 'Shopify Payments payouts — your direct store sales.',
+    settlementFrequencyDays: 3,
   },
   {
     code: 'shopify_orders',
