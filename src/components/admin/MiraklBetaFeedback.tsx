@@ -38,7 +38,7 @@ export default function MiraklBetaFeedback() {
   const toggleResolved = async (id: string, current: boolean) => {
     setToggling(id);
     const { error } = await supabase
-      .from('mirakl_issue_reports' as any)
+      .from('mirakl_issue_reports')
       .update({ resolved: !current })
       .eq('id', id);
     if (error) {
