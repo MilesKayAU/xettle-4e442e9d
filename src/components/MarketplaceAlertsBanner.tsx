@@ -3,6 +3,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface FeeAlert {
   id: string;
@@ -44,6 +45,7 @@ export default function MarketplaceAlertsBanner({ marketplaceCode }: Marketplace
           .limit(5);
         if (error) {
           console.warn('[MarketplaceAlertsBanner] fetch failed:', error.message);
+          toast.error('Failed to load marketplace alerts');
           return;
         }
         if (isMounted && data) setAlerts(data as FeeAlert[]);

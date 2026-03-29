@@ -29,23 +29,24 @@ export default function AccountResetButton() {
   const handleReset = async () => {
     if (!isConfirmed) return;
     setLoading(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30-second timeout
     try {
-      const { data, error } = await supabase.functions.invoke('account-reset');
+      const { data, error } = await supabase.functions.invoke('account-reset', {
+        body: {},
+      });
+      clearTimeout(timeoutId);
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
       const cleared = Object.values(data.results as Record<string, string>).filter(v => v === 'cleared').length;
       const errors = Object.entries(data.results as Record<string, string>).filter(([, v]) => v.startsWith('error'));
 
-      // Clear ALL client-side state so dashboard sees fresh DB
-      sessionStorage.clear();
-      localStorage.clear();
-
       // Nuke ALL React Query caches
       queryClient.clear();
       queryClient.removeQueries();
 
-      // Sign out to clear in-memory Supabase session
+      // Sign out to clear in-memory Supabase session (also clears auth tokens from localStorage)
       await supabase.auth.signOut();
 
       if (errors.length > 0) {
@@ -64,9 +65,13 @@ export default function AccountResetButton() {
         window.location.href = '/dashboard?reset=' + Date.now();
       }, 1200);
     } catch (err: any) {
+      clearTimeout(timeoutId);
+      const message = err?.name === 'AbortError'
+        ? 'Reset timed out. Please try again.'
+        : err.message;
       toast({
         title: 'Reset failed',
-        description: err.message,
+        description: message,
         variant: 'destructive',
       });
     } finally {
