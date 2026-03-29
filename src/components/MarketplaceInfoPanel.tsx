@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { Store, Calendar, Receipt, Clock, TrendingUp } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
 
 interface MarketplaceInfo {
   name: string;
