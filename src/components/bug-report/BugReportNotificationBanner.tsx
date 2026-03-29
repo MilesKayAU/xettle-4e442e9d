@@ -1,39 +1,40 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function BugReportNotificationBanner() {
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState<any[]>([]);
 
   useEffect(() => {
-    const load = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+    if (!user) return;
 
+    const load = async () => {
       // Get resolved bugs where notify_submitter is true
       const { data: bugs } = await supabase
-        .from('bug_reports' as any)
+        .from('bug_reports')
         .select('id, description')
         .eq('submitted_by', user.id)
         .eq('status', 'resolved')
-        .eq('notify_submitter', true) as any;
+        .eq('notify_submitter', true);
 
       if (!bugs || bugs.length === 0) return;
 
       // Check which ones have been dismissed
-      const keys = bugs.map((b: any) => `bug_notification_${b.id}`);
+      const keys = bugs.map((b) => `bug_notification_${b.id}`);
       const { data: dismissed } = await supabase
         .from('app_settings')
         .select('key')
         .in('key', keys);
 
-      const dismissedKeys = new Set((dismissed || []).map((d: any) => d.key));
-      const pending = bugs.filter((b: any) => !dismissedKeys.has(`bug_notification_${b.id}`));
+      const dismissedKeys = new Set((dismissed || []).map((d) => d.key));
+      const pending = bugs.filter((b) => !dismissedKeys.has(`bug_notification_${b.id}`));
       setNotifications(pending);
     };
 
     load();
-  }, []);
+  }, [user]);
 
   const dismiss = async (bugId: string) => {
     setNotifications(prev => prev.filter(n => n.id !== bugId));
