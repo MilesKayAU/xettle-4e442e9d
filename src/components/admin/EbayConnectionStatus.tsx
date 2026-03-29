@@ -7,8 +7,10 @@ import { CheckCircle2, XCircle, Loader2, ExternalLink, Unplug } from "lucide-rea
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { upsertMarketplaceConnection } from '@/utils/marketplace-connections';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function EbayConnectionStatus() {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [connection, setConnection] = useState<any>(null);
@@ -26,9 +28,7 @@ export default function EbayConnectionStatus() {
         setConnection(data.connection || null);
 
         // Ensure marketplace_connections row exists via universal helper
-        if (data.connected) {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
+        if (data.connected && user) {
             await upsertMarketplaceConnection({
               userId: user.id,
               marketplaceCode: 'ebay_au',
@@ -37,7 +37,6 @@ export default function EbayConnectionStatus() {
               connectionStatus: 'active',
               countryCode: 'AU',
             });
-          }
         }
       }
     } catch (err) {
@@ -45,7 +44,7 @@ export default function EbayConnectionStatus() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     checkStatus();

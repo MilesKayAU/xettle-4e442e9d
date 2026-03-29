@@ -43,6 +43,8 @@ export interface MarketplaceDefinition {
   connectionMethods: Array<'sp_api' | 'manual_csv' | 'api_key' | 'mirakl_api'>;
   phase: 'live' | 'csv_ready' | 'coming_soon';
   description: string;
+  /** Typical days between settlements — used for next-expected-date estimates */
+  settlementFrequencyDays?: number;
 }
 
 export const MARKETPLACE_CATALOG: MarketplaceDefinition[] = [
@@ -55,6 +57,7 @@ export const MARKETPLACE_CATALOG: MarketplaceDefinition[] = [
     connectionMethods: ['sp_api', 'manual_csv'],
     phase: 'live',
     description: 'Amazon Seller Central Australia — SP-API auto-fetch or manual TSV upload.',
+    settlementFrequencyDays: 14,
   },
   {
     code: 'bunnings',
@@ -65,6 +68,7 @@ export const MARKETPLACE_CATALOG: MarketplaceDefinition[] = [
     connectionMethods: ['mirakl_api', 'manual_csv'],
     phase: 'live',
     description: 'Bunnings Marketplace — Mirakl API auto-fetch or manual PDF upload.',
+    settlementFrequencyDays: 15,
   },
   {
     code: 'bigw',
@@ -95,6 +99,7 @@ export const MARKETPLACE_CATALOG: MarketplaceDefinition[] = [
     connectionMethods: ['manual_csv'],
     phase: 'csv_ready',
     description: 'Woolworths Everyday Market — manual CSV upload.',
+    settlementFrequencyDays: 14,
   },
   {
     code: 'mydeal',
@@ -125,6 +130,7 @@ export const MARKETPLACE_CATALOG: MarketplaceDefinition[] = [
     connectionMethods: ['manual_csv'],
     phase: 'csv_ready',
     description: 'Shopify Payments payouts — your direct store sales.',
+    settlementFrequencyDays: 3,
   },
   {
     code: 'shopify_orders',
@@ -135,6 +141,7 @@ export const MARKETPLACE_CATALOG: MarketplaceDefinition[] = [
     connectionMethods: ['manual_csv'],
     phase: 'csv_ready',
     description: 'Shopify Orders export — creates gateway clearing invoices for PayPal, Afterpay, Stripe, etc.',
+    settlementFrequencyDays: 3,
   },
 ];
 

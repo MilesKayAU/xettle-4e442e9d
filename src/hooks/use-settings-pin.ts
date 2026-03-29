@@ -8,6 +8,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 const SESSION_KEY = 'xettle_settings_pin_unlocked';
 
@@ -38,25 +39,26 @@ async function hashPin(pin: string): Promise<string> {
 export { hashPin };
 
 export function useSettingsPin() {
+  const { user } = useAuth();
   const [isUnlocked, setIsUnlocked] = useState(readSessionUnlockState);
   const [showDialog, setShowDialog] = useState(false);
   const [pendingCallback, setPendingCallback] = useState<(() => void) | null>(null);
   const [hasPin, setHasPin] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Check if user has a settings PIN configured
+    if (!user) return;
+    let isMounted = true;
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
       const { data } = await supabase
         .from('app_settings')
         .select('value')
         .eq('user_id', user.id)
         .eq('key', 'settings_pin_hash')
         .maybeSingle();
-      setHasPin(!!data?.value);
+      if (isMounted) setHasPin(!!data?.value);
     })();
-  }, []);
+    return () => { isMounted = false; };
+  }, [user]);
 
   const unlock = useCallback(() => {
     persistSessionUnlockState();
@@ -88,7 +90,6 @@ export function useSettingsPin() {
   }, []);
 
   const verifyPin = useCallback(async (pin: string): Promise<boolean> => {
-    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
     const { data } = await supabase
       .from('app_settings')
@@ -99,7 +100,7 @@ export function useSettingsPin() {
     if (!data?.value) return false;
     const inputHash = await hashPin(pin);
     return inputHash === data.value;
-  }, []);
+  }, [user]);
 
   return {
     isUnlocked,
