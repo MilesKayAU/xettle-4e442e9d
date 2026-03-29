@@ -47,7 +47,7 @@ export default function BugReportButton() {
 
   const getErrors = useCallback(() => [...errorsRef.current], []);
 
-  if (!visible) return null;
+  if (!isAdmin) return null;
 
   return (
     <>
