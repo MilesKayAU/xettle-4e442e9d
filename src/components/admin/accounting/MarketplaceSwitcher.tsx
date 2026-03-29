@@ -57,6 +57,7 @@ export const MARKETPLACE_CATALOG: MarketplaceDefinition[] = [
     connectionMethods: ['sp_api', 'manual_csv'],
     phase: 'live',
     description: 'Amazon Seller Central Australia — SP-API auto-fetch or manual TSV upload.',
+    settlementFrequencyDays: 14,
   },
   {
     code: 'bunnings',
@@ -67,6 +68,7 @@ export const MARKETPLACE_CATALOG: MarketplaceDefinition[] = [
     connectionMethods: ['mirakl_api', 'manual_csv'],
     phase: 'live',
     description: 'Bunnings Marketplace — Mirakl API auto-fetch or manual PDF upload.',
+    settlementFrequencyDays: 15,
   },
   {
     code: 'bigw',
