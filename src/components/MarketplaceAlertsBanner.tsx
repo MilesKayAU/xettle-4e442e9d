@@ -32,6 +32,7 @@ export default function MarketplaceAlertsBanner({ marketplaceCode }: Marketplace
   const [alerts, setAlerts] = useState<FeeAlert[]>([]);
 
   useEffect(() => {
+    let isMounted = true;
     const load = async () => {
       const { data } = await supabase
         .from('marketplace_fee_alerts')
@@ -40,9 +41,10 @@ export default function MarketplaceAlertsBanner({ marketplaceCode }: Marketplace
         .eq('status', 'pending')
         .order('created_at', { ascending: false })
         .limit(5);
-      if (data) setAlerts(data as FeeAlert[]);
+      if (isMounted && data) setAlerts(data as FeeAlert[]);
     };
     load();
+    return () => { isMounted = false; };
   }, [marketplaceCode]);
 
   const dismiss = async (id: string) => {

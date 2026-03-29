@@ -3,10 +3,10 @@ import { useTrialStatus } from '@/hooks/use-trial-status';
 import TrialBanner from '@/components/shared/TrialBanner';
 import ScopeBanner from '@/components/shared/ScopeBanner';
 import { AiContextProvider } from '@/ai/context/AiContextProvider';
-import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 import AskAiButton from '@/components/ai-assistant/AskAiButton';
 
-function AuthenticatedLayoutInner() {
+export default function AuthenticatedLayout() {
   const { user } = useAuth();
   const trialInfo = useTrialStatus(user?.id);
 
@@ -17,13 +17,5 @@ function AuthenticatedLayoutInner() {
       <Outlet />
       <AskAiButton />
     </AiContextProvider>
-  );
-}
-
-export default function AuthenticatedLayout() {
-  return (
-    <AuthProvider>
-      <AuthenticatedLayoutInner />
-    </AuthProvider>
   );
 }
