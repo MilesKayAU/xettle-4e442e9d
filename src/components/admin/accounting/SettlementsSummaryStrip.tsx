@@ -44,34 +44,38 @@ export default function SettlementsSummaryStrip({ userMarketplaceCount }: Settle
     else setMonth(m => m + 1);
   };
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data: settlements, error } = await supabase
-        .from('settlements')
-        .select('sales_principal, seller_fees, bank_deposit, status')
-        .lte('period_start', monthEnd)
-        .gte('period_end', monthStart);
+  useEffect(() => {
+    const controller = new AbortController();
+    const load = async () => {
+      setLoading(true);
+      try {
+        const { data: settlements, error } = await supabase
+          .from('settlements')
+          .select('sales_principal, seller_fees, bank_deposit, status')
+          .lte('period_start', monthEnd)
+          .gte('period_end', monthStart)
+          .abortSignal(controller.signal);
 
-      if (error) throw error;
-      const rows = settlements || [];
+        if (error) throw error;
+        const rows = settlements || [];
 
-      const revenue = rows.reduce((sum, s) => sum + (s.sales_principal || 0), 0);
-      const fees = rows.reduce((sum, s) => sum + (s.seller_fees || 0), 0);
-      const net = rows.reduce((sum, s) => sum + (s.bank_deposit || 0), 0);
-      const synced = rows.filter(s => ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || '')).length;
-      const ready = rows.filter(s => s.status === 'saved' || s.status === 'parsed').length;
-      const failed = rows.filter(s => s.status === 'push_failed').length;
+        const revenue = rows.reduce((sum, s) => sum + (s.sales_principal || 0), 0);
+        const fees = rows.reduce((sum, s) => sum + (s.seller_fees || 0), 0);
+        const net = rows.reduce((sum, s) => sum + (s.bank_deposit || 0), 0);
+        const synced = rows.filter(s => ['synced', 'pushed_to_xero', 'synced_external', 'draft_in_xero', 'authorised_in_xero', 'reconciled_in_xero'].includes(s.status || '')).length;
+        const ready = rows.filter(s => s.status === 'saved' || s.status === 'parsed').length;
+        const failed = rows.filter(s => s.status === 'push_failed').length;
 
-      setData({ revenue, fees, net, synced, ready, failed, missing: 0, total: rows.length });
-    } catch {
-      // silent
-    } finally {
-      setLoading(false);
-    }
+        setData({ revenue, fees, net, synced, ready, failed, missing: 0, total: rows.length });
+      } catch (e: any) {
+        if (e?.name === 'AbortError') return;
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+    return () => { controller.abort(); };
   }, [monthStart, monthEnd]);
-
-  useEffect(() => { loadData(); }, [loadData]);
 
   if (loading && data.total === 0) return null;
 

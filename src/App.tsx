@@ -80,6 +80,7 @@ function App() {
                 </Routes>
               </Suspense>
             </PinGate>
+            </AuthProvider>
             <BugReportButton />
             <Toaster />
             <SonnerToaster position="bottom-right" richColors />
