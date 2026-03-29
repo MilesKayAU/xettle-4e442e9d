@@ -1,36 +1,64 @@
 
 
-## Fix Valid CleanVibes Findings (Round 2)
+## Round 3: Fix Remaining Auth Lock Contention + Minor Improvements
 
-### Finding 1: Move AuthProvider to App root
-**File:** `src/App.tsx`, `src/components/AuthenticatedLayout.tsx`
-
-The `AuthProvider` currently only wraps authenticated routes. Moving it to `App.tsx` (wrapping all routes) means any component anywhere can use `useAuth()` without independent `getUser()` calls. Remove the `AuthProvider` wrapper from `AuthenticatedLayout.tsx`.
-
-### Finding 2: Add isMounted guard to MarketplaceAlertsBanner
-**File:** `src/components/MarketplaceAlertsBanner.tsx`
-
-Add `let isMounted = true` + cleanup return in the `useEffect` to prevent state updates after unmount.
-
-### Finding 7: Add AbortController to SettlementsSummaryStrip
-**File:** `src/components/admin/accounting/SettlementsSummaryStrip.tsx`
-
-Add an `AbortController` in the `useEffect` so rapid month changes cancel stale requests. Use Supabase's `.abortSignal(signal)` method.
+5 files to modify. All changes are small and surgical.
 
 ---
 
-### Not fixing (with rationale)
+### 1. `src/hooks/use-settings-pin.ts` — Eliminate `getUser()` calls
 
-- **Finding 3 (DashboardConnectionStrip)**: The parallel queries are valid — they don't cause lock contention. The `Promise.all` pattern is correct and doesn't need an RPC. The component already has a session guard.
-- **Findings 4 & 5 (pdfjs-dist / xlsx)**: Major version upgrades with breaking APIs. Neither causes the lock errors. Previously assessed as skip.
-- **Finding 6 (NextExpectedSettlements)**: The date estimation is intentionally approximate for a UI hint. Not a bug — it's a design choice. The lock error cited as "runtime evidence" is unrelated.
+This is the **primary source** of the 46x lock errors. The hook is used by 4+ components, each calling `getUser()` on mount and again on PIN verify.
 
-### Summary: 3 files modified
+**Changes:**
+- Import `useAuth` from `@/contexts/AuthContext`
+- Replace the `useEffect` (lines 46-59) to use `user` from `useAuth()` instead of `supabase.auth.getUser()`. Add `isMounted` guard.
+- Replace `getUser()` in `verifyPin` (line 91) with the `user` from context — store it as a ref or use it from the closure.
+
+### 2. `src/components/admin/EbayConnectionStatus.tsx` — Eliminate `getUser()` call
+
+Line 30 calls `supabase.auth.getUser()` on every status check.
+
+**Changes:**
+- Import `useAuth` from `@/contexts/AuthContext`
+- Get `user` at the component top level
+- Replace line 30's `getUser()` call with the context `user`
+
+### 3. `src/components/admin/AccountResetButton.tsx` — Add `signOut()` before redirect
+
+After clearing caches (line 41-46), the in-memory Supabase session remains active.
+
+**Changes:**
+- Add `await supabase.auth.signOut()` after `queryClient.removeQueries()` and before the `setTimeout` redirect
+
+### 4. `src/components/MarketplaceAlertsBanner.tsx` — Add try/catch error handling
+
+The `load` function has no error handling — silent failures on network issues.
+
+**Changes:**
+- Wrap the fetch in `try/catch`, log errors with `console.warn`
+
+### 5. `src/components/admin/accounting/NextExpectedSettlements.tsx` — Use catalog-based frequency
+
+Hardcoded string matching for settlement frequency is brittle.
+
+**Changes:**
+- Add `settlementFrequencyDays` to `MarketplaceDefinition` interface in `MarketplaceSwitcher.tsx`
+- Add the field to each catalog entry (shopify: 3, bunnings: 15, woolworths: 14, default 7)
+- In `NextExpectedSettlements.tsx`, use `catalog?.settlementFrequencyDays ?? 7` instead of the ternary chain
+
+This means `MarketplaceSwitcher.tsx` also gets a small edit (interface + catalog data).
+
+---
+
+### Summary: 6 files modified
 
 | File | Change |
 |------|--------|
-| `src/App.tsx` | Wrap routes in `AuthProvider` |
-| `src/components/AuthenticatedLayout.tsx` | Remove `AuthProvider` wrapper |
-| `src/components/MarketplaceAlertsBanner.tsx` | Add `isMounted` cleanup |
-| `src/components/admin/accounting/SettlementsSummaryStrip.tsx` | Add `AbortController` cancellation |
+| `src/hooks/use-settings-pin.ts` | Use `useAuth()` instead of `getUser()` |
+| `src/components/admin/EbayConnectionStatus.tsx` | Use `useAuth()` instead of `getUser()` |
+| `src/components/admin/AccountResetButton.tsx` | Add `signOut()` before redirect |
+| `src/components/MarketplaceAlertsBanner.tsx` | Add try/catch error handling |
+| `src/components/admin/accounting/MarketplaceSwitcher.tsx` | Add `settlementFrequencyDays` to interface + catalog |
+| `src/components/admin/accounting/NextExpectedSettlements.tsx` | Use catalog frequency field |
 
