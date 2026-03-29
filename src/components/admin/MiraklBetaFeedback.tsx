@@ -26,10 +26,10 @@ export default function MiraklBetaFeedback() {
   const loadReports = async () => {
     setLoading(true);
     const { data, error } = await supabase
-      .from('mirakl_issue_reports' as any)
+      .from('mirakl_issue_reports')
       .select('*')
       .order('created_at', { ascending: false });
-    if (!error && data) setReports(data as any);
+    if (!error && data) setReports(data as IssueReport[]);
     setLoading(false);
   };
 
