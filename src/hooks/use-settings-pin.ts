@@ -11,7 +11,33 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
 const SESSION_KEY = 'xettle_settings_pin_unlocked';
-// ... keep existing code
+
+function readSessionUnlockState() {
+  try {
+    return window.sessionStorage.getItem(SESSION_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function persistSessionUnlockState() {
+  try {
+    window.sessionStorage.setItem(SESSION_KEY, 'true');
+  } catch {
+    // Embedded previews can block sessionStorage; keep unlock in memory for this render session.
+  }
+}
+
+async function hashPin(pin: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(`xettle_pin_salt_${pin}`);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+export { hashPin };
+
 export function useSettingsPin() {
   const { user } = useAuth();
   const [isUnlocked, setIsUnlocked] = useState(readSessionUnlockState);
