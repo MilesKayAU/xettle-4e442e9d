@@ -43,6 +43,8 @@ export interface MarketplaceDefinition {
   connectionMethods: Array<'sp_api' | 'manual_csv' | 'api_key' | 'mirakl_api'>;
   phase: 'live' | 'csv_ready' | 'coming_soon';
   description: string;
+  /** Typical days between settlements — used for next-expected-date estimates */
+  settlementFrequencyDays?: number;
 }
 
 export const MARKETPLACE_CATALOG: MarketplaceDefinition[] = [
