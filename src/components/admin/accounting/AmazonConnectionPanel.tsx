@@ -167,7 +167,16 @@ export default function AmazonConnectionPanel({ onSettlementsAutoFetched, onRequ
       setShowManualToken(false);
       await checkStatus();
     } catch (err: any) {
-      toast.error(`Save failed: ${err.message}`);
+      console.error('Amazon connection error:', err);
+      let errorMessage = 'Failed to connect to Amazon. Please try again.';
+      if (err?.status === 401 || err?.status === 403) {
+        errorMessage = 'Connection failed: Check your SP-API credentials.';
+      } else if (err?.message?.includes('timed out')) {
+        errorMessage = 'Connection timed out. Check your network or try again.';
+      } else if (err?.message) {
+        errorMessage = `Save failed: ${err.message}`;
+      }
+      toast.error(errorMessage);
     } finally {
       setSavingToken(false);
     }
