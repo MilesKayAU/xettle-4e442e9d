@@ -50,8 +50,8 @@ export function useAiAssistant({ context }: UseAiAssistantOptions = {}) {
         .eq('month', currentMonth)
         .maybeSingle();
       setUsageCount((data as any)?.question_count ?? 0);
-    } catch {
-      // silent
+    } catch (err) {
+      if (import.meta.env.DEV) console.warn('[ai-usage] failed to load usage:', err);
     }
   }, []);
 
