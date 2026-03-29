@@ -344,13 +344,24 @@ export function parseGenericCSV(content: string, options: GenericParseOptions): 
  */
 export async function parseGenericXLSX(file: File, options: GenericParseOptions): Promise<GenericParseResult> {
   try {
-    const XLSX = await import('xlsx');
+    const ExcelJS = await import('exceljs');
+    const workbook = new ExcelJS.Workbook();
     const buffer = await file.arrayBuffer();
-    const wb = XLSX.read(buffer, { type: 'array' });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    
-    // Convert to CSV and use the CSV parser
-    const csv = XLSX.utils.sheet_to_csv(ws);
+    await workbook.xlsx.load(buffer);
+    const ws = workbook.worksheets[0];
+    if (!ws) {
+      return { success: false, settlements: [], error: 'No worksheets found', rowCount: 0, warnings: [] };
+    }
+    // Convert worksheet to CSV string
+    const rows: string[] = [];
+    ws.eachRow((row) => {
+      const values = row.values ? (row.values as any[]).slice(1) : [];
+      rows.push(values.map(v => {
+        const s = String(v ?? '');
+        return s.includes(',') ? `"${s}"` : s;
+      }).join(','));
+    });
+    const csv = rows.join('\n');
     return parseGenericCSV(csv, options);
   } catch (err: any) {
     return {

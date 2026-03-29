@@ -621,11 +621,16 @@ export async function extractFileHeaders(file: File): Promise<{ headers: string[
   // Handle XLSX
   if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
     try {
-      const XLSX = await import('xlsx');
+      const ExcelJS = await import('exceljs');
+      const workbook = new ExcelJS.Workbook();
       const buffer = await file.arrayBuffer();
-      const wb = XLSX.read(buffer, { type: 'array' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1 }) as string[][];
+      await workbook.xlsx.load(buffer);
+      const ws = workbook.worksheets[0];
+      if (!ws || ws.rowCount < 1) return null;
+      const rows: string[][] = [];
+      ws.eachRow((row) => {
+        rows.push(row.values ? (row.values as any[]).slice(1).map(c => String(c ?? '')) : []);
+      });
       if (rows.length < 1) return null;
       const headers = rows[0].map(h => String(h || '').trim());
       const sampleRows = rows.slice(1, 4).map(r => r.map(c => String(c || '')));
