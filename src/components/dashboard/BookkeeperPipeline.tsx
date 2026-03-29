@@ -594,7 +594,7 @@ export default function BookkeeperPipeline({
 
 // ─── Pipeline Row ───────────────────────────────────────────────────
 
-function PipelineRow({
+const PipelineRow = React.memo(function PipelineRow({
   item,
   onUpload,
   onPush,
