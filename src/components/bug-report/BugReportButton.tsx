@@ -64,7 +64,7 @@ export default function BugReportButton() {
         open={open}
         onClose={() => setOpen(false)}
         getErrors={getErrors}
-        userEmail={userEmail}
+        userEmail={user?.email || ''}
       />
     </>
   );
