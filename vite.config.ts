@@ -6,6 +6,9 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  define: {
+    'import.meta.env.VITE_APP_PIN': JSON.stringify(process.env.VITE_APP_PIN || '1984'),
+  },
   plugins: [
     react(),
     mode === 'development' && componentTagger(),
