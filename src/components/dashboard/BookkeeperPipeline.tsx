@@ -11,7 +11,7 @@
  * 6. ✅ COMPLETE — fully reconciled (collapsed)
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAccountingBoundaryDate } from '@/hooks/useAccountingBoundaryDate';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
