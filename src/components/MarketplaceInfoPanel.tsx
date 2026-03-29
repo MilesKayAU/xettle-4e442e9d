@@ -47,23 +47,24 @@ export default function MarketplaceInfoPanel({ marketplaceCode }: MarketplaceInf
     const load = async () => {
       setLoading(true);
       try {
-        // Load marketplace profile
-        const { data: mp } = await supabase
-          .from('marketplaces')
-          .select('name, settlement_frequency, gst_model, payment_delay_days, currency')
-          .eq('marketplace_code', marketplaceCode)
-          .eq('is_active', true)
-          .maybeSingle();
+        // Parallel fetch: marketplace profile + fee observations
+        const [mpRes, obsRes] = await Promise.all([
+          supabase
+            .from('marketplaces')
+            .select('name, settlement_frequency, gst_model, payment_delay_days, currency')
+            .eq('marketplace_code', marketplaceCode)
+            .eq('is_active', true)
+            .maybeSingle(),
+          supabase
+            .from('marketplace_fee_observations')
+            .select('fee_type, observed_rate')
+            .eq('marketplace_code', marketplaceCode)
+            .not('observed_rate', 'is', null),
+        ]);
 
-        if (mp) setInfo(mp);
+        if (mpRes.data) setInfo(mpRes.data);
 
-        // Load user's fee averages
-        const { data: obs } = await supabase
-          .from('marketplace_fee_observations')
-          .select('fee_type, observed_rate')
-          .eq('marketplace_code', marketplaceCode)
-          .not('observed_rate', 'is', null);
-
+        const obs = obsRes.data;
         if (obs && obs.length > 0) {
           const grouped: Record<string, number[]> = {};
           for (const o of obs) {
