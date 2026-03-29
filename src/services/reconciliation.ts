@@ -38,14 +38,20 @@ export const GST_INCLUSIVE_MARKETPLACES = [
 /**
  * The maximum acceptable difference between computed net and bank_deposit
  * before a settlement is blocked from pushing to Xero.
+ * Re-exported from the canonical tolerance constants for backward compatibility.
  */
-export const RECONCILIATION_TOLERANCE = 1.00;
+export const RECONCILIATION_TOLERANCE = RECONCILIATION_PUSH_TOLERANCE;
 
 /**
  * Threshold below which formula gaps are classified as rounding residuals
  * rather than data issues requiring investigation.
  */
 export const ROUNDING_RESIDUAL_THRESHOLD = 10.00;
+
+/**
+ * Re-export the exact-match tolerance for consumers that need it.
+ */
+export const EXACT_MATCH_TOLERANCE = TOL_LINE_SUM;
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 

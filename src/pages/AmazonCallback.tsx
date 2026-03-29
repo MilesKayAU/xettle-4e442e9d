@@ -14,9 +14,18 @@ export default function AmazonCallback() {
   const [sellerInfo, setSellerInfo] = useState<{ selling_partner_id: string; marketplace_id: string } | null>(null);
 
   useEffect(() => {
+    const validateParam = (param: string | null, name: string, maxLength: number, pattern: RegExp): string | null => {
+      if (!param) return null;
+      if (param.length > maxLength || !pattern.test(param)) {
+        console.warn(`[AmazonCallback] Invalid ${name} parameter`);
+        return null;
+      }
+      return param;
+    };
+
     const exchangeCode = async () => {
-      const spapi_oauth_code = searchParams.get('spapi_oauth_code');
-      const selling_partner_id = searchParams.get('selling_partner_id');
+      const spapi_oauth_code = validateParam(searchParams.get('spapi_oauth_code'), 'oauth_code', 1000, /^[a-zA-Z0-9_\-]+$/);
+      const selling_partner_id = validateParam(searchParams.get('selling_partner_id'), 'selling_partner_id', 200, /^[a-zA-Z0-9_\-]+$/);
       const mws_auth_token = searchParams.get('mws_auth_token');
       const errorParam = searchParams.get('error');
       const errorDesc = searchParams.get('error_description');

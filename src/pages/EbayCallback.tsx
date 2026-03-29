@@ -19,7 +19,7 @@ export default function EbayCallback() {
       const errorParam = searchParams.get('error');
       const errorDesc = searchParams.get('error_description');
 
-      logger.debug('[eBay Callback] Params:', { code: code ? `${code.substring(0, 10)}...` : null, error: errorParam });
+      logger.debug('[eBay Callback] Processing authorization callback.', { hasCode: !!code, error: errorParam });
 
       if (errorParam) {
         setStatus('error');
