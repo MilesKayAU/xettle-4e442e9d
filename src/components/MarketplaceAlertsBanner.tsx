@@ -45,6 +45,7 @@ export default function MarketplaceAlertsBanner({ marketplaceCode }: Marketplace
           .limit(5);
         if (error) {
           console.warn('[MarketplaceAlertsBanner] fetch failed:', error.message);
+          toast.error('Failed to load marketplace alerts');
           return;
         }
         if (isMounted && data) setAlerts(data as FeeAlert[]);

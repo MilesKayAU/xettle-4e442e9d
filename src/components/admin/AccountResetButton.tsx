@@ -65,9 +65,13 @@ export default function AccountResetButton() {
         window.location.href = '/dashboard?reset=' + Date.now();
       }, 1200);
     } catch (err: any) {
+      clearTimeout(timeoutId);
+      const message = err?.name === 'AbortError'
+        ? 'Reset timed out. Please try again.'
+        : err.message;
       toast({
         title: 'Reset failed',
-        description: err.message,
+        description: message,
         variant: 'destructive',
       });
     } finally {
