@@ -99,6 +99,7 @@ export const MARKETPLACE_CATALOG: MarketplaceDefinition[] = [
     connectionMethods: ['manual_csv'],
     phase: 'csv_ready',
     description: 'Woolworths Everyday Market — manual CSV upload.',
+    settlementFrequencyDays: 14,
   },
   {
     code: 'mydeal',
